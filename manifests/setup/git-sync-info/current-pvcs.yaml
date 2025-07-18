@@ -1,0 +1,136 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    annotations:
+      pv.kubernetes.io/bind-completed: "yes"
+      pv.kubernetes.io/bound-by-controller: "yes"
+      volume.beta.kubernetes.io/storage-provisioner: rancher.io/local-path
+      volume.kubernetes.io/selected-node: k3s-server-1
+      volume.kubernetes.io/storage-provisioner: rancher.io/local-path
+    creationTimestamp: "2025-06-29T15:04:02Z"
+    finalizers:
+    - kubernetes.io/pvc-protection
+    labels:
+      app: postgresql
+      component: database
+    name: postgresql-data-postgresql-0
+    namespace: investment-assistant
+    resourceVersion: "657874"
+    uid: 2a283e91-2c80-4b9f-ba68-bfd3550d3cd9
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 20Gi
+    storageClassName: local-path
+    volumeMode: Filesystem
+    volumeName: pvc-2a283e91-2c80-4b9f-ba68-bfd3550d3cd9
+  status:
+    accessModes:
+    - ReadWriteOnce
+    capacity:
+      storage: 20Gi
+    phase: Bound
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    annotations:
+      pv.kubernetes.io/bind-completed: "yes"
+      pv.kubernetes.io/bound-by-controller: "yes"
+      volume.beta.kubernetes.io/storage-provisioner: rancher.io/local-path
+      volume.kubernetes.io/selected-node: k3s-agent-4
+      volume.kubernetes.io/storage-provisioner: rancher.io/local-path
+    creationTimestamp: "2025-06-29T15:04:16Z"
+    finalizers:
+    - kubernetes.io/pvc-protection
+    labels:
+      app: redis
+      component: cache
+    name: redis-data-redis-0
+    namespace: investment-assistant
+    resourceVersion: "657947"
+    uid: 2d1f038b-a5f5-44e9-baff-666254f058f1
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 5Gi
+    storageClassName: local-path
+    volumeMode: Filesystem
+    volumeName: pvc-2d1f038b-a5f5-44e9-baff-666254f058f1
+  status:
+    accessModes:
+    - ReadWriteOnce
+    capacity:
+      storage: 5Gi
+    phase: Bound
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    annotations:
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"annotations":{},"labels":{"app":"airflow","component":"scheduler","tier":"airflow"},"name":"airflow-dags-pvc","namespace":"investment-assistant"},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"5Gi"}},"storageClassName":"local-path"}}
+      pv.kubernetes.io/bind-completed: "yes"
+      pv.kubernetes.io/bound-by-controller: "yes"
+      volume.beta.kubernetes.io/storage-provisioner: rancher.io/local-path
+      volume.kubernetes.io/selected-node: k3s-agent-1
+      volume.kubernetes.io/storage-provisioner: rancher.io/local-path
+    creationTimestamp: "2025-07-06T05:41:26Z"
+    finalizers:
+    - kubernetes.io/pvc-protection
+    labels:
+      app: airflow
+      component: scheduler
+      tier: airflow
+    name: airflow-dags-pvc
+    namespace: investment-assistant
+    resourceVersion: "1359550"
+    uid: 2090768c-10a1-41ca-8992-ed07927db8dd
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 5Gi
+    storageClassName: local-path
+    volumeMode: Filesystem
+    volumeName: pvc-2090768c-10a1-41ca-8992-ed07927db8dd
+  status:
+    accessModes:
+    - ReadWriteOnce
+    capacity:
+      storage: 5Gi
+    phase: Bound
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    creationTimestamp: "2025-07-07T15:21:21Z"
+    deletionGracePeriodSeconds: 0
+    deletionTimestamp: "2025-07-07T15:22:36Z"
+    finalizers:
+    - kubernetes.io/pvc-protection
+    labels:
+      app: airflow
+      component: scheduler
+      tier: airflow
+    name: logs-airflow-scheduler-0
+    namespace: investment-assistant
+    resourceVersion: "1506775"
+    uid: db3a9b7b-dec2-480d-8718-7b989a7e444c
+  spec:
+    accessModes:
+    - ReadWriteOnce
+    resources:
+      requests:
+        storage: 10Gi
+    storageClassName: local-path
+    volumeMode: Filesystem
+  status:
+    phase: Pending
+kind: List
+metadata:
+  resourceVersion: ""

@@ -39,17 +39,17 @@ default_args = {
     "depends_on_past": False,
     "start_date": datetime(2025, 6, 1),
     "retries": 3,  # 클러스터 환경에서는 재시도 횟수 증가
-    "retry_delay": timedelta(minutes=2),  # 재시도 간격 증가
+    "retry_delay": timedelta(minutes=1),  # 재시도 간격 증가
     "email_on_failure": False,
     "email_on_retry": False,
 }
 
 with DAG(
-    "ingest_earnings_news_to_db",
+    "ingest_earnings_news_to_db_k8s",
     default_args=default_args,
     schedule_interval="@daily",
     catchup=False,
-    template_searchpath=['/opt/airflow/dags/sql', '/opt/airflow/dags/dags/sql'],  # 양쪽 경로 모두 지원
+    template_searchpath=['/opt/airflow/dags/sql', '/opt/airflow/dags/dags/sql', '/opt/airflow/dags/init', '/opt/airflow/dags/.worktrees/*/initdb'],  # 양쪽 경로 모두 지원
     description='Fetch earnings calendar entries and upsert related news (K3s optimized)',
     tags=['earnings', 'news', 'finnhub', 'k3s'],
 ) as dag:

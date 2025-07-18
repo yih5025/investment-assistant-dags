@@ -1,0 +1,246 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "4"
+    meta.helm.sh/release-name: airflow
+    meta.helm.sh/release-namespace: investment-assistant
+  creationTimestamp: "2025-06-29T15:25:40Z"
+  generation: 6
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    chart: airflow-1.11.0
+    component: webserver
+    heritage: Helm
+    release: airflow
+    tier: airflow
+  name: airflow-webserver
+  namespace: investment-assistant
+  resourceVersion: "1094479"
+  uid: 22b4ccf7-c20f-4fe1-9b3b-aa283bf25395
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      component: webserver
+      release: airflow
+      tier: airflow
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/airflow-config: fd4dc31f8fb40025dbc2426ce73658da9f850ba67c6e385cc408a75006198a69
+        checksum/extra-configmaps: e862ea47e13e634cf17d476323784fa27dac20015550c230953b526182f5cac8
+        checksum/extra-secrets: e9582fdd622296c976cbc10a5ba7d6702c28a24fe80795ea5b84ba443a56c827
+        checksum/metadata-secret: 0512f73b97be6d4062f47bcef75339f5103fffa617e7bfdf5ecbaf20e3f4a5a1
+        checksum/pgbouncer-config-secret: 1dae2adc757473469686d37449d076b0c82404f61413b58ae68b3c5e99527688
+        checksum/webserver-config: 2f3fdfd294a37094d2abee43b2b09888a5c195ee03414996bf99a4681658af94
+        checksum/webserver-secret-key: 830194696a43db1a8f684f31565c26f657237689c2656f35f00de4037c4314f1
+        kubectl.kubernetes.io/restartedAt: "2025-07-04T01:53:14+09:00"
+      creationTimestamp: null
+      labels:
+        component: webserver
+        release: airflow
+        tier: airflow
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  component: webserver
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      containers:
+      - args:
+        - bash
+        - -c
+        - exec airflow webserver
+        env:
+        - name: AIRFLOW__CORE__FERNET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: fernet-key
+              name: airflow-fernet-key
+        - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              key: connection
+              name: airflow-metadata
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              key: connection
+              name: airflow-metadata
+        - name: AIRFLOW_CONN_AIRFLOW_DB
+          valueFrom:
+            secretKeyRef:
+              key: connection
+              name: airflow-metadata
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: webserver-secret-key
+              name: airflow-webserver-secret-key
+        image: apache/airflow:2.8.1
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 15
+        name: webserver
+        ports:
+        - containerPort: 8080
+          name: airflow-ui
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1536Mi
+          requests:
+            cpu: 300m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        startupProbe:
+          failureThreshold: 30
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          successThreshold: 1
+          timeoutSeconds: 15
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/airflow/pod_templates/pod_template_file.yaml
+          name: config
+          readOnly: true
+          subPath: pod_template_file.yaml
+        - mountPath: /opt/airflow/airflow.cfg
+          name: config
+          readOnly: true
+          subPath: airflow.cfg
+        - mountPath: /opt/airflow/config/airflow_local_settings.py
+          name: config
+          readOnly: true
+          subPath: airflow_local_settings.py
+      dnsPolicy: ClusterFirst
+      initContainers:
+      - args:
+        - airflow
+        - db
+        - check-migrations
+        - --migration-wait-timeout=60
+        env:
+        - name: AIRFLOW__CORE__FERNET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: fernet-key
+              name: airflow-fernet-key
+        - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              key: connection
+              name: airflow-metadata
+        - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              key: connection
+              name: airflow-metadata
+        - name: AIRFLOW_CONN_AIRFLOW_DB
+          valueFrom:
+            secretKeyRef:
+              key: connection
+              name: airflow-metadata
+        - name: AIRFLOW__WEBSERVER__SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: webserver-secret-key
+              name: airflow-webserver-secret-key
+        image: apache/airflow:2.8.1
+        imagePullPolicy: IfNotPresent
+        name: wait-for-airflow-migrations
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/airflow/airflow.cfg
+          name: config
+          readOnly: true
+          subPath: airflow.cfg
+        - mountPath: /opt/airflow/config/airflow_local_settings.py
+          name: config
+          readOnly: true
+          subPath: airflow_local_settings.py
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 0
+        runAsUser: 50000
+      serviceAccount: airflow-webserver
+      serviceAccountName: airflow-webserver
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: airflow-config
+        name: config
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2025-07-03T17:20:24Z"
+    lastUpdateTime: "2025-07-03T17:20:24Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2025-07-03T16:53:14Z"
+    lastUpdateTime: "2025-07-03T17:20:24Z"
+    message: ReplicaSet "airflow-webserver-75b8fd9fb5" has successfully progressed.
+    reason: NewReplicaSetAvailable
+    status: "True"
+    type: Progressing
+  observedGeneration: 6
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
