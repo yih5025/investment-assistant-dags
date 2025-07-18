@@ -110,7 +110,7 @@ with DAG(
                 # SQL 실행 (파일에서 읽은 UPSERT_SQL 사용)
                 hook.run(UPSERT_SQL, parameters={
                     'symbol': row['symbol'],
-                    'name': row.get('name', ''),
+                    'company_name': row.get('company_name', ''),
                     'report_date': row['reportDate'] if row['reportDate'] else None,
                     'fiscal_date_ending': row.get('fiscalDateEnding') if row.get('fiscalDateEnding') else None,
                     'estimate': estimate,
