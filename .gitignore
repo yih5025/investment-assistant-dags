@@ -1,0 +1,33 @@
+# K8s manifests - DAG 저장소에는 불필요
+manifests/
+
+# Docker 관련 파일들 (빈 디렉토리라면)
+docker/
+
+# Kafka consumer/producer (빈 디렉토리라면)
+kafka-consumer/
+kafka-producer/
+
+# Python 캐시 파일들
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE 설정 파일들
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 환경 변수 파일들 (보안상)
+.env
+*.env
+
+# 로그 파일들
+*.log
+
+# 임시 파일들
+.DS_Store
+Thumbs.db
