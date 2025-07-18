@@ -22,8 +22,8 @@ with open(os.path.join(DAGS_SQL_DIR, "upsert_earnings_calendar.sql"), encoding="
 default_args = {
     'owner': 'investment_assistant',
     'start_date': datetime(2025, 1, 1),
-    'retries': 2,
-    'retry_delay': timedelta(minutes=3),
+    'retries': None,
+    'retry_delay': timedelta(minutes=1),
 }
 
 with DAG(
