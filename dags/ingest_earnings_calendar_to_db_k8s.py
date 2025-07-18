@@ -27,14 +27,14 @@ default_args = {
 }
 
 with DAG(
-    dag_id='ingest_earnings_calendar_to_db',
+    dag_id='ingest_earnings_calendar_to_db_k8s',
     default_args=default_args,
     schedule_interval='@monthly',
     catchup=False,
     description='Fetch 12-month earnings calendar from Alpha Vantage and upsert into PostgreSQL',
     # create table SQL은 initdb 폴더에서 찾도록 설정
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['earnings', 'calendar', 'alpha_vantage'],
+    tags=['earnings', 'calendar', 'alpha_vantage', 'k8s'],
 ) as dag:
 
     create_table = PostgresOperator(
