@@ -4,16 +4,14 @@ INSERT INTO earnings_calendar (
     report_date, 
     fiscal_date_ending, 
     estimate, 
-    currency,
-    created_at
+    currency
 ) VALUES (
     %(symbol)s, 
     %(company_name)s, 
     %(report_date)s, 
     %(fiscal_date_ending)s, 
     %(estimate)s, 
-    %(currency)s,
-    NOW()
+    %(currency)s
 )
 ON CONFLICT (symbol, report_date)
 DO UPDATE SET
