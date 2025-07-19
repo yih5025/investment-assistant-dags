@@ -1,0 +1,203 @@
+# ConfigMap: Consumer 코드 저장
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bithumb-consumer-code
+  namespace: investment-assistant
+data:
+  consumer.py: |
+    import json
+    import os
+    import time
+    from kafka import KafkaConsumer
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    class BithumbTickerConsumer:
+        def __init__(self):
+            self.kafka_servers = os.getenv('KAFKA_SERVERS')
+            self.topic = "bithumb-ticker"
+            self.consumer = None
+            
+        def init_consumer(self):
+            self.consumer = KafkaConsumer(
+                self.topic,
+                bootstrap_servers=self.kafka_servers,
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                key_deserializer=lambda m: m.decode('utf-8') if m else None,
+                group_id='bithumb-ticker-consumer-group',
+                auto_offset_reset='latest',
+                enable_auto_commit=True
+            )
+            print(f"Consumer connected to topic: {self.topic}")
+            
+        def get_db_connection(self):
+            return psycopg2.connect(
+                host=os.getenv('POSTGRES_HOST'),
+                database=os.getenv('POSTGRES_DB'),
+                user=os.getenv('POSTGRES_USER'),
+                password=os.getenv('POSTGRES_PASSWORD'),
+                port=5432
+            )
+            
+        def insert_ticker_data(self, data):
+            try:
+                conn = self.get_db_connection()
+                with conn.cursor() as cursor:
+                    insert_sql = """
+                        INSERT INTO bithumb_ticker (
+                            market, trade_date, trade_time, trade_date_kst, trade_time_kst,
+                            trade_timestamp, opening_price, high_price, low_price, trade_price,
+                            prev_closing_price, change, change_price, change_rate,
+                            signed_change_price, signed_change_rate, trade_volume,
+                            acc_trade_price, acc_trade_price_24h, acc_trade_volume,
+                            acc_trade_volume_24h, highest_52_week_price, highest_52_week_date,
+                            lowest_52_week_price, lowest_52_week_date, timestamp_field, source
+                        ) VALUES (
+                            %(market)s, %(trade_date)s, %(trade_time)s, %(trade_date_kst)s, %(trade_time_kst)s,
+                            %(trade_timestamp)s, %(opening_price)s, %(high_price)s, %(low_price)s, %(trade_price)s,
+                            %(prev_closing_price)s, %(change)s, %(change_price)s, %(change_rate)s,
+                            %(signed_change_price)s, %(signed_change_rate)s, %(trade_volume)s,
+                            %(acc_trade_price)s, %(acc_trade_price_24h)s, %(acc_trade_volume)s,
+                            %(acc_trade_volume_24h)s, %(highest_52_week_price)s, %(highest_52_week_date)s,
+                            %(lowest_52_week_price)s, %(lowest_52_week_date)s, %(timestamp)s, %(source)s
+                        )
+                        ON CONFLICT (market, timestamp_field) DO UPDATE SET
+                            trade_price = EXCLUDED.trade_price,
+                            change_price = EXCLUDED.change_price,
+                            change_rate = EXCLUDED.change_rate,
+                            trade_volume = EXCLUDED.trade_volume
+                    """
+                    
+                    # 데이터 변환 (None 값 처리)
+                    params = {
+                        'market': data.get('market'),
+                        'trade_date': data.get('trade_date'),
+                        'trade_time': data.get('trade_time'),
+                        'trade_date_kst': data.get('trade_date_kst'),
+                        'trade_time_kst': data.get('trade_time_kst'),
+                        'trade_timestamp': data.get('trade_timestamp'),
+                        'opening_price': self.safe_decimal(data.get('opening_price')),
+                        'high_price': self.safe_decimal(data.get('high_price')),
+                        'low_price': self.safe_decimal(data.get('low_price')),
+                        'trade_price': self.safe_decimal(data.get('trade_price')),
+                        'prev_closing_price': self.safe_decimal(data.get('prev_closing_price')),
+                        'change': data.get('change'),
+                        'change_price': self.safe_decimal(data.get('change_price')),
+                        'change_rate': self.safe_decimal(data.get('change_rate')),
+                        'signed_change_price': self.safe_decimal(data.get('signed_change_price')),
+                        'signed_change_rate': self.safe_decimal(data.get('signed_change_rate')),
+                        'trade_volume': self.safe_decimal(data.get('trade_volume')),
+                        'acc_trade_price': self.safe_decimal(data.get('acc_trade_price')),
+                        'acc_trade_price_24h': self.safe_decimal(data.get('acc_trade_price_24h')),
+                        'acc_trade_volume': self.safe_decimal(data.get('acc_trade_volume')),
+                        'acc_trade_volume_24h': self.safe_decimal(data.get('acc_trade_volume_24h')),
+                        'highest_52_week_price': self.safe_decimal(data.get('highest_52_week_price')),
+                        'highest_52_week_date': data.get('highest_52_week_date'),
+                        'lowest_52_week_price': self.safe_decimal(data.get('lowest_52_week_price')),
+                        'lowest_52_week_date': data.get('lowest_52_week_date'),
+                        'timestamp': data.get('timestamp'),
+                        'source': data.get('source', 'bithumb')
+                    }
+                    
+                    cursor.execute(insert_sql, params)
+                    conn.commit()
+                    
+                conn.close()
+                return True
+                
+            except Exception as e:
+                print(f"DB insert error: {e}")
+                if 'conn' in locals():
+                    conn.close()
+                return False
+                
+        def safe_decimal(self, value):
+            """안전한 decimal 변환"""
+            if value is None or value == '':
+                return None
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return None
+                
+        def run(self):
+            self.init_consumer()
+            
+            processed_count = 0
+            error_count = 0
+            
+            print("Consumer started - waiting for messages...")
+            
+            for message in self.consumer:
+                try:
+                    data = message.value
+                    market = data.get('market', 'unknown')
+                    
+                    if self.insert_ticker_data(data):
+                        processed_count += 1
+                        if processed_count % 100 == 0:
+                            print(f"Processed: {processed_count}, Errors: {error_count}")
+                    else:
+                        error_count += 1
+                        
+                except Exception as e:
+                    print(f"Message processing error: {e}")
+                    error_count += 1
+
+    if __name__ == "__main__":
+        BithumbTickerConsumer().run()
+
+---
+# Deployment: Consumer 실행
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bithumb-ticker-consumer
+  namespace: investment-assistant
+  labels:
+    app: bithumb-ticker-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bithumb-ticker-consumer
+  template:
+    metadata:
+      labels:
+        app: bithumb-ticker-consumer
+    spec:
+      containers:
+      - name: consumer
+        image: python:3.11-slim
+        command: ["sh", "-c"]
+        args:
+        - |
+          pip install kafka-python psycopg2-binary
+          python /app/consumer.py
+        env:
+        - name: KAFKA_SERVERS
+          value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+        - name: POSTGRES_HOST
+          value: "postgresql.investment-assistant.svc.cluster.local"
+        - name: POSTGRES_DB
+          value: "investment_db"
+        - name: POSTGRES_USER
+          value: "airflow"
+        - name: POSTGRES_PASSWORD
+          value: "airflow123"
+        volumeMounts:
+        - name: consumer-code
+          mountPath: /app
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+      volumes:
+      - name: consumer-code
+        configMap:
+          name: bithumb-consumer-code
+      restartPolicy: Always
