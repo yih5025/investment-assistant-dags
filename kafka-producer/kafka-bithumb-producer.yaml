@@ -1,0 +1,133 @@
+# ConfigMap: Producer 코드 저장
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bithumb-producer-code
+  namespace: investment-assistant
+data:
+  producer.py: |
+    import time
+    import requests
+    import json
+    import os
+    from kafka import KafkaProducer
+    import psycopg2
+
+    class BithumbProducer:
+        def __init__(self):
+            self.kafka_servers = os.getenv('KAFKA_SERVERS')
+            self.api_url = "https://api.bithumb.com/v1/ticker"
+            self.market_codes = []
+            self.producer = None
+            
+        def init(self):
+            # Kafka Producer
+            self.producer = KafkaProducer(
+                bootstrap_servers=self.kafka_servers,
+                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                key_serializer=lambda k: k.encode('utf-8')
+            )
+            
+            # DB에서 마켓코드 로드
+            conn = psycopg2.connect(
+                host=os.getenv('POSTGRES_HOST'),
+                database=os.getenv('POSTGRES_DB'),
+                user=os.getenv('POSTGRES_USER'),
+                password=os.getenv('POSTGRES_PASSWORD'),
+                port=5432
+            )
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT market_code FROM market_code_bithumb")
+                self.market_codes = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            
+            print(f"Loaded {len(self.market_codes)} markets")
+        
+        def fetch_and_send(self, market):
+            try:
+                response = requests.get(self.api_url, params={"markets": market}, timeout=5)
+                if response.status_code == 429:
+                    print(f"Rate limit hit for {market}")
+                    time.sleep(1)
+                    return
+                
+                response.raise_for_status()
+                data = response.json()
+                data['source'] = 'bithumb'
+                
+                self.producer.send("bithumb-ticker", key=f"{market}_{int(time.time() * 1000)}", value=data)
+                
+            except Exception as e:
+                print(f"Error {market}: {e}")
+        
+        def run(self):
+            self.init()
+            
+            while True:
+                for market in self.market_codes:
+                    self.fetch_and_send(market)
+                
+                self.producer.flush()
+
+    if __name__ == "__main__":
+        BithumbProducer().run()
+
+---
+# Deployment: Producer 실행
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bithumb-ticker-producer
+  namespace: investment-assistant
+  labels:
+    app: bithumb-ticker-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bithumb-ticker-producer
+  template:
+    metadata:
+      labels:
+        app: bithumb-ticker-producer
+    spec:
+      containers:
+      - name: producer
+        image: python:3.11-slim
+        command: ["sh", "-c"]
+        args:
+        - |
+          pip install kafka-python requests psycopg2-binary
+          python /app/producer.py
+        env:
+        - name: KAFKA_SERVERS
+          value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+        - name: POSTGRES_HOST
+          value: "postgresql.investment-assistant.svc.cluster.local"
+        - name: POSTGRES_DB
+          value: "investment_db"
+        - name: POSTGRES_USER
+          value: "airflow"
+        - name: POSTGRES_PASSWORD
+          value: "airflow123"
+        volumeMounts:
+        - name: producer-code
+          mountPath: /app
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+        # 컨테이너 헬스체크
+        livenessProbe:
+          exec:
+            command: ["pgrep", "-f", "producer.py"]
+          initialDelaySeconds: 60
+          periodSeconds: 30
+      volumes:
+      - name: producer-code
+        configMap:
+          name: bithumb-producer-code
+      restartPolicy: Always
