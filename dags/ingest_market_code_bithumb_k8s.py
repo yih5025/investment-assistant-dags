@@ -22,7 +22,7 @@ with DAG(
     default_args=default_args,
     schedule_interval='@daily',  # 매일 업데이트
     catchup=False,
-    description='Update Bithumb market codes daily (truncate and reload)',
+    description='Update Bithumb market codes daily (delete and reload)',
     template_searchpath=[INITDB_SQL_DIR],
     tags=['bithumb', 'markets', 'master_data', 'k8s'],
 ) as dag:
@@ -49,14 +49,12 @@ with DAG(
             
             print(f"📊 조회된 마켓: {len(markets_data)}개")
             
-            # 기존 데이터 모두 삭제
-            hook.run("TRUNCATE TABLE market_code_bithumb")
+            # 기존 데이터 모두 삭제 (TRUNCATE → DELETE로 변경)
+            hook.run("DELETE FROM market_code_bithumb")
             print("🗑️ 기존 마켓코드 삭제 완료")
             
-            # KRW 마켓만 새로 삽입
-            krw_markets = [m for m in markets_data if m['market'].startswith('KRW-')]
-            
-            for market in krw_markets:
+            # 전체 마켓 새로 삽입 (KRW 필터링 제거)
+            for market in markets_data:
                 hook.run("""
                     INSERT INTO market_code_bithumb (
                         market_code, korean_name, english_name, market_warning
@@ -72,7 +70,7 @@ with DAG(
             result = hook.get_first("SELECT COUNT(*) FROM market_code_bithumb")
             total_count = result[0] if result else 0
             
-            print(f"✅ 완료. 총 마켓: {total_count}개 (KRW 마켓만)")
+            print(f"✅ 완료. 총 마켓: {total_count}개")
             
             return total_count
             

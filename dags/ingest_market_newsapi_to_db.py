@@ -20,8 +20,8 @@ with open(os.path.join(DAGS_SQL_DIR, "upsert_market_news.sql"), encoding="utf-8"
 default_args = {
     'owner': 'investment_assistant',
     'start_date': datetime(2025, 1, 1),
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retries': None,
+    'retry_delay': timedelta(minutes=1),
 }
 
 with DAG(
