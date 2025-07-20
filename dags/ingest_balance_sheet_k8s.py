@@ -27,7 +27,7 @@ default_args = {
 with DAG(
     dag_id='ingest_balance_sheet_k8s',
     default_args=default_args,
-    schedule_interval='@daily',
+    schedule_interval='@weekly',
     catchup=False,
     description='Fetch balance sheet data in batches (10 companies per day)',
     template_searchpath=[INITDB_SQL_DIR],
