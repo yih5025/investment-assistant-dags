@@ -86,9 +86,10 @@ def fetch_top_gainers_data(**context):
 
 def process_and_store_data(**context):
     """
-    수집된 데이터를 가공하여 PostgreSQL에 저장
+    수집된 데이터를 가공하여 PostgreSQL에 저장 (호출 회차별 batch_id 버전)
+    - batch_id: 호출 회차 식별자 (1, 2, 3, 4, ...)
     - top_gainers: 20개 전부
-    - top_losers: 상위 10개
+    - top_losers: 상위 10개  
     - most_actively_traded: 20개 전부
     """
     # XCom에서 데이터 가져오기
@@ -97,18 +98,23 @@ def process_and_store_data(**context):
     if not data:
         raise ValueError("❌ 이전 태스크에서 데이터를 받지 못했습니다")
     
-    # 타임스탬프 파싱
+    # DB 연결
+    hook = PostgresHook(postgres_conn_id='postgres_default')
+    
+    # 🔑 현재 최대 batch_id 조회해서 +1 (호출 회차 증가)
+    max_batch_result = hook.get_first("SELECT COALESCE(MAX(batch_id), 0) FROM top_gainers")
+    current_batch_id = (max_batch_result[0] if max_batch_result else 0) + 1
+    
+    # API 응답의 타임스탬프도 파싱 (참고용)
     last_updated_str = data['last_updated']
-    # "2025-07-18 16:16:00 US/Eastern" -> datetime 변환
-    last_updated = datetime.strptime(
+    api_last_updated = datetime.strptime(
         last_updated_str.split(' US/Eastern')[0], 
         "%Y-%m-%d %H:%M:%S"
     )
     
-    print(f"🔄 데이터 처리 시작: {last_updated}")
-    
-    # DB 연결
-    hook = PostgresHook(postgres_conn_id='postgres_default')
+    print(f"🆔 이번 호출 회차: {current_batch_id}")
+    print(f"📡 API 응답 시간: {api_last_updated}")
+    print(f"🔄 DAG 실행 시간: {context['execution_date']}")
     
     # 처리할 데이터 정의
     categories = [
@@ -132,6 +138,8 @@ def process_and_store_data(**context):
     total_success = 0
     total_error = 0
     
+    print(f"🚀 배치 {current_batch_id} 데이터 저장 시작")
+    
     for category in categories:
         category_name = category['name']
         category_data = category['data']
@@ -149,9 +157,10 @@ def process_and_store_data(**context):
                     error_count += 1
                     continue
                 
-                # 파라미터 준비
+                # 🔑 파라미터 준비 (호출 회차별 batch_id 포함)
                 params = {
-                    'last_updated': last_updated,
+                    'batch_id': current_batch_id,  # 🔑 핵심: 호출 회차 번호
+                    'last_updated': api_last_updated,  # API 응답 시간 (참고용)
                     'symbol': item['ticker'][:10],  # VARCHAR(10) 제한
                     'category': category_name,
                     'rank_position': rank,
@@ -175,28 +184,15 @@ def process_and_store_data(**context):
         total_error += error_count
     
     # 최종 통계
-    print(f"🎯 전체 저장 완료: {total_success}개 성공, {total_error}개 실패")
-    
-    # 저장된 데이터 확인
-    result = hook.get_first(
-        "SELECT COUNT(*) FROM top_gainers WHERE last_updated = %s",
-        parameters=[last_updated]
-    )
-    current_session_records = result[0] if result else 0
-    
-    total_result = hook.get_first("SELECT COUNT(*) FROM top_gainers")
-    total_records = total_result[0] if total_result else 0
-    
-    print(f"📊 이번 세션 저장: {current_session_records}개")
-    print(f"📊 총 레코드 수: {total_records}개")
+    print(f"🎯 배치 {current_batch_id} 저장 완료: {total_success}개 성공, {total_error}개 실패")
     
     return {
+        'batch_id': current_batch_id,
         'success_count': total_success,
         'error_count': total_error,
-        'current_session_records': current_session_records,
-        'total_records': total_records
+        'api_time': api_last_updated.isoformat(),
+        'execution_time': context['execution_date'].isoformat()
     }
-
 # DAG 정의
 with DAG(
     dag_id='ingest_top_gainers_to_db',
@@ -212,7 +208,7 @@ with DAG(
     create_table = PostgresOperator(
         task_id='create_top_gainers_table',
         postgres_conn_id='postgres_default',
-        sql='create_top_gainers.sql',
+        sql='create_top_gainers.sql',  # 실제 파일명에 맞춤
     )
     
     # 2. API 데이터 수집
