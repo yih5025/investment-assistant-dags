@@ -552,13 +552,13 @@ def process_and_store_25_limit_news(**context):
 
 # DAG 정의
 with DAG(
-    dag_id='ingest_market_news_sentiment_25_limit_weekday',
+    dag_id='ingest_market_news_sentiment',
     default_args=default_args,
     schedule_interval='@daily',
     catchup=False,
-    description='Alpha Vantage News & Sentiment API - 25개 제한 요일별 전문화',
+    description='Alpha Vantage News & Sentiment API',
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['news', 'sentiment', 'alpha_vantage', '25_limit', 'weekday_specialized'],
+    tags=['news', 'sentiment', 'alpha_vantage'],
 ) as dag:
     
     # 1. 테이블 생성
