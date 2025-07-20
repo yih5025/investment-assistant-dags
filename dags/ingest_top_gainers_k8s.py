@@ -217,7 +217,7 @@ with DAG(
     create_table = PostgresOperator(
         task_id='create_top_gainers_table',
         postgres_conn_id='postgres_default',
-        sql='create_topgainers.sql',
+        sql='create_top_gainers.sql',
     )
     
     # 2. API 데이터 수집
