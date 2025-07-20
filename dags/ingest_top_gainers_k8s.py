@@ -1,8 +1,3 @@
-"""
-Top Gainers/Losers/Most Active 주식 데이터 수집 DAG
-Alpha Vantage API를 통해 일일 주식 랭킹 데이터를 수집하여 PostgreSQL에 저장
-"""
-
 from datetime import datetime, timedelta
 import os
 import requests
