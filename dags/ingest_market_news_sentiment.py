@@ -26,96 +26,113 @@ default_args = {
     'retry_delay': timedelta(minutes=1),
 }
 
-class WeeklySpecialized25QueryGenerator:
-    """25개 제한 - 요일별 완전 전문화 쿼리 생성기"""
+# 요일별 전문화 유지 + 단순한 파라미터 조합
+class SimplifiedWeeklySpecializedQueries:
+    """
+    요일별 전문화 전략 유지하면서 파라미터 조합만 단순화
+    """
     
-    # ✅ 실제 지원되는 topics만 사용
-    VALID_TOPICS = [
-        'blockchain', 'earnings', 'ipo', 'mergers_and_acquisitions',
-        'financial_markets', 'economy_fiscal', 'economy_monetary', 
-        'economy_macro', 'energy_transportation', 'finance',
-        'life_sciences', 'manufacturing', 'real_estate', 
-        'retail_wholesale', 'technology'
-    ]
+    # ✅ 검증된 에너지 주식들
+    ENERGY_TICKERS = ['XOM', 'CVX', 'COP', 'EOG', 'SLB']
     
-    # ✅ 검증된 ticker들
-    STOCK_TICKERS = {
-        'megacap': ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA', 'META'],
-        'tech': ['IBM', 'ORCL', 'ADBE', 'CRM', 'INTC', 'AMD', 'QCOM'],
-        'finance': ['JPM', 'BAC', 'WFC', 'C', 'GS', 'V', 'MA'],
-        'crypto_stocks': ['COIN', 'MSTR', 'RIOT', 'MARA', 'CLSK'],
-        'energy': ['XOM', 'CVX', 'COP', 'EOG', 'SLB'],
-        'healthcare': ['JNJ', 'PFE', 'UNH', 'MRNA', 'ABBV'],
-        'consumer': ['WMT', 'TGT', 'COST', 'HD', 'LOW'],
-        'media': ['DIS', 'NFLX', 'CMCSA', 'VZ', 'T']
-    }
+    # ✅ 검증된 기술 주식들  
+    TECH_TICKERS = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA', 'META']
     
-    CRYPTO_TICKERS = ['CRYPTO:BTC', 'CRYPTO:ETH', 'CRYPTO:SOL', 'CRYPTO:ADA']
-    FOREX_TICKERS = ['FOREX:USD', 'FOREX:EUR', 'FOREX:JPY', 'FOREX:GBP']
+    # ✅ 검증된 금융 주식들
+    FINANCE_TICKERS = ['JPM', 'BAC', 'WFC', 'C', 'GS', 'V', 'MA']
     
-    def __init__(self, execution_date: datetime):
+    # ✅ 검증된 헬스케어 주식들
+    HEALTHCARE_TICKERS = ['JNJ', 'PFE', 'UNH', 'MRNA', 'ABBV']
+    
+    # ✅ 검증된 소비재 주식들
+    CONSUMER_TICKERS = ['WMT', 'TGT', 'COST', 'HD', 'LOW']
+    
+    # ✅ 검증된 암호화폐 관련 주식들
+    CRYPTO_TICKERS = ['COIN', 'MSTR', 'RIOT', 'MARA']
+    
+    def __init__(self, execution_date):
         self.execution_date = execution_date
         self.day_of_week = execution_date.weekday()
         self.day_names = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
     
-    def generate_weekday_queries(self) -> list:
-        """요일별 25개 전문화 쿼리 생성"""
+    def generate_simplified_weekday_queries(self) -> list:
+        """요일별 전문화 + 단순한 파라미터 조합"""
         
         if self.day_of_week == 0:  # 월요일
-            return self._monday_energy_manufacturing()
+            return self._monday_energy_manufacturing_simple()
         elif self.day_of_week == 1:  # 화요일
-            return self._tuesday_technology_ipo()
+            return self._tuesday_technology_ipo_simple()
         elif self.day_of_week == 2:  # 수요일
-            return self._wednesday_blockchain_finance()
+            return self._wednesday_blockchain_finance_simple()
         elif self.day_of_week == 3:  # 목요일
-            return self._thursday_earnings_healthcare()
+            return self._thursday_earnings_healthcare_simple()
         elif self.day_of_week == 4:  # 금요일
-            return self._friday_retail_mergers()
+            return self._friday_retail_mergers_simple()
         elif self.day_of_week == 5:  # 토요일
-            return self._saturday_realestate_macro()
+            return self._saturday_realestate_macro_simple()
         else:  # 일요일
-            return self._sunday_markets_fiscal()
+            return self._sunday_markets_policy_simple()
     
-    def _monday_energy_manufacturing(self) -> list:
-        """월요일: 에너지 & 제조업 전문 (25개)"""
+    def _monday_energy_manufacturing_simple(self) -> list:
+        """월요일: 에너지 & 제조업 (단순화)"""
         return [
-            # === 에너지 핵심 (15개) ===
+            # === 에너지 토픽 단독 (5개) ===
             {'type': 'energy_general', 'params': 'topics=energy_transportation&sort=LATEST'},
             {'type': 'energy_relevant', 'params': 'topics=energy_transportation&sort=RELEVANCE'},
-            {'type': 'energy_companies_all', 'params': f'tickers={",".join(self.STOCK_TICKERS["energy"])}&sort=LATEST'},
-            {'type': 'energy_exxon', 'params': 'tickers=XOM&sort=LATEST'},
-            {'type': 'energy_chevron', 'params': 'tickers=CVX&sort=LATEST'},
-            {'type': 'energy_conocophillips', 'params': 'tickers=COP&sort=LATEST'},
-            {'type': 'energy_eog', 'params': 'tickers=EOG&sort=LATEST'},
-            {'type': 'energy_slb', 'params': 'tickers=SLB&sort=LATEST'},
-            {'type': 'tesla_energy', 'params': 'tickers=TSLA&topics=energy_transportation'},
-            {'type': 'energy_economy', 'params': 'topics=energy_transportation,economy_macro'},
-            {'type': 'energy_fiscal_policy', 'params': 'topics=energy_transportation,economy_fiscal'},
-            {'type': 'energy_markets', 'params': 'topics=energy_transportation,financial_markets'},
-            {'type': 'energy_manufacturing', 'params': 'topics=energy_transportation,manufacturing'},
-            {'type': 'energy_tech_combo', 'params': 'topics=energy_transportation,technology'},
-            {'type': 'energy_finance', 'params': 'topics=energy_transportation,finance'},
-            
-            # === 제조업 전문 (10개) ===
             {'type': 'manufacturing_general', 'params': 'topics=manufacturing&sort=LATEST'},
             {'type': 'manufacturing_relevant', 'params': 'topics=manufacturing&sort=RELEVANCE'},
-            {'type': 'manufacturing_caterpillar', 'params': 'tickers=CAT&topics=manufacturing'},
-            {'type': 'manufacturing_ge', 'params': 'tickers=GE&topics=manufacturing'},
-            {'type': 'manufacturing_deere', 'params': 'tickers=DE&topics=manufacturing'},
-            {'type': 'manufacturing_ford', 'params': 'tickers=F&topics=manufacturing'},
-            {'type': 'manufacturing_gm', 'params': 'tickers=GM&topics=manufacturing'},
-            {'type': 'manufacturing_boeing', 'params': 'tickers=BA&topics=manufacturing'},
-            {'type': 'manufacturing_economy', 'params': 'topics=manufacturing,economy_macro'},
-            {'type': 'manufacturing_tech', 'params': 'topics=manufacturing,technology'},
+            {'type': 'energy_manufacturing', 'params': 'topics=energy_transportation'},  # sort 제거
+            
+            # === 에너지 주식 단독 (10개) ===
+            {'type': 'exxon_news', 'params': 'tickers=XOM'},
+            {'type': 'chevron_news', 'params': 'tickers=CVX'},
+            {'type': 'conocophillips_news', 'params': 'tickers=COP'},
+            {'type': 'eog_news', 'params': 'tickers=EOG'},
+            {'type': 'slb_news', 'params': 'tickers=SLB'},
+            {'type': 'tesla_energy_news', 'params': 'tickers=TSLA'},  # 에너지 관련
+            {'type': 'caterpillar_news', 'params': 'tickers=CAT'},    # 제조업
+            {'type': 'ge_news', 'params': 'tickers=GE'},             # 제조업
+            {'type': 'ford_news', 'params': 'tickers=F'},            # 제조업
+            {'type': 'boeing_news', 'params': 'tickers=BA'},         # 제조업
+            
+            # === 단순 조합 (10개) ===
+            {'type': 'exxon_energy', 'params': 'tickers=XOM&topics=energy_transportation'},
+            {'type': 'chevron_energy', 'params': 'tickers=CVX&topics=energy_transportation'},
+            {'type': 'cop_energy', 'params': 'tickers=COP&topics=energy_transportation'},
+            {'type': 'tesla_manufacturing', 'params': 'tickers=TSLA&topics=manufacturing'},
+            {'type': 'cat_manufacturing', 'params': 'tickers=CAT&topics=manufacturing'},
+            {'type': 'ge_manufacturing', 'params': 'tickers=GE&topics=manufacturing'},
+            {'type': 'ford_manufacturing', 'params': 'tickers=F&topics=manufacturing'},
+            {'type': 'boeing_manufacturing', 'params': 'tickers=BA&topics=manufacturing'},
+            {'type': 'eog_energy', 'params': 'tickers=EOG&topics=energy_transportation'},
+            {'type': 'slb_energy', 'params': 'tickers=SLB&topics=energy_transportation'},
         ]
     
-    def _tuesday_technology_ipo(self) -> list:
-        """화요일: 기술 & IPO 전문 (25개)"""
+    def _tuesday_technology_ipo_simple(self) -> list:
+        """화요일: 기술 & IPO (단순화)"""
         return [
-            # === 기술 핵심 (18개) ===
+            # === 기술 토픽 단독 (3개) ===
             {'type': 'technology_general', 'params': 'topics=technology&sort=LATEST'},
             {'type': 'technology_relevant', 'params': 'topics=technology&sort=RELEVANCE'},
-            {'type': 'tech_megacap_all', 'params': f'tickers={",".join(self.STOCK_TICKERS["megacap"])}&topics=technology'},
+            {'type': 'ipo_general', 'params': 'topics=ipo&sort=LATEST'},
+            
+            # === 기술 주식 단독 (14개) ===
+            {'type': 'apple_news', 'params': 'tickers=AAPL'},
+            {'type': 'microsoft_news', 'params': 'tickers=MSFT'},
+            {'type': 'nvidia_news', 'params': 'tickers=NVDA'},
+            {'type': 'google_news', 'params': 'tickers=GOOGL'},
+            {'type': 'amazon_news', 'params': 'tickers=AMZN'},
+            {'type': 'tesla_news', 'params': 'tickers=TSLA'},
+            {'type': 'meta_news', 'params': 'tickers=META'},
+            {'type': 'oracle_news', 'params': 'tickers=ORCL'},
+            {'type': 'salesforce_news', 'params': 'tickers=CRM'},
+            {'type': 'intel_news', 'params': 'tickers=INTC'},
+            {'type': 'amd_news', 'params': 'tickers=AMD'},
+            {'type': 'qualcomm_news', 'params': 'tickers=QCOM'},
+            {'type': 'adobe_news', 'params': 'tickers=ADBE'},
+            {'type': 'ibm_news', 'params': 'tickers=IBM'},
+            
+            # === 단순 조합 (8개) ===
             {'type': 'apple_tech', 'params': 'tickers=AAPL&topics=technology'},
             {'type': 'microsoft_tech', 'params': 'tickers=MSFT&topics=technology'},
             {'type': 'nvidia_tech', 'params': 'tickers=NVDA&topics=technology'},
@@ -123,188 +140,182 @@ class WeeklySpecialized25QueryGenerator:
             {'type': 'amazon_tech', 'params': 'tickers=AMZN&topics=technology'},
             {'type': 'tesla_tech', 'params': 'tickers=TSLA&topics=technology'},
             {'type': 'meta_tech', 'params': 'tickers=META&topics=technology'},
-            {'type': 'oracle_tech', 'params': 'tickers=ORCL&topics=technology'},
-            {'type': 'salesforce_tech', 'params': 'tickers=CRM&topics=technology'},
-            {'type': 'intel_tech', 'params': 'tickers=INTC&topics=technology'},
-            {'type': 'amd_tech', 'params': 'tickers=AMD&topics=technology'},
-            {'type': 'tech_manufacturing', 'params': 'topics=technology,manufacturing'},
-            {'type': 'tech_finance', 'params': 'topics=technology,finance'},
-            {'type': 'tech_markets', 'params': 'topics=technology,financial_markets'},
-            {'type': 'tech_economy', 'params': 'topics=technology,economy_macro'},
-            
-            # === IPO 전문 (7개) ===
-            {'type': 'ipo_general', 'params': 'topics=ipo&sort=LATEST'},
-            {'type': 'ipo_relevant', 'params': 'topics=ipo&sort=RELEVANCE'},
-            {'type': 'ipo_technology', 'params': 'topics=ipo,technology'},
-            {'type': 'ipo_finance', 'params': 'topics=ipo,finance'},
-            {'type': 'ipo_markets', 'params': 'topics=ipo,financial_markets'},
-            {'type': 'ipo_rblx', 'params': 'tickers=RBLX&topics=ipo'},
-            {'type': 'ipo_coin', 'params': 'tickers=COIN&topics=ipo'},
+            {'type': 'coinbase_ipo', 'params': 'tickers=COIN&topics=ipo'},
         ]
     
-    def _wednesday_blockchain_finance(self) -> list:
-        """수요일: 블록체인 & 금융 전문 (25개)"""
+    def _wednesday_blockchain_finance_simple(self) -> list:
+        """수요일: 블록체인 & 금융 (단순화)"""
         return [
-            # === 블록체인 & 암호화폐 (15개) ===
+            # === 블록체인/금융 토픽 단독 (4개) ===
             {'type': 'blockchain_general', 'params': 'topics=blockchain&sort=LATEST'},
             {'type': 'blockchain_relevant', 'params': 'topics=blockchain&sort=RELEVANCE'},
-            {'type': 'crypto_bitcoin', 'params': 'tickers=CRYPTO:BTC&sort=LATEST'},
-            {'type': 'crypto_ethereum', 'params': 'tickers=CRYPTO:ETH&sort=LATEST'},
-            {'type': 'crypto_solana', 'params': 'tickers=CRYPTO:SOL&sort=LATEST'},
-            {'type': 'crypto_cardano', 'params': 'tickers=CRYPTO:ADA&sort=LATEST'},
-            {'type': 'crypto_all', 'params': f'tickers={",".join(self.CRYPTO_TICKERS)}&sort=LATEST'},
-            {'type': 'crypto_coinbase', 'params': 'tickers=COIN&sort=LATEST'},
-            {'type': 'crypto_microstrategy', 'params': 'tickers=MSTR&sort=LATEST'},
-            {'type': 'crypto_stocks_all', 'params': f'tickers={",".join(self.STOCK_TICKERS["crypto_stocks"])}&sort=LATEST'},
-            {'type': 'blockchain_finance', 'params': 'topics=blockchain,finance'},
-            {'type': 'blockchain_tech', 'params': 'topics=blockchain,technology'},
-            {'type': 'blockchain_markets', 'params': 'topics=blockchain,financial_markets'},
-            {'type': 'bitcoin_blockchain', 'params': 'tickers=CRYPTO:BTC&topics=blockchain'},
-            {'type': 'ethereum_blockchain', 'params': 'tickers=CRYPTO:ETH&topics=blockchain'},
-            
-            # === 금융 섹터 (10개) ===
             {'type': 'finance_general', 'params': 'topics=finance&sort=LATEST'},
             {'type': 'finance_relevant', 'params': 'topics=finance&sort=RELEVANCE'},
-            {'type': 'finance_banks_all', 'params': f'tickers={",".join(self.STOCK_TICKERS["finance"][:5])}&sort=LATEST'},
-            {'type': 'jpmorgan_finance', 'params': 'tickers=JPM&sort=LATEST'},
-            {'type': 'bofa_finance', 'params': 'tickers=BAC&sort=LATEST'},
-            {'type': 'visa_mastercard', 'params': 'tickers=V,MA&sort=LATEST'},
-            {'type': 'finance_tech', 'params': 'topics=finance,technology'},
-            {'type': 'finance_markets', 'params': 'topics=finance,financial_markets'},
-            {'type': 'finance_economy', 'params': 'topics=finance,economy_macro'},
-            {'type': 'finance_monetary', 'params': 'topics=finance,economy_monetary'},
+            
+            # === 금융 주식 단독 (10개) ===
+            {'type': 'jpmorgan_news', 'params': 'tickers=JPM'},
+            {'type': 'bofa_news', 'params': 'tickers=BAC'},
+            {'type': 'wells_fargo_news', 'params': 'tickers=WFC'},
+            {'type': 'citigroup_news', 'params': 'tickers=C'},
+            {'type': 'goldman_news', 'params': 'tickers=GS'},
+            {'type': 'visa_news', 'params': 'tickers=V'},
+            {'type': 'mastercard_news', 'params': 'tickers=MA'},
+            {'type': 'coinbase_news', 'params': 'tickers=COIN'},
+            {'type': 'microstrategy_news', 'params': 'tickers=MSTR'},
+            {'type': 'riot_news', 'params': 'tickers=RIOT'},
+            
+            # === 단순 조합 (11개) ===
+            {'type': 'jpmorgan_finance', 'params': 'tickers=JPM&topics=finance'},
+            {'type': 'bofa_finance', 'params': 'tickers=BAC&topics=finance'},
+            {'type': 'visa_finance', 'params': 'tickers=V&topics=finance'},
+            {'type': 'mastercard_finance', 'params': 'tickers=MA&topics=finance'},
+            {'type': 'coinbase_blockchain', 'params': 'tickers=COIN&topics=blockchain'},
+            {'type': 'microstrategy_blockchain', 'params': 'tickers=MSTR&topics=blockchain'},
+            {'type': 'riot_blockchain', 'params': 'tickers=RIOT&topics=blockchain'},
+            {'type': 'mara_blockchain', 'params': 'tickers=MARA&topics=blockchain'},
+            {'type': 'wells_finance', 'params': 'tickers=WFC&topics=finance'},
+            {'type': 'citi_finance', 'params': 'tickers=C&topics=finance'},
+            {'type': 'goldman_finance', 'params': 'tickers=GS&topics=finance'},
         ]
     
-    def _thursday_earnings_healthcare(self) -> list:
-        """목요일: 실적 & 헬스케어 전문 (25개)"""
+    def _thursday_earnings_healthcare_simple(self) -> list:
+        """목요일: 실적 & 헬스케어 (단순화)"""
         return [
-            # === 실적 시즌 (15개) ===
+            # === 실적/헬스케어 토픽 단독 (4개) ===
             {'type': 'earnings_general', 'params': 'topics=earnings&sort=LATEST'},
             {'type': 'earnings_relevant', 'params': 'topics=earnings&sort=RELEVANCE'},
-            {'type': 'earnings_megacap', 'params': f'tickers={",".join(self.STOCK_TICKERS["megacap"])}&topics=earnings'},
+            {'type': 'healthcare_general', 'params': 'topics=life_sciences&sort=LATEST'},
+            {'type': 'healthcare_relevant', 'params': 'topics=life_sciences&sort=RELEVANCE'},
+            
+            # === 주요 주식 단독 (12개) ===
+            {'type': 'apple_earnings_news', 'params': 'tickers=AAPL'},
+            {'type': 'microsoft_earnings_news', 'params': 'tickers=MSFT'},
+            {'type': 'nvidia_earnings_news', 'params': 'tickers=NVDA'},
+            {'type': 'google_earnings_news', 'params': 'tickers=GOOGL'},
+            {'type': 'amazon_earnings_news', 'params': 'tickers=AMZN'},
+            {'type': 'tesla_earnings_news', 'params': 'tickers=TSLA'},
+            {'type': 'jnj_news', 'params': 'tickers=JNJ'},
+            {'type': 'pfizer_news', 'params': 'tickers=PFE'},
+            {'type': 'unitedhealth_news', 'params': 'tickers=UNH'},
+            {'type': 'moderna_news', 'params': 'tickers=MRNA'},
+            {'type': 'abbvie_news', 'params': 'tickers=ABBV'},
+            {'type': 'jpmorgan_earnings_news', 'params': 'tickers=JPM'},
+            
+            # === 단순 조합 (9개) ===
             {'type': 'apple_earnings', 'params': 'tickers=AAPL&topics=earnings'},
             {'type': 'microsoft_earnings', 'params': 'tickers=MSFT&topics=earnings'},
             {'type': 'nvidia_earnings', 'params': 'tickers=NVDA&topics=earnings'},
             {'type': 'google_earnings', 'params': 'tickers=GOOGL&topics=earnings'},
-            {'type': 'amazon_earnings', 'params': 'tickers=AMZN&topics=earnings'},
-            {'type': 'tesla_earnings', 'params': 'tickers=TSLA&topics=earnings'},
-            {'type': 'meta_earnings', 'params': 'tickers=META&topics=earnings'},
-            {'type': 'jpmorgan_earnings', 'params': 'tickers=JPM&topics=earnings'},
-            {'type': 'earnings_finance', 'params': 'topics=earnings,finance'},
-            {'type': 'earnings_tech', 'params': 'topics=earnings,technology'},
-            {'type': 'earnings_markets', 'params': 'topics=earnings,financial_markets'},
-            {'type': 'earnings_manufacturing', 'params': 'topics=earnings,manufacturing'},
-            
-            # === 헬스케어 & 생명과학 (10개) ===
-            {'type': 'healthcare_general', 'params': 'topics=life_sciences&sort=LATEST'},
-            {'type': 'healthcare_relevant', 'params': 'topics=life_sciences&sort=RELEVANCE'},
-            {'type': 'healthcare_companies', 'params': f'tickers={",".join(self.STOCK_TICKERS["healthcare"])}&sort=LATEST'},
-            {'type': 'jnj_healthcare', 'params': 'tickers=JNJ&sort=LATEST'},
-            {'type': 'pfizer_healthcare', 'params': 'tickers=PFE&sort=LATEST'},
-            {'type': 'unitedhealth_healthcare', 'params': 'tickers=UNH&sort=LATEST'},
-            {'type': 'moderna_healthcare', 'params': 'tickers=MRNA&sort=LATEST'},
-            {'type': 'healthcare_earnings', 'params': 'topics=life_sciences,earnings'},
-            {'type': 'healthcare_tech', 'params': 'topics=life_sciences,technology'},
-            {'type': 'healthcare_finance', 'params': 'topics=life_sciences,finance'},
+            {'type': 'jnj_healthcare', 'params': 'tickers=JNJ&topics=life_sciences'},
+            {'type': 'pfizer_healthcare', 'params': 'tickers=PFE&topics=life_sciences'},
+            {'type': 'moderna_healthcare', 'params': 'tickers=MRNA&topics=life_sciences'},
+            {'type': 'unitedhealth_healthcare', 'params': 'tickers=UNH&topics=life_sciences'},
+            {'type': 'abbvie_healthcare', 'params': 'tickers=ABBV&topics=life_sciences'},
         ]
     
-    def _friday_retail_mergers(self) -> list:
-        """금요일: 리테일 & 인수합병 전문 (25개)"""
+    def _friday_retail_mergers_simple(self) -> list:
+        """금요일: 리테일 & M&A (단순화)"""
         return [
-            # === 리테일 & 소비재 (15개) ===
+            # === 리테일/M&A 토픽 단독 (4개) ===
             {'type': 'retail_general', 'params': 'topics=retail_wholesale&sort=LATEST'},
             {'type': 'retail_relevant', 'params': 'topics=retail_wholesale&sort=RELEVANCE'},
-            {'type': 'consumer_companies', 'params': f'tickers={",".join(self.STOCK_TICKERS["consumer"])}&sort=LATEST'},
-            {'type': 'walmart_retail', 'params': 'tickers=WMT&sort=LATEST'},
-            {'type': 'target_retail', 'params': 'tickers=TGT&sort=LATEST'},
-            {'type': 'costco_retail', 'params': 'tickers=COST&sort=LATEST'},
-            {'type': 'homedepot_retail', 'params': 'tickers=HD&sort=LATEST'},
-            {'type': 'lowes_retail', 'params': 'tickers=LOW&sort=LATEST'},
-            {'type': 'amazon_retail', 'params': 'tickers=AMZN&topics=retail_wholesale'},
-            {'type': 'retail_tech', 'params': 'topics=retail_wholesale,technology'},
-            {'type': 'retail_finance', 'params': 'topics=retail_wholesale,finance'},
-            {'type': 'retail_earnings', 'params': 'topics=retail_wholesale,earnings'},
-            {'type': 'retail_markets', 'params': 'topics=retail_wholesale,financial_markets'},
-            {'type': 'retail_economy', 'params': 'topics=retail_wholesale,economy_macro'},
-            {'type': 'retail_manufacturing', 'params': 'topics=retail_wholesale,manufacturing'},
-            
-            # === 인수합병 & M&A (10개) ===
             {'type': 'mergers_general', 'params': 'topics=mergers_and_acquisitions&sort=LATEST'},
             {'type': 'mergers_relevant', 'params': 'topics=mergers_and_acquisitions&sort=RELEVANCE'},
-            {'type': 'mergers_tech', 'params': 'topics=mergers_and_acquisitions,technology'},
-            {'type': 'mergers_finance', 'params': 'topics=mergers_and_acquisitions,finance'},
-            {'type': 'mergers_healthcare', 'params': 'topics=mergers_and_acquisitions,life_sciences'},
+            
+            # === 소비재 주식 단독 (12개) ===
+            {'type': 'walmart_news', 'params': 'tickers=WMT'},
+            {'type': 'target_news', 'params': 'tickers=TGT'},
+            {'type': 'costco_news', 'params': 'tickers=COST'},
+            {'type': 'homedepot_news', 'params': 'tickers=HD'},
+            {'type': 'lowes_news', 'params': 'tickers=LOW'},
+            {'type': 'amazon_retail_news', 'params': 'tickers=AMZN'},
+            {'type': 'disney_news', 'params': 'tickers=DIS'},
+            {'type': 'netflix_news', 'params': 'tickers=NFLX'},
+            {'type': 'starbucks_news', 'params': 'tickers=SBUX'},
+            {'type': 'nike_news', 'params': 'tickers=NKE'},
+            {'type': 'mcdonalds_news', 'params': 'tickers=MCD'},
+            {'type': 'cocacola_news', 'params': 'tickers=KO'},
+            
+            # === 단순 조합 (9개) ===
+            {'type': 'walmart_retail', 'params': 'tickers=WMT&topics=retail_wholesale'},
+            {'type': 'target_retail', 'params': 'tickers=TGT&topics=retail_wholesale'},
+            {'type': 'costco_retail', 'params': 'tickers=COST&topics=retail_wholesale'},
+            {'type': 'homedepot_retail', 'params': 'tickers=HD&topics=retail_wholesale'},
+            {'type': 'amazon_retail', 'params': 'tickers=AMZN&topics=retail_wholesale'},
             {'type': 'microsoft_mergers', 'params': 'tickers=MSFT&topics=mergers_and_acquisitions'},
             {'type': 'google_mergers', 'params': 'tickers=GOOGL&topics=mergers_and_acquisitions'},
             {'type': 'amazon_mergers', 'params': 'tickers=AMZN&topics=mergers_and_acquisitions'},
-            {'type': 'mergers_markets', 'params': 'topics=mergers_and_acquisitions,financial_markets'},
-            {'type': 'mergers_retail', 'params': 'topics=mergers_and_acquisitions,retail_wholesale'},
+            {'type': 'disney_mergers', 'params': 'tickers=DIS&topics=mergers_and_acquisitions'},
         ]
     
-    def _saturday_realestate_macro(self) -> list:
-        """토요일: 부동산 & 거시경제 전문 (25개)"""
+    def _saturday_realestate_macro_simple(self) -> list:
+        """토요일: 부동산 & 거시경제 (단순화)"""
         return [
-            # === 부동산 섹터 (15개) ===
+            # === 부동산/거시경제 토픽 단독 (6개) ===
             {'type': 'realestate_general', 'params': 'topics=real_estate&sort=LATEST'},
             {'type': 'realestate_relevant', 'params': 'topics=real_estate&sort=RELEVANCE'},
-            {'type': 'realestate_finance', 'params': 'topics=real_estate,finance'},
-            {'type': 'realestate_economy', 'params': 'topics=real_estate,economy_macro'},
-            {'type': 'realestate_monetary', 'params': 'topics=real_estate,economy_monetary'},
-            {'type': 'realestate_fiscal', 'params': 'topics=real_estate,economy_fiscal'},
-            {'type': 'realestate_manufacturing', 'params': 'topics=real_estate,manufacturing'},
-            {'type': 'realestate_tech', 'params': 'topics=real_estate,technology'},
-            {'type': 'realestate_retail', 'params': 'topics=real_estate,retail_wholesale'},
-            {'type': 'realestate_markets', 'params': 'topics=real_estate,financial_markets'},
-            {'type': 'realestate_earnings', 'params': 'topics=real_estate,earnings'},
-            {'type': 'home_builders', 'params': 'tickers=HD,LOW&topics=real_estate'},
-            {'type': 'realestate_energy', 'params': 'topics=real_estate,energy_transportation'},
-            {'type': 'realestate_ipo', 'params': 'topics=real_estate,ipo'},
-            {'type': 'realestate_mergers', 'params': 'topics=real_estate,mergers_and_acquisitions'},
-            
-            # === 거시경제 지표 (10개) ===
             {'type': 'macro_general', 'params': 'topics=economy_macro&sort=LATEST'},
             {'type': 'macro_relevant', 'params': 'topics=economy_macro&sort=RELEVANCE'},
-            {'type': 'macro_finance', 'params': 'topics=economy_macro,finance'},
-            {'type': 'macro_markets', 'params': 'topics=economy_macro,financial_markets'},
-            {'type': 'macro_monetary', 'params': 'topics=economy_macro,economy_monetary'},
-            {'type': 'macro_fiscal', 'params': 'topics=economy_macro,economy_fiscal'},
-            {'type': 'macro_manufacturing', 'params': 'topics=economy_macro,manufacturing'},
-            {'type': 'macro_energy', 'params': 'topics=economy_macro,energy_transportation'},
-            {'type': 'forex_macro', 'params': f'tickers={",".join(self.FOREX_TICKERS)}&topics=economy_macro'},
-            {'type': 'usd_macro', 'params': 'tickers=FOREX:USD&topics=economy_macro'},
+            {'type': 'manufacturing_macro', 'params': 'topics=manufacturing'},
+            {'type': 'energy_macro', 'params': 'topics=energy_transportation'},
+            
+            # === 부동산/건설 관련 주식 (10개) ===
+            {'type': 'homedepot_realestate_news', 'params': 'tickers=HD'},
+            {'type': 'lowes_realestate_news', 'params': 'tickers=LOW'},
+            {'type': 'caterpillar_construction_news', 'params': 'tickers=CAT'},
+            {'type': 'deere_construction_news', 'params': 'tickers=DE'},
+            {'type': 'boeing_manufacturing_news', 'params': 'tickers=BA'},
+            {'type': 'ge_industrial_news', 'params': 'tickers=GE'},
+            {'type': 'ford_auto_news', 'params': 'tickers=F'},
+            {'type': 'gm_auto_news', 'params': 'tickers=GM'},
+            {'type': 'exxon_macro_news', 'params': 'tickers=XOM'},
+            {'type': 'chevron_macro_news', 'params': 'tickers=CVX'},
+            
+            # === 단순 조합 (9개) ===
+            {'type': 'homedepot_realestate', 'params': 'tickers=HD&topics=real_estate'},
+            {'type': 'lowes_realestate', 'params': 'tickers=LOW&topics=real_estate'},
+            {'type': 'caterpillar_macro', 'params': 'tickers=CAT&topics=economy_macro'},
+            {'type': 'boeing_macro', 'params': 'tickers=BA&topics=economy_macro'},
+            {'type': 'ford_macro', 'params': 'tickers=F&topics=economy_macro'},
+            {'type': 'exxon_realestate', 'params': 'tickers=XOM&topics=real_estate'},
+            {'type': 'ge_manufacturing', 'params': 'tickers=GE&topics=manufacturing'},
+            {'type': 'deere_manufacturing', 'params': 'tickers=DE&topics=manufacturing'},
+            {'type': 'gm_manufacturing', 'params': 'tickers=GM&topics=manufacturing'},
         ]
     
-    def _sunday_markets_fiscal(self) -> list:
-        """일요일: 금융시장 & 재정정책 전문 (25개)"""
+    def _sunday_markets_policy_simple(self) -> list:
+        """일요일: 금융시장 & 정책 (단순화) - 기존 실패 조합 완전 교체"""
         return [
-            # === 금융시장 전반 (15개) ===
-            {'type': 'markets_general', 'params': 'topics=financial_markets&sort=LATEST'},
-            {'type': 'markets_relevant', 'params': 'topics=financial_markets&sort=RELEVANCE'},
-            {'type': 'markets_tech', 'params': 'topics=financial_markets,technology'},
-            {'type': 'markets_finance', 'params': 'topics=financial_markets,finance'},
-            {'type': 'markets_earnings', 'params': 'topics=financial_markets,earnings'},
-            {'type': 'markets_macro', 'params': 'topics=financial_markets,economy_macro'},
-            {'type': 'markets_monetary', 'params': 'topics=financial_markets,economy_monetary'},
-            {'type': 'markets_energy', 'params': 'topics=financial_markets,energy_transportation'},
-            {'type': 'markets_healthcare', 'params': 'topics=financial_markets,life_sciences'},
-            {'type': 'markets_retail', 'params': 'topics=financial_markets,retail_wholesale'},
-            {'type': 'markets_realestate', 'params': 'topics=financial_markets,real_estate'},
-            {'type': 'markets_manufacturing', 'params': 'topics=financial_markets,manufacturing'},
-            {'type': 'markets_blockchain', 'params': 'topics=financial_markets,blockchain'},
-            {'type': 'markets_ipo', 'params': 'topics=financial_markets,ipo'},
-            {'type': 'markets_mergers', 'params': 'topics=financial_markets,mergers_and_acquisitions'},
+            # === 단일 토픽 (8개) - 검증된 것들만 ===
+            {'type': 'technology_markets', 'params': 'topics=technology'},
+            {'type': 'finance_markets', 'params': 'topics=finance'},
+            {'type': 'earnings_markets', 'params': 'topics=earnings'},
+            {'type': 'ipo_markets', 'params': 'topics=ipo'},
+            {'type': 'blockchain_markets', 'params': 'topics=blockchain'},
+            {'type': 'mergers_markets', 'params': 'topics=mergers_and_acquisitions'},
+            {'type': 'retail_markets', 'params': 'topics=retail_wholesale'},
+            {'type': 'healthcare_markets', 'params': 'topics=life_sciences'},
             
-            # === 통화정책 & 재정정책 (10개) ===
-            {'type': 'monetary_general', 'params': 'topics=economy_monetary&sort=LATEST'},
-            {'type': 'monetary_relevant', 'params': 'topics=economy_monetary&sort=RELEVANCE'},
-            {'type': 'fiscal_general', 'params': 'topics=economy_fiscal&sort=LATEST'},
-            {'type': 'fiscal_relevant', 'params': 'topics=economy_fiscal&sort=RELEVANCE'},
-            {'type': 'monetary_finance', 'params': 'topics=economy_monetary,finance'},
-            {'type': 'monetary_markets', 'params': 'topics=economy_monetary,financial_markets'},
-            {'type': 'fiscal_finance', 'params': 'topics=economy_fiscal,finance'},
-            {'type': 'fiscal_markets', 'params': 'topics=economy_fiscal,financial_markets'},
-            {'type': 'monetary_fiscal', 'params': 'topics=economy_monetary,economy_fiscal'},
-            {'type': 'usd_policy', 'params': 'tickers=FOREX:USD&topics=economy_monetary'},
+            # === 주요 주식 단독 (10개) ===
+            {'type': 'apple_sunday', 'params': 'tickers=AAPL'},
+            {'type': 'microsoft_sunday', 'params': 'tickers=MSFT'},
+            {'type': 'nvidia_sunday', 'params': 'tickers=NVDA'},
+            {'type': 'google_sunday', 'params': 'tickers=GOOGL'},
+            {'type': 'amazon_sunday', 'params': 'tickers=AMZN'},
+            {'type': 'tesla_sunday', 'params': 'tickers=TSLA'},
+            {'type': 'jpmorgan_sunday', 'params': 'tickers=JPM'},
+            {'type': 'visa_sunday', 'params': 'tickers=V'},
+            {'type': 'coinbase_sunday', 'params': 'tickers=COIN'},
+            {'type': 'meta_sunday', 'params': 'tickers=META'},
+            
+            # === 단순 조합 (7개) ===
+            {'type': 'apple_finance', 'params': 'tickers=AAPL&topics=finance'},
+            {'type': 'microsoft_finance', 'params': 'tickers=MSFT&topics=finance'},
+            {'type': 'jpmorgan_earnings', 'params': 'tickers=JPM&topics=earnings'},
+            {'type': 'visa_technology', 'params': 'tickers=V&topics=technology'},
+            {'type': 'coinbase_finance', 'params': 'tickers=COIN&topics=finance'},
+            {'type': 'nvidia_finance', 'params': 'tickers=NVDA&topics=finance'},
+            {'type': 'tesla_finance', 'params': 'tickers=TSLA&topics=finance'},
         ]
 
 def collect_news_sentiment_25(**context):
@@ -322,7 +333,7 @@ def collect_news_sentiment_25(**context):
     current_batch_id = (max_batch_result[0] if max_batch_result else 0) + 1
     
     execution_date = context['execution_date']
-    generator = WeeklySpecialized25QueryGenerator(execution_date)
+    generator = SimplifiedWeeklySpecializedQueries(execution_date)
     day_name = generator.day_names[generator.day_of_week]
     
     print(f"🗓️ 실행 날짜: {execution_date.strftime('%Y-%m-%d')} ({day_name})")
@@ -330,7 +341,7 @@ def collect_news_sentiment_25(**context):
     print(f"🎯 일일 제한: 25개 호출 (최적화됨)")
     
     # 요일별 25개 전문 쿼리 생성
-    query_combinations = generator.generate_weekday_queries()
+    query_combinations = generator.generate_simplified_weekday_queries()
     
     print(f"📊 {day_name} 전문 쿼리: {len(query_combinations)}개")
     
@@ -457,7 +468,7 @@ def process_and_store_25_limit_news(**context):
     duplicate_count = 0
     
     execution_date = context['execution_date']
-    generator = WeeklySpecialized25QueryGenerator(execution_date)
+    generator = SimplifiedWeeklySpecializedQueries(execution_date)
     day_name = generator.day_names[generator.day_of_week]
     
     print(f"🚀 배치 {batch_id} ({day_name}) 25개 제한 뉴스 저장 시작: {len(news_data)}개")
