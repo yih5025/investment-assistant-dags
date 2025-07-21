@@ -1,0 +1,176 @@
+# 수정된 Finnhub Consumer
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finnhub-consumer-code
+  namespace: investment-assistant
+data:
+  consumer.py: |
+    import json
+    import os
+    import time
+    from kafka import KafkaConsumer
+    import psycopg2
+
+    class FinnhubTradesConsumer:
+        def __init__(self):
+            self.kafka_servers = os.getenv('KAFKA_SERVERS')
+            self.topic = "finnhub-trades"
+            
+        def get_db_connection(self):
+            return psycopg2.connect(
+                host=os.getenv('POSTGRES_HOST'),
+                database=os.getenv('POSTGRES_DB'),
+                user=os.getenv('POSTGRES_USER'),
+                password=os.getenv('POSTGRES_PASSWORD'),
+                port=5432
+            )
+            
+
+                    
+        def safe_decimal(self, value):
+            """안전한 숫자 변환"""
+            if value is None or value == '':
+                return None
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return None
+                
+        def insert_trade_data(self, data):
+            """거래 데이터 삽입 (빗썸 Consumer 패턴 활용)"""
+            conn = None
+            try:
+                conn = self.get_db_connection()
+                with conn.cursor() as cursor:
+                    insert_sql = '''
+                        INSERT INTO finnhub_trades (
+                            symbol, price, volume, timestamp_ms, 
+                            trade_conditions, source, created_at
+                        ) VALUES (
+                            %(symbol)s, %(price)s, %(volume)s, %(timestamp_ms)s,
+                            %(trade_conditions)s, %(source)s, NOW()
+                        )
+                    '''
+                    
+                    params = {
+                        'symbol': data.get('symbol'),
+                        'price': self.safe_decimal(data.get('price')),
+                        'volume': data.get('volume'),
+                        'timestamp_ms': data.get('timestamp_ms'),
+                        'trade_conditions': data.get('trade_conditions', []),
+                        'source': data.get('source', 'finnhub_websocket')
+                    }
+                    
+                    cursor.execute(insert_sql, params)
+                    conn.commit()
+                    
+                return True
+                
+            except Exception as e:
+                print(f"❌ DB 삽입 실패: {e}")
+                if conn:
+                    conn.rollback()
+                return False
+            finally:
+                if conn:
+                    conn.close()
+                    
+        def run(self):
+            consumer = KafkaConsumer(
+                self.topic,
+                bootstrap_servers=self.kafka_servers,
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                key_deserializer=lambda m: m.decode('utf-8') if m else None,
+                group_id='finnhub-trades-consumer-group',
+                auto_offset_reset='latest',
+                enable_auto_commit=True
+            )
+            
+            processed_count = 0
+            error_count = 0
+            start_time = time.time()
+            
+            print("🔄 Finnhub Trades Consumer 시작")
+            print(f"🔗 Topic: {self.topic}")
+            print(f"🔗 Kafka: {self.kafka_servers}")
+            
+            for message in consumer:
+                try:
+                    data = message.value
+                    symbol = data.get('symbol', 'unknown')
+                    
+                    if self.insert_trade_data(data):
+                        processed_count += 1
+                        if processed_count % 100 == 0:
+                            elapsed = time.time() - start_time
+                            rate = processed_count / elapsed if elapsed > 0 else 0
+                            current_time = time.strftime("%H:%M:%S")
+                            print(f"📊 처리: {processed_count}, 에러: {error_count}, 시간: {current_time}, 속도: {rate:.1f}/sec")
+                    else:
+                        error_count += 1
+                        
+                except Exception as e:
+                    print(f"❌ 메시지 처리 오류: {e}")
+                    error_count += 1
+
+    if __name__ == "__main__":
+        FinnhubTradesConsumer().run()
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finnhub-trades-consumer
+  namespace: investment-assistant
+  labels:
+    app: finnhub-trades-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finnhub-trades-consumer
+  template:
+    metadata:
+      labels:
+        app: finnhub-trades-consumer
+    spec:
+      containers:
+      - name: consumer
+        image: python:3.11-slim
+        command: ["sh", "-c"]
+        args:
+        - |
+          pip install kafka-python psycopg2-binary lz4
+          python /app/consumer.py
+        env:
+        - name: KAFKA_SERVERS
+          value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+        - name: POSTGRES_HOST
+          value: "postgresql.investment-assistant.svc.cluster.local"
+        - name: POSTGRES_DB
+          value: "investment_db"
+        - name: POSTGRES_USER
+          value: "airflow"
+        - name: POSTGRES_PASSWORD
+          value: "airflow123"
+        volumeMounts:
+        - name: consumer-code
+          mountPath: /app
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "100m"
+        livenessProbe:
+          exec:
+            command: ["pgrep", "-f", "consumer.py"]
+          initialDelaySeconds: 60
+          periodSeconds: 30
+      volumes:
+      - name: consumer-code
+        configMap:
+          name: finnhub-consumer-code
+      restartPolicy: Always

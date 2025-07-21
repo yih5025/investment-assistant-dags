@@ -1,0 +1,248 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finnhub-websocket-code
+  namespace: investment-assistant
+data:
+  websocket_producer.py: |
+    import asyncio
+    import json
+    import os
+    import time
+    import logging
+    import psycopg2
+    import websockets
+    from kafka import KafkaProducer
+    import threading
+    import queue
+
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+    logger = logging.getLogger(__name__)
+
+    class FinnhubWebSocketProducer:
+        def __init__(self):
+            self.kafka_servers = os.getenv('KAFKA_SERVERS')
+            self.api_key = os.getenv('FINNHUB_API_KEY', 'd06vv49r01qg26saj2t0d06vv49r01qg26saj2tg')
+            self.current_symbols = []
+            self.producer = None
+            self.websocket = None
+            self.update_queue = queue.Queue()
+            self.running = True
+            
+        def init_kafka(self):
+            self.producer = KafkaProducer(
+                bootstrap_servers=self.kafka_servers,
+                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                key_serializer=lambda k: k.encode('utf-8'),
+                compression_type='lz4'
+            )
+            logger.info("✅ Kafka Producer 초기화 완료")
+            
+        def get_db_connection(self):
+            return psycopg2.connect(
+                host=os.getenv('POSTGRES_HOST'),
+                database=os.getenv('POSTGRES_DB'),
+                user=os.getenv('POSTGRES_USER'),
+                password=os.getenv('POSTGRES_PASSWORD'),
+                port=5432
+            )
+            
+        def start_db_listener(self):
+            """PostgreSQL LISTEN 시작"""
+            def listen_for_updates():
+                try:
+                    conn = self.get_db_connection()
+                    conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+                    
+                    with conn.cursor() as cursor:
+                        cursor.execute("LISTEN top_gainers_updated;")
+                        logger.info("🔔 PostgreSQL LISTEN 시작")
+                        
+                        while self.running:
+                            if conn.poll() is None:
+                                time.sleep(0.5)
+                                continue
+                                
+                            conn.poll()
+                            while conn.notifies:
+                                notify = conn.notifies.pop(0)
+                                logger.info(f"🚨 새 데이터 알림 수신!")
+                                self.update_queue.put({'update': True})
+                                
+                    conn.close()
+                except Exception as e:
+                    logger.error(f"❌ DB 리스너 오류: {e}")
+                    
+            threading.Thread(target=listen_for_updates, daemon=True).start()
+            
+        def get_latest_symbols(self):
+            try:
+                conn = self.get_db_connection()
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        SELECT symbol FROM top_gainers
+                        WHERE batch_id = (SELECT MAX(batch_id) FROM top_gainers WHERE category = 'top_gainers')
+                          AND category = 'top_gainers'
+                        ORDER BY rank_position LIMIT 50
+                    """)
+                    symbols = [row[0] for row in cursor.fetchall()]
+                conn.close()
+                
+                logger.info(f"📊 최신 심볼 조회: {len(symbols)}개")
+                return symbols
+            except Exception as e:
+                logger.error(f"❌ DB 조회 실패: {e}")
+                return []
+                
+        async def check_update_signal(self):
+            """트리거 신호 확인"""
+            try:
+                self.update_queue.get_nowait()
+                logger.info("🔄 심볼 업데이트 시작")
+                
+                new_symbols = self.get_latest_symbols()
+                if set(new_symbols) != set(self.current_symbols):
+                    logger.info(f"   {len(self.current_symbols)} → {len(new_symbols)}개 심볼 변경")
+                    self.current_symbols = new_symbols
+                    return True
+            except queue.Empty:
+                pass
+            return False
+            
+        async def connect_websocket(self):
+            if not self.current_symbols:
+                logger.warning("⚠️ 구독할 심볼이 없습니다")
+                return
+                
+            try:
+                if self.websocket:
+                    await self.websocket.close()
+                    
+                uri = f"wss://ws.finnhub.io?token={self.api_key}"
+                self.websocket = await websockets.connect(uri)
+                logger.info("✅ WebSocket 연결 성공")
+                
+                for symbol in self.current_symbols:
+                    subscribe_msg = {"type": "subscribe", "symbol": symbol}
+                    await self.websocket.send(json.dumps(subscribe_msg))
+                    await asyncio.sleep(0.05)
+                    
+                logger.info(f"✅ {len(self.current_symbols)}개 심볼 구독 완료")
+            except Exception as e:
+                logger.error(f"❌ WebSocket 연결 실패: {e}")
+                raise
+                
+        async def process_message(self, message):
+            try:
+                data = json.loads(message)
+                if data.get('type') == 'trade' and data.get('data'):
+                    for trade in data['data']:
+                        kafka_message = {
+                            'symbol': trade.get('s'),
+                            'price': trade.get('p'),
+                            'volume': trade.get('v'),
+                            'timestamp_ms': trade.get('t'),
+                            'source': 'finnhub_websocket'
+                        }
+                        key = f"{trade.get('s')}_{trade.get('t')}"
+                        self.producer.send("finnhub-trades", key=key, value=kafka_message)
+            except Exception as e:
+                logger.error(f"❌ 메시지 처리 실패: {e}")
+                
+        async def run(self):
+            logger.info("🚀 Finnhub WebSocket Producer 시작")
+            self.init_kafka()
+            self.start_db_listener()
+            
+            # 초기 심볼 로드
+            self.current_symbols = self.get_latest_symbols()
+            
+            message_count = 0
+            
+            try:
+                while self.running:
+                    # 트리거 신호 확인 및 심볼 업데이트
+                    if await self.check_update_signal() or not self.websocket:
+                        await self.connect_websocket()
+                    
+                    # WebSocket 메시지 수신
+                    if self.websocket:
+                        try:
+                            message = await asyncio.wait_for(self.websocket.recv(), timeout=1)
+                            await self.process_message(message)
+                            message_count += 1
+                            
+                            if message_count % 100 == 0:
+                                logger.info(f"📊 처리된 메시지: {message_count}개")
+                        except asyncio.TimeoutError:
+                            continue
+                        except websockets.exceptions.ConnectionClosed:
+                            logger.warning("⚠️ 연결 끊김, 재연결 시도")
+                            self.websocket = None
+                            await asyncio.sleep(5)
+                            
+            finally:
+                self.running = False
+                if self.websocket:
+                    await self.websocket.close()
+                if self.producer:
+                    self.producer.close()
+
+    if __name__ == "__main__":
+        producer = FinnhubWebSocketProducer()
+        asyncio.run(producer.run())
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finnhub-websocket-producer
+  namespace: investment-assistant
+  labels:
+    app: finnhub-websocket-producer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finnhub-websocket-producer
+  template:
+    metadata:
+      labels:
+        app: finnhub-websocket-producer
+    spec:
+      containers:
+      - name: websocket-producer
+        image: python:3.11-slim
+        command: ["sh", "-c"]
+        args:
+        - |
+          pip install kafka-python psycopg2-binary websockets lz4
+          python /app/websocket_producer.py
+        env:
+        - name: KAFKA_SERVERS
+          value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+        - name: POSTGRES_HOST
+          value: "postgresql.investment-assistant.svc.cluster.local"
+        - name: POSTGRES_DB
+          value: "investment_db"
+        - name: POSTGRES_USER
+          value: "airflow"
+        - name: POSTGRES_PASSWORD
+          value: "airflow123"
+        - name: FINNHUB_API_KEY
+          value: "d06vv49r01qg26saj2t0d06vv49r01qg26saj2tg"
+        volumeMounts:
+        - name: producer-code
+          mountPath: /app
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+      volumes:
+      - name: producer-code
+        configMap:
+          name: finnhub-websocket-code
+      restartPolicy: Always
