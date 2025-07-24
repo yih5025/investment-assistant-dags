@@ -113,12 +113,12 @@ def fetch_posts_for_account(username, **context):
     print(f"🔍 {username} 포스트 수집 중...")
     
     # 6시간 전 이후 포스트만 수집
-    six_hours_ago = (datetime.now() - timedelta(hours=6)).isoformat()
+    one_hours_ago = (datetime.now() - timedelta(hours=1)).isoformat()
     
     try:
         output = run_truthbrush_command([
             'statuses', username, 
-            '--created-after', six_hours_ago,
+            '--created-after', one_hours_ago,
             '--no-replies'
         ])
         
@@ -168,7 +168,7 @@ def store_posts_to_db(**context):
 with DAG(
     dag_id='ingest_truth_social_posts_k8s',
     default_args=default_args,
-    schedule_interval='0 */2 * * *',  # 2시간마다
+    schedule_interval='0 */1 * * *',  # 1시간마다
     catchup=False,
     description='트럼프, 백악관, DonaldJTrumpJr Truth Social 포스트 수집',
     template_searchpath=[INITDB_SQL_DIR],
