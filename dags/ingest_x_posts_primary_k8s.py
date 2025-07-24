@@ -21,12 +21,12 @@ with open(os.path.join(DAGS_SQL_DIR, "upsert_x_posts.sql"), encoding="utf-8") as
 default_args = {
     'owner': 'investment_assistant',
     'start_date': datetime(2025, 1, 1),
-    'retries': 2,
-    'retry_delay': timedelta(minutes=5),
+    'retries': None,
+    'retry_delay': timedelta(minutes=1),
 }
 
-# 계정별 호출 스케줄 정의 (월 100회 최적 배분)
-ACCOUNT_SCHEDULE = {
+# ===== 첫 번째 토큰용 핵심 계정들 (월 100회 배분) =====
+PRIMARY_ACCOUNT_SCHEDULE = {
     # 초고영향 계정 (매일 or 격일)
     'elonmusk': {
         'user_id': '44196397',
@@ -66,13 +66,15 @@ ACCOUNT_SCHEDULE = {
         'user_id': '16144047',
         'frequency': 'twice_weekly',   # 주 2회 (8회/월)
         'max_results': 50,
-        'priority': 3
+        'priority': 3,
+        'weekly_days': [1, 4]  # 화, 금 (Secondary와 다름)
     },
     'SecYellen': {
         'user_id': '950837342094893062',
         'frequency': 'twice_weekly',   # 주 2회 (8회/월)
         'max_results': 50,
-        'priority': 3
+        'priority': 3,
+        'weekly_days': [0, 3]  # 월, 목
     },
     
     # 저영향 계정 (주 1회)
@@ -80,14 +82,15 @@ ACCOUNT_SCHEDULE = {
         'user_id': '295218901',
         'frequency': 'weekly',         # 주 1회 (4회/월)
         'max_results': 50,
-        'priority': 4
+        'priority': 4,
+        'weekly_day': 6  # 일요일
     }
     # 총 호출: 30+15+15+10+10+8+8+4 = 100회/월
 }
 
-def should_run_account_today(username):
-    """오늘 이 계정을 수집해야 하는지 판단"""
-    config = ACCOUNT_SCHEDULE.get(username)
+def should_run_account_today_primary(username):
+    """첫 번째 토큰 계정들의 오늘 실행 여부 판단 (업데이트됨)"""
+    config = PRIMARY_ACCOUNT_SCHEDULE.get(username)
     if not config:
         return False
     
@@ -107,36 +110,33 @@ def should_run_account_today(username):
         offset = {'tim_cook': 0, 'satyanadella': 1}.get(username, 0)
         return (day_of_year + offset) % 3 == 0
     elif frequency == 'twice_weekly':
-        # 계정별로 다른 요일 할당
-        if username == 'sundarpichai':
-            return day_of_week in [0, 3]  # 월, 목
-        elif username == 'SecYellen':
-            return day_of_week in [1, 4]  # 화, 금
+        # 계정별로 정확한 요일 할당
+        assigned_days = config.get('weekly_days', [0, 3])
+        return day_of_week in assigned_days
     elif frequency == 'weekly':
-        # 계정별로 다른 요일
-        weekly_schedule = {
-            'VitalikButerin': 6,  # 일요일
-        }
-        return day_of_week == weekly_schedule.get(username, 6)
+        # 계정별로 정확한 요일
+        assigned_day = config.get('weekly_day', 6)
+        return day_of_week == assigned_day
     
     return False
 
-def get_todays_accounts():
-    """오늘 수집할 계정들 반환"""
+def get_todays_primary_accounts():
+    """오늘 수집할 첫 번째 토큰 계정들 반환"""
     todays_accounts = []
     
-    for username in ACCOUNT_SCHEDULE.keys():
-        if should_run_account_today(username):
+    for username in PRIMARY_ACCOUNT_SCHEDULE.keys():
+        if should_run_account_today_primary(username):
             todays_accounts.append(username)
     
     # 우선순위 순으로 정렬
-    todays_accounts.sort(key=lambda x: ACCOUNT_SCHEDULE[x]['priority'])
+    todays_accounts.sort(key=lambda x: PRIMARY_ACCOUNT_SCHEDULE[x]['priority'])
     
     return todays_accounts
 
-def call_x_api(username, user_id, max_results=50):
-    """X API 호출"""
-    bearer_token = Variable.get('X_API_BEARER_TOKEN')
+def call_x_api_primary(username, user_id, max_results=50):
+    """첫 번째 Bearer Token으로 X API 호출"""
+    # 첫 번째 토큰 사용 (기존과 동일)
+    bearer_token = Variable.get('X_API_BEARER_TOKEN_1')  # 또는 X_API_BEARER_TOKEN_1
     
     url = f"https://api.twitter.com/2/users/{user_id}/tweets"
     
@@ -153,7 +153,7 @@ def call_x_api(username, user_id, max_results=50):
     
     headers = {
         "Authorization": f"Bearer {bearer_token}",
-        "User-Agent": "InvestmentAssistant/1.0"
+        "User-Agent": "InvestmentAssistant-Primary/1.0"
     }
     
     response = requests.get(url, headers=headers, params=params, timeout=30)
@@ -162,8 +162,8 @@ def call_x_api(username, user_id, max_results=50):
     data = response.json()
     return data
 
-def process_tweet_data(tweet, user_info, source_account):
-    """트윗 데이터 처리"""
+def process_tweet_data_primary(tweet, user_info, source_account):
+    """트윗 데이터 처리 (Primary Token용, 호환성 보장)"""
     
     # 기본 트윗 정보
     processed_data = {
@@ -173,6 +173,8 @@ def process_tweet_data(tweet, user_info, source_account):
         'created_at': tweet['created_at'].replace('Z', '+00:00'),
         'lang': tweet.get('lang', 'en'),
         'source_account': source_account,
+        'account_category': 'core_investors',  # Primary는 모두 핵심 투자자
+        'collection_source': 'primary_token',  # 토큰 구분
     }
     
     # 참여도 지표
@@ -227,20 +229,20 @@ def process_tweet_data(tweet, user_info, source_account):
     
     return processed_data
 
-def fetch_todays_tweets(**context):
-    """오늘 수집 대상 계정들의 트윗 수집"""
+def fetch_primary_tweets(**context):
+    """첫 번째 토큰으로 핵심 계정들의 트윗 수집"""
     
     # 오늘 수집할 계정들 결정
-    todays_accounts = get_todays_accounts()
+    todays_accounts = get_todays_primary_accounts()
     
     if not todays_accounts:
-        print("📅 오늘은 수집할 계정이 없습니다")
+        print("📅 [PRIMARY] 오늘은 수집할 계정이 없습니다")
         context['ti'].xcom_push(key='collected_tweets', value=[])
         return 0
     
-    print(f"🎯 오늘 수집 대상: {len(todays_accounts)}개 계정")
+    print(f"🎯 [PRIMARY TOKEN] 오늘 수집 대상: {len(todays_accounts)}개 계정")
     for account in todays_accounts:
-        config = ACCOUNT_SCHEDULE[account]
+        config = PRIMARY_ACCOUNT_SCHEDULE[account]
         print(f"   - {account}: {config['frequency']} (우선순위 {config['priority']})")
     
     # 각 계정별 트윗 수집
@@ -249,14 +251,14 @@ def fetch_todays_tweets(**context):
     
     for username in todays_accounts:
         try:
-            config = ACCOUNT_SCHEDULE[username]
+            config = PRIMARY_ACCOUNT_SCHEDULE[username]
             user_id = config['user_id']
             max_results = config['max_results']
             
-            print(f"\n🔍 {username} 트윗 수집 중 (최대 {max_results}개)...")
+            print(f"\n🔍 [CORE] {username} 트윗 수집 중 (최대 {max_results}개)...")
             
-            # API 호출
-            api_response = call_x_api(username, user_id, max_results)
+            # API 호출 (첫 번째 토큰 사용)
+            api_response = call_x_api_primary(username, user_id, max_results)
             total_api_calls += 1
             
             if 'data' not in api_response or not api_response['data']:
@@ -271,7 +273,7 @@ def fetch_todays_tweets(**context):
             # 트윗 데이터 처리
             account_tweets = []
             for tweet in api_response['data']:
-                processed_tweet = process_tweet_data(tweet, user_info, username)
+                processed_tweet = process_tweet_data_primary(tweet, user_info, username)
                 account_tweets.append(processed_tweet)
             
             all_tweets.extend(account_tweets)
@@ -282,7 +284,9 @@ def fetch_todays_tweets(**context):
             total_api_calls += 1  # 실패해도 API 호출은 차감
             continue
     
-    print(f"\n📊 수집 완료: {len(all_tweets)}개 트윗, {total_api_calls}회 API 호출")
+    print(f"\n📊 [PRIMARY TOKEN] 수집 완료:")
+    print(f"   📱 총 트윗: {len(all_tweets)}개")
+    print(f"   🔑 API 호출: {total_api_calls}회")
     
     # XCom에 결과 저장
     context['ti'].xcom_push(key='collected_tweets', value=all_tweets)
@@ -290,8 +294,8 @@ def fetch_todays_tweets(**context):
     
     return len(all_tweets)
 
-def store_tweets_to_db(**context):
-    """수집된 트윗을 DB에 저장"""
+def store_primary_tweets_to_db(**context):
+    """수집된 핵심 계정 트윗을 DB에 저장"""
     
     # XCom에서 수집된 트윗 가져오기
     all_tweets = context['ti'].xcom_pull(key='collected_tweets') or []
@@ -306,7 +310,7 @@ def store_tweets_to_db(**context):
     success_count = 0
     error_count = 0
     
-    print(f"💾 DB 저장 시작: {len(all_tweets)}개 트윗")
+    print(f"💾 [PRIMARY] DB 저장 시작: {len(all_tweets)}개 트윗")
     
     for tweet_data in all_tweets:
         try:
@@ -322,53 +326,60 @@ def store_tweets_to_db(**context):
             error_count += 1
             continue
     
-    print(f"✅ 저장 완료: {success_count}개 성공, {error_count}개 실패")
+    print(f"✅ [PRIMARY] 저장 완료: {success_count}개 성공, {error_count}개 실패")
     
     # 통계 조회
     try:
-        result = hook.get_first("SELECT COUNT(*) FROM x_posts WHERE collected_at >= NOW() - INTERVAL '1 day'")
-        total_today = result[0] if result else 0
-        print(f"📊 오늘 수집된 총 트윗: {total_today}개")
+        # 오늘 수집된 primary 토큰 트윗
+        result = hook.get_first("""
+            SELECT COUNT(*) FROM x_posts 
+            WHERE collected_at >= NOW() - INTERVAL '1 day'
+            AND collection_source = 'primary_token'
+        """)
+        primary_today = result[0] if result else 0
         
+        # 전체 트윗 수
         result = hook.get_first("SELECT COUNT(*) FROM x_posts")
         total_all = result[0] if result else 0
+        
+        print(f"📊 오늘 Primary 토큰 수집: {primary_today}개")
         print(f"📊 전체 저장된 트윗: {total_all}개")
         
     except Exception as e:
         print(f"⚠️ 통계 조회 실패: {e}")
     
-    print(f"🔥 오늘 API 호출: {api_calls}회")
+    print(f"🔥 Primary 토큰 오늘 API 호출: {api_calls}회")
     
     return success_count
 
 # DAG 정의
 with DAG(
-    dag_id='ingest_x_posts_scheduled_k8s',
+    dag_id='ingest_x_posts_primary_k8s',
     default_args=default_args,
     schedule_interval='0 */8 * * *',  # 8시간마다 실행
     catchup=False,
-    description='X API 날짜 기반 스케줄링 트윗 수집 (월 100회 최적화)',
+    description='X API 첫 번째 토큰으로 핵심 투자 인물 트윗 수집 (Elon, Ray Dalio, Cramer 등)',
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['x_api', 'twitter', 'scheduled', 'investment', 'k8s'],
+    tags=['x_api', 'twitter', 'first_token', 'core_investors', 'investment', 'k8s'],
 ) as dag:
     
     # 테이블 생성
     create_table = PostgresOperator(
-        task_id='create_x_posts_table',
+        task_id='create_x_posts_table_primary',
         postgres_conn_id='postgres_default',
         sql='create_x_posts.sql',
     )
     
-    # 오늘 대상 계정들의 트윗 수집
+    # 첫 번째 토큰으로 핵심 계정들의 트윗 수집
     fetch_tweets = PythonOperator(
-        task_id='fetch_todays_tweets',
-        python_callable=fetch_todays_tweets,
+        task_id='fetch_primary_tweets',
+        python_callable=fetch_primary_tweets,
     )
     
     # DB 저장
     store_tweets = PythonOperator(
-        task_id='store_tweets_to_db',
-        python_callable=store_tweets_to_db,
+        task_id='store_primary_tweets_to_db',
+        python_callable=store_primary_tweets_to_db,
     )
     
     # Task 의존성

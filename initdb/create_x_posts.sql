@@ -1,15 +1,19 @@
--- create_x_posts.sql
--- X API 트윗 데이터 저장용 테이블 (실제 API 구조 기반)
+-- create_x_posts.sql (업데이트된 버전)
+-- Secondary Token 지원을 위한 새 필드들 추가
 
 CREATE TABLE IF NOT EXISTS x_posts (
-    -- 기본 트윗 정보 (항상 존재)
     tweet_id TEXT PRIMARY KEY,
     author_id TEXT NOT NULL,
     text TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     lang TEXT DEFAULT 'en',
+    source_account TEXT NOT NULL,
     
-    -- 참여도 지표 (public_metrics - 항상 존재)
+    -- === 새로 추가된 필드들 ===
+    account_category TEXT DEFAULT 'core_investors',  -- crypto, tech_ceo, institutional, media, corporate
+    collection_source TEXT DEFAULT 'primary_token',  -- primary_token, secondary_token
+    
+    -- 참여도 지표
     retweet_count INTEGER DEFAULT 0,
     reply_count INTEGER DEFAULT 0,
     like_count INTEGER DEFAULT 0,
@@ -17,17 +21,15 @@ CREATE TABLE IF NOT EXISTS x_posts (
     bookmark_count INTEGER DEFAULT 0,
     impression_count INTEGER DEFAULT 0,
     
-    -- 엔티티 정보 (entities - 있을 때만)
-    hashtags JSONB,              -- entities.hashtags
-    mentions JSONB,              -- entities.mentions  
-    urls JSONB,                  -- entities.urls
-    cashtags JSONB,              -- entities.cashtags ($TSLA 등)
-    annotations JSONB,           -- entities.annotations
+    -- 엔티티 정보 (JSON 형태)
+    hashtags JSONB,
+    mentions JSONB,
+    urls JSONB,
+    cashtags JSONB,
+    annotations JSONB,
+    context_annotations JSONB,
     
-    -- X 자동 분류 (context_annotations - 핵심!)
-    context_annotations JSONB,   -- 전체 context_annotations 배열
-    
-    -- 사용자 정보 (includes.users에서 추출)
+    -- 사용자 정보
     username TEXT,
     display_name TEXT,
     user_verified BOOLEAN DEFAULT FALSE,
@@ -35,45 +37,30 @@ CREATE TABLE IF NOT EXISTS x_posts (
     user_following_count INTEGER DEFAULT 0,
     user_tweet_count INTEGER DEFAULT 0,
     
-    -- 편집 정보
-    edit_history_tweet_ids JSONB,
-    
     -- 메타 정보
-    source_account TEXT NOT NULL,       -- 수집한 계정명
+    edit_history_tweet_ids JSONB,
     collected_at TIMESTAMP DEFAULT NOW(),
-    
-    -- 제약조건
-    CONSTRAINT valid_tweet_id CHECK (LENGTH(tweet_id) > 0),
-    CONSTRAINT valid_source_account CHECK (LENGTH(source_account) > 0)
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- 성능 최적화 인덱스들
-CREATE INDEX IF NOT EXISTS idx_x_posts_author_id ON x_posts(author_id);
-CREATE INDEX IF NOT EXISTS idx_x_posts_username ON x_posts(username);
-CREATE INDEX IF NOT EXISTS idx_x_posts_created_at ON x_posts(created_at DESC);
+-- 인덱스 생성
 CREATE INDEX IF NOT EXISTS idx_x_posts_source_account ON x_posts(source_account);
+CREATE INDEX IF NOT EXISTS idx_x_posts_created_at ON x_posts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_x_posts_collected_at ON x_posts(collected_at DESC);
 
--- 투자 분석용 인덱스
-CREATE INDEX IF NOT EXISTS idx_x_posts_financial ON x_posts(created_at DESC) 
-    WHERE has_financial_context = TRUE;
-CREATE INDEX IF NOT EXISTS idx_x_posts_high_impact ON x_posts(market_impact_score DESC, created_at DESC) 
-    WHERE market_impact_score >= 5;
-CREATE INDEX IF NOT EXISTS idx_x_posts_tesla ON x_posts(created_at DESC) 
-    WHERE has_tesla_context = TRUE;
+-- === 새로 추가된 인덱스들 ===
+CREATE INDEX IF NOT EXISTS idx_x_posts_account_category ON x_posts(account_category);
+CREATE INDEX IF NOT EXISTS idx_x_posts_collection_source ON x_posts(collection_source);
+CREATE INDEX IF NOT EXISTS idx_x_posts_category_source ON x_posts(account_category, collection_source);
+
+-- 복합 인덱스 (카테고리별 최신 트윗 조회용)
+CREATE INDEX IF NOT EXISTS idx_x_posts_category_created_at ON x_posts(account_category, created_at DESC);
+
+-- 전문 검색 인덱스 (트윗 내용 검색용)
+CREATE INDEX IF NOT EXISTS idx_x_posts_text_search ON x_posts USING gin(to_tsvector('english', text));
 
 -- 참여도 기반 인덱스 (인기 트윗 조회용)
-CREATE INDEX IF NOT EXISTS idx_x_posts_engagement ON x_posts(
-    (like_count + retweet_count + reply_count + quote_count) DESC, 
-    created_at DESC
-);
+CREATE INDEX IF NOT EXISTS idx_x_posts_engagement ON x_posts((like_count + retweet_count + reply_count) DESC);
 
--- 전문 검색용 인덱스 (트윗 내용 검색)
-CREATE INDEX IF NOT EXISTS idx_x_posts_text_search ON x_posts 
-    USING gin(to_tsvector('english', text));
-
--- 계정별 최신 트윗 조회 최적화
-CREATE INDEX IF NOT EXISTS idx_x_posts_account_recent ON x_posts(source_account, created_at DESC);
-
--- 중복 방지 제약조건 (같은 트윗이 중복 저장되지 않도록)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_x_posts_unique_id ON x_posts(tweet_id);
+-- 사용자별 최신 트윗 조회용
+CREATE INDEX IF NOT EXISTS idx_x_posts_user_created_at ON x_posts(source_account, created_at DESC);

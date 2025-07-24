@@ -1,6 +1,6 @@
 # K8s manifests - DAG 저장소에는 불필요
 manifests/
-
+dags/test/
 # Python 캐시 파일들
 __pycache__/
 *.pyc
