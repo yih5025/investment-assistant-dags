@@ -30,9 +30,22 @@ def run_truthbrush_command(command_args):
     """Truthbrush 명령어 실행"""
     username = Variable.get('TRUTHSOCIAL_USERNAME')
     password = Variable.get('TRUTHSOCIAL_PASSWORD')
+    
+    # 기존 환경변수 복사하고 인증 정보 추가
+    env = os.environ.copy()
+    env['TRUTHSOCIAL_USERNAME'] = username
+    env['TRUTHSOCIAL_PASSWORD'] = password
     try:
-        cmd = ['truthbrush', '--username', username, '--password', password] + command_args
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        # 명령어에서 --username, --password 제거!
+        cmd = ['truthbrush'] + command_args
+        
+        result = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True, 
+            timeout=120,
+            env=env  # 환경변수 전달
+        )
         
         if result.returncode == 0:
             return result.stdout
