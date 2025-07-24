@@ -63,11 +63,11 @@ def clean_html_content(content):
     return re.sub(r'<[^>]+>', '', content).strip()
 
 def is_already_collected_recently(post_id):
-    """최근 8시간 내 수집된 포스트인지 확인"""
+    """최근 4시간 내 수집된 포스트인지 확인"""
     hook = PostgresHook(postgres_conn_id='postgres_default')
     query = """
     SELECT 1 FROM truth_social_trends 
-    WHERE id = %s AND collected_at >= NOW() - INTERVAL '8 hours'
+    WHERE id = %s AND collected_at >= NOW() - INTERVAL '1 hours'
     """
     result = hook.get_first(query, parameters=[post_id])
     return result is not None
@@ -176,7 +176,7 @@ def store_trends_to_db(**context):
 with DAG(
     dag_id='ingest_truth_social_trends_k8s',
     default_args=default_args,
-    schedule_interval='0 */8 * * *',  # 8시간마다 (개선)
+    schedule_interval='0 */1 * * *',  # 1시간마다 (개선)
     catchup=False,
     description='Truth Social 트렌딩 포스트 수집',
     template_searchpath=[INITDB_SQL_DIR],
