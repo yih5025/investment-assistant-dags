@@ -38,23 +38,24 @@ data:
                 return None
                 
         def insert_trade_data(self, data):
-            """거래 데이터 삽입 (빗썸 Consumer 패턴 활용)"""
+            """거래 데이터 삽입 (카테고리 포함)"""
             conn = None
             try:
                 conn = self.get_db_connection()
                 with conn.cursor() as cursor:
                     insert_sql = '''
                         INSERT INTO finnhub_trades (
-                            symbol, price, volume, timestamp_ms, 
+                            symbol, category, price, volume, timestamp_ms, 
                             trade_conditions, source, created_at
                         ) VALUES (
-                            %(symbol)s, %(price)s, %(volume)s, %(timestamp_ms)s,
+                            %(symbol)s, %(category)s, %(price)s, %(volume)s, %(timestamp_ms)s,
                             %(trade_conditions)s, %(source)s, NOW()
                         )
                     '''
                     
                     params = {
                         'symbol': data.get('symbol'),
+                        'category': data.get('category', 'unknown'),  # 카테고리 추가
                         'price': self.safe_decimal(data.get('price')),
                         'volume': data.get('volume'),
                         'timestamp_ms': data.get('timestamp_ms'),

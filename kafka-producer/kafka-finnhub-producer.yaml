@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: finnhub-websocket-code
+  name: finnhub-trades-producer-code
   namespace: investment-assistant
 data:
   websocket_producer.py: |
@@ -24,6 +24,7 @@ data:
             self.kafka_servers = os.getenv('KAFKA_SERVERS')
             self.api_key = os.getenv('FINNHUB_API_KEY', 'd06vv49r01qg26saj2t0d06vv49r01qg26saj2tg')
             self.current_symbols = []
+            self.symbol_categories = {}  # {symbol: category} 매핑
             self.producer = None
             self.websocket = None
             self.update_queue = queue.Queue()
@@ -79,20 +80,46 @@ data:
             try:
                 conn = self.get_db_connection()
                 with conn.cursor() as cursor:
+                    # 심볼과 카테고리를 함께 조회 (50개)
                     cursor.execute("""
-                        SELECT symbol FROM top_gainers
-                        WHERE batch_id = (SELECT MAX(batch_id) FROM top_gainers WHERE category = 'top_gainers')
-                          AND category = 'top_gainers'
-                        ORDER BY rank_position LIMIT 50
+                        SELECT symbol, category FROM top_gainers
+                        WHERE batch_id = (
+                            SELECT MAX(batch_id) FROM top_gainers 
+                            WHERE category IN ('top_gainers', 'top_losers', 'most_actively_traded')
+                        )
+                        AND category IN ('top_gainers', 'top_losers', 'most_actively_traded')
+                        ORDER BY 
+                            CASE category 
+                                WHEN 'top_gainers' THEN 1 
+                                WHEN 'most_actively_traded' THEN 2 
+                                WHEN 'top_losers' THEN 3 
+                            END,
+                            rank_position
+                        LIMIT 50
                     """)
-                    symbols = [row[0] for row in cursor.fetchall()]
+                    
+                    # 딕셔너리 형태로 저장 {symbol: category}
+                    symbol_data = {}
+                    symbols = []
+                    
+                    for row in cursor.fetchall():
+                        symbol, category = row
+                        symbols.append(symbol)
+                        symbol_data[symbol] = category
+                    
                 conn.close()
                 
                 logger.info(f"📊 최신 심볼 조회: {len(symbols)}개")
-                return symbols
+                logger.info(f"   📈 top_gainers: {sum(1 for c in symbol_data.values() if c == 'top_gainers')}개")
+                logger.info(f"   📊 most_actively_traded: {sum(1 for c in symbol_data.values() if c == 'most_actively_traded')}개")
+                logger.info(f"   📉 top_losers: {sum(1 for c in symbol_data.values() if c == 'top_losers')}개")
+                
+                # 심볼 리스트와 카테고리 맵핑을 모두 반환
+                return symbols, symbol_data
+                
             except Exception as e:
                 logger.error(f"❌ DB 조회 실패: {e}")
-                return []
+                return [], {}
                 
         async def check_update_signal(self):
             """트리거 신호 확인"""
@@ -100,10 +127,11 @@ data:
                 self.update_queue.get_nowait()
                 logger.info("🔄 심볼 업데이트 시작")
                 
-                new_symbols = self.get_latest_symbols()
+                new_symbols, new_categories = self.get_latest_symbols()
                 if set(new_symbols) != set(self.current_symbols):
                     logger.info(f"   {len(self.current_symbols)} → {len(new_symbols)}개 심볼 변경")
                     self.current_symbols = new_symbols
+                    self.symbol_categories = new_categories
                     return True
             except queue.Empty:
                 pass
@@ -137,14 +165,19 @@ data:
                 data = json.loads(message)
                 if data.get('type') == 'trade' and data.get('data'):
                     for trade in data['data']:
+                        symbol = trade.get('s')
+                        category = self.symbol_categories.get(symbol, 'unknown')  # 카테고리 조회
+                        
                         kafka_message = {
-                            'symbol': trade.get('s'),
+                            'symbol': symbol,
+                            'category': category,  # 카테고리 추가
                             'price': trade.get('p'),
                             'volume': trade.get('v'),
                             'timestamp_ms': trade.get('t'),
+                            'trade_conditions': trade.get('c', []),
                             'source': 'finnhub_websocket'
                         }
-                        key = f"{trade.get('s')}_{trade.get('t')}"
+                        key = f"{symbol}_{trade.get('t')}"
                         self.producer.send("finnhub-trades", key=key, value=kafka_message)
             except Exception as e:
                 logger.error(f"❌ 메시지 처리 실패: {e}")
@@ -155,7 +188,7 @@ data:
             self.start_db_listener()
             
             # 초기 심볼 로드
-            self.current_symbols = self.get_latest_symbols()
+            self.current_symbols, self.symbol_categories = self.get_latest_symbols()
             
             message_count = 0
             
@@ -196,19 +229,19 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: finnhub-websocket-producer
+  name: finnhub-trades-producer
   namespace: investment-assistant
   labels:
-    app: finnhub-websocket-producer
+    app: finnhub-trades-producer
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: finnhub-websocket-producer
+      app: finnhub-trades-producer
   template:
     metadata:
       labels:
-        app: finnhub-websocket-producer
+        app: finnhub-trades-producer
     spec:
       containers:
       - name: websocket-producer
@@ -241,8 +274,13 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "200m"
+        livenessProbe:
+          exec:
+            command: ["pgrep", "-f", "websocket_producer.py"]
+          initialDelaySeconds: 60
+          periodSeconds: 30
       volumes:
       - name: producer-code
         configMap:
-          name: finnhub-websocket-code
+          name: finnhub-trades-producer-code
       restartPolicy: Always
