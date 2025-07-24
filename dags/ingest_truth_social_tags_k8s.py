@@ -7,6 +7,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
+from airflow.models import Variable
 
 # 경로 설정
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
@@ -26,8 +27,10 @@ default_args = {
 
 def run_truthbrush_command(command_args):
     """Truthbrush 명령어 실행"""
+    username = Variable.get('TRUTHSOCIAL_USERNAME')
+    password = Variable.get('TRUTHSOCIAL_PASSWORD')
     try:
-        cmd = ['truthbrush'] + command_args
+        cmd = ['truthbrush', '--username', username, '--password', password] + command_args
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
         if result.returncode == 0:

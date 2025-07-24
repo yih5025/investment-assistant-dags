@@ -28,8 +28,10 @@ default_args = {
 
 def run_truthbrush_command(command_args):
     """Truthbrush 명령어 실행"""
+    username = Variable.get('TRUTHSOCIAL_USERNAME')
+    password = Variable.get('TRUTHSOCIAL_PASSWORD')
     try:
-        cmd = ['truthbrush'] + command_args
+        cmd = ['truthbrush', '--username', username, '--password', password] + command_args
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         
         if result.returncode == 0:
