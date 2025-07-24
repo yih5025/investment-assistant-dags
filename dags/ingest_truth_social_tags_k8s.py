@@ -28,13 +28,13 @@ default_args = {
 def run_truthbrush_command(command_args):
     """Truthbrush 명령어 실행 - 인증 부분 수정"""
     # 환경변수로 인증 정보 설정 (핵심 수정!)
-    username = Variable.get('TRUTHSOCIAL_USERNAME')
-    password = Variable.get('TRUTHSOCIAL_PASSWORD')
+    truth_social_username = Variable.get('TRUTHSOCIAL_USERNAME')
+    truth_social_password = Variable.get('TRUTHSOCIAL_PASSWORD')
     
     # 기존 환경변수 복사하고 인증 정보 추가
     env = os.environ.copy()
-    env['TRUTHSOCIAL_USERNAME'] = username
-    env['TRUTHSOCIAL_PASSWORD'] = password
+    env['TRUTHSOCIAL_USERNAME'] = truth_social_username
+    env['TRUTHSOCIAL_PASSWORD'] = truth_social_password
     
     try:
         # 명령어에서 --username, --password 제거!
