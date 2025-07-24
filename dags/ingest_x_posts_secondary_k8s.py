@@ -206,7 +206,7 @@ def call_x_api_secondary(username, user_id, max_results=50):
     start_time = (datetime.utcnow() - timedelta(hours=24)).isoformat() + 'Z'
     
     params = {
-        "max_results": min(max_results, 100),
+        "max_results": min(max_results, 10),
         "start_time": start_time,
         "tweet.fields": "created_at,text,public_metrics,context_annotations,entities,lang,edit_history_tweet_ids",
         "expansions": "author_id",
