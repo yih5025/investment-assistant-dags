@@ -14,7 +14,7 @@ DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
 INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
 
 # SQL 파일 읽기
-with open(os.path.join(DAGS_SQL_DIR, "upsert_user_profiles.sql"), encoding="utf-8") as f:
+with open(os.path.join(DAGS_SQL_DIR, "upsert_x_user_profiles.sql"), encoding="utf-8") as f:
     UPSERT_SQL = f.read()
 
 # DAG 기본 설정
@@ -28,9 +28,9 @@ default_args = {
 # 모든 사용자명 (순서대로 처리)
 ALL_USERNAMES = [
     # Primary Token 계정들
-    ('elonmusk', 'core_investors'),
-    ('RayDalio', 'core_investors'),
-    ('jimcramer', 'core_investors'),
+    # ('elonmusk', 'core_investors'),
+    # ('RayDalio', 'core_investors'),
+    # ('jimcramer', 'core_investors'),
     ('tim_cook', 'core_investors'),
     ('satyanadella', 'core_investors'),
     ('sundarpichai', 'core_investors'),
@@ -59,7 +59,7 @@ def get_next_username_to_process():
     
     # 이미 수집된 사용자들 확인
     try:
-        result = hook.get_records("SELECT username FROM user_profiles")
+        result = hook.get_records("SELECT username FROM x_user_profiles")
         completed_users = {row[0] for row in result} if result else set()
     except:
         completed_users = set()
@@ -147,7 +147,7 @@ def check_completion_status(**context):
     
     try:
         # 전체 수집 현황
-        result = hook.get_first("SELECT COUNT(*) FROM user_profiles")
+        result = hook.get_first("SELECT COUNT(*) FROM x_user_profiles")
         total_collected = result[0] if result else 0
         
         remaining = len(ALL_USERNAMES) - total_collected
@@ -164,7 +164,7 @@ def check_completion_status(**context):
         # 카테고리별 통계
         result = hook.get_records("""
             SELECT category, COUNT(*) 
-            FROM user_profiles 
+            FROM x_user_profiles 
             GROUP BY category 
             ORDER BY COUNT(*) DESC
         """)
@@ -183,7 +183,7 @@ def check_completion_status(**context):
 with DAG(
     dag_id='fetch_user_ids_batch_15min',
     default_args=default_args,
-    schedule_interval='*/15 * * * *',  # 15분마다 실행
+    schedule_interval='*/16 * * * *',  # 15분마다 실행
     catchup=False,
     max_active_runs=1,  # 동시 실행 방지
     description='X API Rate Limit 대응 - 15분마다 1개씩 User ID 수집',
@@ -195,7 +195,7 @@ with DAG(
     create_table = PostgresOperator(
         task_id='create_user_profiles_table',
         postgres_conn_id='postgres_default',
-        sql='create_user_profiles.sql',
+        sql='create_x_user_profiles.sql',
     )
     
     # 한 개씩 사용자 ID 수집
