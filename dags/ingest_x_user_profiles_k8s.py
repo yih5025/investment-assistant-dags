@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import requests
-import os
 import time
+import os
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -14,49 +14,79 @@ DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
 INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
 
 # SQL 파일 읽기
-with open(os.path.join(DAGS_SQL_DIR, "upsert_x_user_profiles.sql"), encoding="utf-8") as f:
+with open(os.path.join(DAGS_SQL_DIR, "upsert_user_profiles.sql"), encoding="utf-8") as f:
     UPSERT_SQL = f.read()
 
 # DAG 기본 설정
 default_args = {
     'owner': 'investment_assistant',
     'start_date': datetime(2025, 1, 1),
-    'retries': 1,
+    'retries': None,
     'retry_delay': timedelta(minutes=2),
 }
 
-# Primary + Secondary DAG에서 사용하는 모든 사용자명
-ALL_USERNAMES = {
+# 모든 사용자명 (순서대로 처리)
+ALL_USERNAMES = [
     # Primary Token 계정들
-    # 'elonmusk': {'category': 'core_investors'},
-    # 'RayDalio': {'category': 'core_investors'},
-    # 'jimcramer': {'category': 'core_investors'},
-    'tim_cook': {'category': 'core_investors'},
-    'satyanadella': {'category': 'core_investors'},
-    'sundarpichai': {'category': 'core_investors'},
-    'SecYellen': {'category': 'core_investors'},
-    'VitalikButerin': {'category': 'core_investors'},
+    ('elonmusk', 'core_investors'),
+    ('RayDalio', 'core_investors'),
+    ('jimcramer', 'core_investors'),
+    ('tim_cook', 'core_investors'),
+    ('satyanadella', 'core_investors'),
+    ('sundarpichai', 'core_investors'),
+    ('SecYellen', 'core_investors'),
+    ('VitalikButerin', 'core_investors'),
     
     # Secondary Token 계정들
-    'saylor': {'category': 'crypto'},
-    'brian_armstrong': {'category': 'crypto'},
-    'CoinbaseAssets': {'category': 'crypto'},
-    'jeffbezos': {'category': 'tech_ceo'},
-    'IBM': {'category': 'tech_ceo'},
-    'CathieDWood': {'category': 'institutional'},
-    'mcuban': {'category': 'institutional'},
-    'chamath': {'category': 'institutional'},
-    'CNBC': {'category': 'media'},
-    'business': {'category': 'media'},
-    'WSJ': {'category': 'media'},
-    'Tesla': {'category': 'corporate'},
-    'nvidia': {'category': 'corporate'}
-}
+    ('saylor', 'crypto'),
+    ('brian_armstrong', 'crypto'),
+    ('CoinbaseAssets', 'crypto'),
+    ('jeffbezos', 'tech_ceo'),
+    ('IBM', 'tech_ceo'),
+    ('CathieDWood', 'institutional'),
+    ('mcuban', 'institutional'),
+    ('chamath', 'institutional'),
+    ('CNBC', 'media'),
+    ('business', 'media'),
+    ('WSJ', 'media'),
+    ('Tesla', 'corporate'),
+    ('nvidia', 'corporate')
+]
 
-def fetch_user_id_from_api(username):
-    """X API로 사용자명에서 user_id 조회"""
-    bearer_token = Variable.get('X_API_BEARER_TOKEN_3')  # Secondary 토큰 사용
+def get_next_username_to_process():
+    """다음에 처리할 사용자명 확인"""
+    hook = PostgresHook(postgres_conn_id='postgres_default')
     
+    # 이미 수집된 사용자들 확인
+    try:
+        result = hook.get_records("SELECT username FROM user_profiles")
+        completed_users = {row[0] for row in result} if result else set()
+    except:
+        completed_users = set()
+    
+    # 아직 수집되지 않은 첫 번째 사용자 찾기
+    for username, category in ALL_USERNAMES:
+        if username not in completed_users:
+            return username, category
+    
+    return None, None
+
+def fetch_single_user_id(**context):
+    """한 번에 하나의 사용자 ID만 수집"""
+    
+    # 다음 처리할 사용자 확인
+    username, category = get_next_username_to_process()
+    
+    if not username:
+        print("🎉 모든 사용자 ID 수집 완료!")
+        return "completed"
+    
+    print(f"🎯 처리 대상: {username} ({category})")
+    
+    # Bearer Token 가져오기
+    bearer_token = Variable.get('X_API_BEARER_TOKEN_2')
+    
+    # API 호출
     url = f"https://api.twitter.com/2/users/by/username/{username}"
     
     params = {
@@ -68,95 +98,68 @@ def fetch_user_id_from_api(username):
         "User-Agent": "InvestmentAssistant-UserID/1.0"
     }
     
-    response = requests.get(url, headers=headers, params=params, timeout=30)
-    response.raise_for_status()
-    
-    data = response.json()
-    return data
+    try:
+        print(f"🔍 {username} API 호출 중...")
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'data' not in data:
+            print(f"❌ {username}: 사용자를 찾을 수 없음")
+            return "not_found"
+        
+        user_data = data['data']
+        
+        # DB에 저장
+        user_info = {
+            'username': username,
+            'user_id': user_data['id'],
+            'display_name': user_data['name'],
+            'category': category
+        }
+        
+        hook = PostgresHook(postgres_conn_id='postgres_default')
+        hook.run(UPSERT_SQL, parameters=user_info)
+        
+        print(f"✅ {username}: {user_data['name']} (ID: {user_data['id']}) - 저장 완료")
+        
+        # XCom에 결과 저장
+        context['ti'].xcom_push(key='processed_user', value=user_info)
+        
+        return "success"
+        
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            print(f"⏰ Rate Limit 도달 - 15분 후 재시도 예정")
+            return "rate_limited"
+        else:
+            print(f"❌ {username} API 에러: {e}")
+            return "api_error"
+    except Exception as e:
+        print(f"❌ {username} 처리 실패: {e}")
+        return "error"
 
-def fetch_all_user_ids(**context):
-    """모든 사용자명의 user_id 수집"""
-    
-    print(f"🎯 사용자 ID 수집 시작: {len(ALL_USERNAMES)}개 계정")
-    
-    collected_users = []
-    success_count = 0
-    error_count = 0
-    
-    for username, config in ALL_USERNAMES.items():
-        try:
-            print(f"🔍 {username} ({config['category']}) ID 조회 중...")
-            
-            # API 호출
-            api_response = fetch_user_id_from_api(username)
-            
-            if 'data' not in api_response:
-                print(f"❌ {username}: 사용자를 찾을 수 없음")
-                error_count += 1
-                continue
-            
-            user_data = api_response['data']
-            
-            # 데이터 처리
-            user_info = {
-                'username': username,
-                'user_id': user_data['id'],
-                'display_name': user_data['name'],
-                'category': config['category']
-            }
-            
-            collected_users.append(user_info)
-            success_count += 1
-            print(f"✅ {username}: {user_data['name']} (ID: {user_data['id']})")
-            time.sleep(5)
-        except Exception as e:
-            print(f"❌ {username} 조회 실패: {e}")
-            error_count += 1
-            time.sleep(5)
-            continue
-    
-    print(f"\n📊 수집 완료: {success_count}개 성공, {error_count}개 실패")
-    
-    # XCom에 결과 저장
-    context['ti'].xcom_push(key='collected_users', value=collected_users)
-    
-    return success_count
-
-def store_user_profiles(**context):
-    """수집된 사용자 정보를 DB에 저장"""
-    
-    # XCom에서 사용자 정보 가져오기
-    collected_users = context['ti'].xcom_pull(key='collected_users') or []
-    
-    if not collected_users:
-        print("ℹ️ 저장할 사용자 정보가 없습니다")
-        return 0
+def check_completion_status(**context):
+    """완료 상태 확인 및 통계 출력"""
     
     hook = PostgresHook(postgres_conn_id='postgres_default')
     
-    success_count = 0
-    error_count = 0
-    
-    print(f"💾 DB 저장 시작: {len(collected_users)}개 사용자")
-    
-    for user_info in collected_users:
-        try:
-            hook.run(UPSERT_SQL, parameters=user_info)
-            success_count += 1
-            print(f"✅ {user_info['username']}: 저장 완료")
-            
-        except Exception as e:
-            print(f"❌ {user_info['username']} 저장 실패: {e}")
-            error_count += 1
-            continue
-    
-    print(f"✅ 저장 완료: {success_count}개 성공, {error_count}개 실패")
-    
-    # 저장된 데이터 확인
     try:
+        # 전체 수집 현황
         result = hook.get_first("SELECT COUNT(*) FROM user_profiles")
-        total_users = result[0] if result else 0
-        print(f"📊 총 저장된 사용자: {total_users}개")
+        total_collected = result[0] if result else 0
+        
+        remaining = len(ALL_USERNAMES) - total_collected
+        
+        print(f"📊 수집 현황: {total_collected}/{len(ALL_USERNAMES)} 완료")
+        print(f"📋 남은 작업: {remaining}개")
+        
+        if remaining > 0:
+            # 다음 처리 대상
+            username, category = get_next_username_to_process()
+            if username:
+                print(f"🎯 다음 대상: {username} ({category})")
         
         # 카테고리별 통계
         result = hook.get_records("""
@@ -166,44 +169,46 @@ def store_user_profiles(**context):
             ORDER BY COUNT(*) DESC
         """)
         
-        print(f"📈 카테고리별 통계:")
-        for row in result:
-            print(f"   - {row[0]}: {row[1]}개")
+        if result:
+            print(f"📈 카테고리별 현황:")
+            for row in result:
+                print(f"   - {row[0]}: {row[1]}개")
         
     except Exception as e:
         print(f"⚠️ 통계 조회 실패: {e}")
     
-    return success_count
+    return total_collected
 
 # DAG 정의
 with DAG(
-    dag_id='fetch_user_ids_onetime',
+    dag_id='fetch_user_ids_batch_15min',
     default_args=default_args,
-    schedule_interval=None,  # 수동 실행만
+    schedule_interval='*/15 * * * *',  # 15분마다 실행
     catchup=False,
-    description='X API로 사용자명 → user_id 매핑 수집 (일회성)',
+    max_active_runs=1,  # 동시 실행 방지
+    description='X API Rate Limit 대응 - 15분마다 1개씩 User ID 수집',
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['x_api', 'user_profiles', 'onetime', 'setup'],
+    tags=['x_api', 'user_profiles', 'batch', 'rate_limit'],
 ) as dag:
     
     # 테이블 생성
     create_table = PostgresOperator(
         task_id='create_user_profiles_table',
         postgres_conn_id='postgres_default',
-        sql='create_x_user_profiles.sql',
+        sql='create_user_profiles.sql',
     )
     
-    # 사용자 ID 수집
-    fetch_ids = PythonOperator(
-        task_id='fetch_all_user_ids',
-        python_callable=fetch_all_user_ids,
+    # 한 개씩 사용자 ID 수집
+    fetch_one = PythonOperator(
+        task_id='fetch_single_user_id',
+        python_callable=fetch_single_user_id,
     )
     
-    # DB 저장
-    store_profiles = PythonOperator(
-        task_id='store_user_profiles',
-        python_callable=store_user_profiles,
+    # 완료 상태 확인
+    check_status = PythonOperator(
+        task_id='check_completion_status',
+        python_callable=check_completion_status,
     )
     
     # Task 의존성
-    create_table >> fetch_ids >> store_profiles
+    create_table >> fetch_one >> check_status
