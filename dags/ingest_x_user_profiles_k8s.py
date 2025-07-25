@@ -28,9 +28,9 @@ default_args = {
 # 모든 사용자명 (순서대로 처리)
 ALL_USERNAMES = [
     # Primary Token 계정들
-    # ('elonmusk', 'core_investors'),
-    # ('RayDalio', 'core_investors'),
-    # ('jimcramer', 'core_investors'),
+    ('elonmusk', 'core_investors'),
+    ('RayDalio', 'core_investors'),
+    ('jimcramer', 'core_investors'),
     ('tim_cook', 'core_investors'),
     ('satyanadella', 'core_investors'),
     ('sundarpichai', 'core_investors'),

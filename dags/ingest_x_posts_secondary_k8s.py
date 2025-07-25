@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import requests
 import json
 import os
+import time
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -21,121 +22,139 @@ with open(os.path.join(DAGS_SQL_DIR, "upsert_x_posts.sql"), encoding="utf-8") as
 default_args = {
     'owner': 'investment_assistant',
     'start_date': datetime(2025, 1, 1),
-    'retries': None,
-    'retry_delay': timedelta(minutes=1),
+    'retries': 1,  # Rate Limit 에러 시 1회 재시도
+    'retry_delay': timedelta(minutes=20),  # 20분 후 재시도
 }
 
-# ===== 두 번째 토큰용 확장 계정들 (월 100회 배분) =====
+# ===== DB 기반 두 번째 토큰용 확장 계정들 (user_id 제거) =====
 SECONDARY_ACCOUNT_SCHEDULE = {
     # === 1. 암호화폐 생태계 (35회/월) ===
     'saylor': {  # Michael Saylor (MicroStrategy)
-        'user_id': '244647486',
         'frequency': 'daily',              # 30회/월
-        'max_results': 50,
+        'max_results': 50,                 # Free Tier 제한 고려
         'priority': 1,
         'category': 'crypto'
     },
     'brian_armstrong': {  # Coinbase CEO
-        'user_id': '9224862',
         'frequency': 'twice_weekly',       # 8회/월 (화, 금)
         'max_results': 50,
         'priority': 2,
-        'category': 'crypto'
+        'category': 'crypto',
+        'weekly_days': [1, 4]  # 화, 금
     },
     'CoinbaseAssets': {  # Coinbase 공식
-        'user_id': '1087818612',
         'frequency': 'weekly',             # 4회/월 (일요일)
-        'max_results': 30,
+        'max_results': 50,
         'priority': 3,
-        'category': 'crypto'
+        'category': 'crypto',
+        'weekly_day': 6  # 일요일
     },
     
     # === 2. 추가 빅테크 CEO들 (25회/월) ===
     'jeffbezos': {  # Amazon 창립자
-        'user_id': '12071242',
         'frequency': 'every_2_days',       # 15회/월
         'max_results': 50,
         'priority': 1,
         'category': 'tech_ceo'
     },
-    'sundarpichai': {  # Google CEO (중복 방지 - 다른 스케줄)
-        'user_id': '16144047',
+    'sundarpichai': {  # Google CEO (Primary와 다른 스케줄)
         'frequency': 'twice_weekly',       # 8회/월 (월, 목)
         'max_results': 50,
         'priority': 2,
-        'category': 'tech_ceo'
+        'category': 'tech_ceo',
+        'weekly_days': [0, 3]  # 월, 목
     },
     'IBM': {  # IBM 공식 계정
-        'user_id': '18994444',
         'frequency': 'weekly',             # 4회/월 (토요일)
-        'max_results': 30,
+        'max_results': 50,
         'priority': 3,
-        'category': 'tech_ceo'
+        'category': 'tech_ceo',
+        'weekly_day': 5  # 토요일
     },
     
     # === 3. 투자 기관 & 인플루언서들 (20회/월) ===
     'CathieDWood': {  # ARK Invest
-        'user_id': '2899617799',
         'frequency': 'twice_weekly',       # 8회/월 (수, 토)
         'max_results': 50,
         'priority': 2,
-        'category': 'institutional'
+        'category': 'institutional',
+        'weekly_days': [2, 5]  # 수, 토
     },
     'mcuban': {  # Mark Cuban
-        'user_id': '15164565',
         'frequency': 'twice_weekly',       # 8회/월 (화, 금)
         'max_results': 50,
         'priority': 2,
-        'category': 'institutional'
+        'category': 'institutional',
+        'weekly_days': [1, 4]  # 화, 금
     },
     'chamath': {  # Chamath Palihapitiya
-        'user_id': '3291691',
         'frequency': 'weekly',             # 4회/월 (일요일)
-        'max_results': 40,
+        'max_results': 50,
         'priority': 3,
-        'category': 'institutional'
+        'category': 'institutional',
+        'weekly_day': 6  # 일요일
     },
     
     # === 4. 금융 미디어 (15회/월) ===
     'CNBC': {
-        'user_id': '20402945',
         'frequency': 'twice_weekly',       # 8회/월 (월, 목)
-        'max_results': 40,
+        'max_results': 50,
         'priority': 2,
-        'category': 'media'
+        'category': 'media',
+        'weekly_days': [0, 3]  # 월, 목
     },
     'business': {  # Bloomberg
-        'user_id': '34713362',
         'frequency': 'weekly',             # 4회/월 (화요일)
-        'max_results': 30,
+        'max_results': 50,
         'priority': 3,
-        'category': 'media'
+        'category': 'media',
+        'weekly_day': 1  # 화요일
     },
     'WSJ': {  # Wall Street Journal
-        'user_id': '3108351',
         'frequency': 'weekly',             # 4회/월 (수요일)
-        'max_results': 30,
+        'max_results': 50,
         'priority': 3,
-        'category': 'media'
+        'category': 'media',
+        'weekly_day': 2  # 수요일
     },
     
-    # === 5. 기업 공식 계정들 (5회/월) ===
+    # === 5. 기업 공식 계정들 (8회/월) ===
     'Tesla': {
-        'user_id': '13298072',
         'frequency': 'weekly',             # 4회/월 (금요일)
-        'max_results': 25,
+        'max_results': 50,
         'priority': 3,
-        'category': 'corporate'
+        'category': 'corporate',
+        'weekly_day': 4  # 금요일
     },
     'nvidia': {
-        'user_id': '61559439',
         'frequency': 'weekly',             # 4회/월 (목요일)
-        'max_results': 25,
+        'max_results': 50,
         'priority': 3,
-        'category': 'corporate'
+        'category': 'corporate',
+        'weekly_day': 3  # 목요일
     }
-    # 총 호출: 30+8+4+15+8+4+8+8+4+4+4+4+4 = 105회/월 (5회 여유)
 }
+
+def get_user_id_from_db(username):
+    """DB에서 username으로 user_id 조회"""
+    try:
+        hook = PostgresHook(postgres_conn_id='postgres_default')
+        result = hook.get_first(
+            "SELECT user_id FROM x_user_profiles WHERE username = %s",
+            parameters=[username]
+        )
+        
+        if result:
+            user_id = result[0]
+            print(f"✅ DB 조회 성공: {username} → {user_id}")
+            return user_id
+        else:
+            print(f"❌ DB에서 {username}을 찾을 수 없습니다")
+            return None
+            
+    except Exception as e:
+        print(f"❌ DB 조회 실패: {username} - {e}")
+        return None
 
 def should_run_account_today_secondary(username):
     """두 번째 토큰 계정들의 오늘 실행 여부 판단"""
@@ -151,34 +170,19 @@ def should_run_account_today_secondary(username):
     if frequency == 'daily':
         return True
     elif frequency == 'every_2_days':
-        # jeffbezos는 홀수일에 실행
+        # jeffbezos는 홀수일에 실행 (Primary와 다르게)
         return day_of_year % 2 == 1
     elif frequency == 'every_3_days':
         # 필요시 추가
         return (day_of_year + 1) % 3 == 0
     elif frequency == 'twice_weekly':
-        # 계정별로 다른 요일 할당 (Primary 토큰과 겹치지 않게)
-        twice_weekly_schedule = {
-            'brian_armstrong': [1, 4],    # 화, 금
-            'sundarpichai': [0, 3],       # 월, 목 (Primary와 다름)
-            'CathieDWood': [2, 5],        # 수, 토
-            'mcuban': [1, 4],             # 화, 금
-            'CNBC': [0, 3]                # 월, 목
-        }
-        assigned_days = twice_weekly_schedule.get(username, [0, 3])
+        # 계정별로 다른 요일 할당
+        assigned_days = config.get('weekly_days', [0, 3])
         return day_of_week in assigned_days
     elif frequency == 'weekly':
         # 계정별로 다른 요일 할당
-        weekly_schedule = {
-            'CoinbaseAssets': 6,    # 일요일
-            'IBM': 5,               # 토요일  
-            'chamath': 6,           # 일요일
-            'business': 1,          # 화요일
-            'WSJ': 2,               # 수요일
-            'Tesla': 4,             # 금요일
-            'nvidia': 3             # 목요일
-        }
-        return day_of_week == weekly_schedule.get(username, 6)
+        assigned_day = config.get('weekly_day', 6)
+        return day_of_week == assigned_day
     
     return False
 
@@ -195,37 +199,52 @@ def get_todays_secondary_accounts():
     
     return todays_accounts
 
-def call_x_api_secondary(username, user_id, max_results=50):
-    """두 번째 Bearer Token으로 X API 호출"""
-    # 두 번째 토큰 사용
-    bearer_token = Variable.get('X_API_BEARER_TOKEN_2')
-    
-    url = f"https://api.twitter.com/2/users/{user_id}/tweets"
-    
-    # 24시간 전부터 수집
-    start_time = (datetime.utcnow() - timedelta(hours=24)).isoformat() + 'Z'
-    
-    params = {
-        "max_results": min(max_results, 10),
-        "start_time": start_time,
-        "tweet.fields": "created_at,text,public_metrics,context_annotations,entities,lang,edit_history_tweet_ids",
-        "expansions": "author_id",
-        "user.fields": "name,username,verified,public_metrics"
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {bearer_token}",
-        "User-Agent": "InvestmentAssistant-Secondary/1.0"
-    }
-    
-    response = requests.get(url, headers=headers, params=params, timeout=30)
-    response.raise_for_status()
-    
-    data = response.json()
-    return data
+def call_x_api_secondary_with_rate_limit(username, user_id, max_results=50):
+    """Rate Limit을 고려한 두 번째 토큰 X API 호출"""
+    try:
+        bearer_token = Variable.get('X_API_BEARER_TOKEN_2')  # 두 번째 토큰
+        
+        url = f"https://api.twitter.com/2/users/{user_id}/tweets"
+        
+        # 24시간 전부터 수집
+        start_time = (datetime.utcnow() - timedelta(hours=24)).isoformat() + 'Z'
+        
+        params = {
+            "max_results": min(max_results, 50),  # Free Tier 최대 100개
+            "start_time": start_time,
+            "tweet.fields": "created_at,text,public_metrics,context_annotations,entities,lang,edit_history_tweet_ids",
+            "expansions": "author_id",
+            "user.fields": "name,username,verified,public_metrics"
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {bearer_token}",
+            "User-Agent": "InvestmentAssistant-Secondary/2.0"
+        }
+        
+        print(f"🔍 API 호출 중: {username} (user_id: {user_id})")
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        
+        # Rate Limit 에러 체크
+        if response.status_code == 429:
+            print(f"⚠️ Rate Limit 도달: {username}")
+            reset_time = response.headers.get('x-rate-limit-reset', '')
+            if reset_time:
+                print(f"   재설정 시간: {datetime.fromtimestamp(int(reset_time))}")
+            raise Exception(f"Rate Limit exceeded for {username}")
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        print(f"✅ API 호출 성공: {username}")
+        return data
+        
+    except Exception as e:
+        print(f"❌ API 호출 실패: {username} - {e}")
+        raise
 
 def process_tweet_data_secondary(tweet, user_info, source_account, category):
-    """트윗 데이터 처리 (카테고리 정보 추가)"""
+    """트윗 데이터 처리 (Secondary Token용, 카테고리 정보 추가)"""
     
     # 기본 트윗 정보
     processed_data = {
@@ -291,8 +310,8 @@ def process_tweet_data_secondary(tweet, user_info, source_account, category):
     
     return processed_data
 
-def fetch_secondary_tweets(**context):
-    """두 번째 토큰으로 확장 계정들의 트윗 수집"""
+def fetch_secondary_tweets_with_delay(**context):
+    """방안 2: 15분 딜레이를 두고 순차적으로 확장 계정 수집"""
     
     # 오늘 수집할 계정들 결정
     todays_accounts = get_todays_secondary_accounts()
@@ -300,11 +319,13 @@ def fetch_secondary_tweets(**context):
     if not todays_accounts:
         print("📅 [SECONDARY] 오늘은 수집할 계정이 없습니다")
         context['ti'].xcom_push(key='collected_tweets', value=[])
+        context['ti'].xcom_push(key='api_calls_made', value=0)
+        context['ti'].xcom_push(key='category_stats', value={})
         return 0
     
     print(f"🎯 [SECONDARY TOKEN] 오늘 수집 대상: {len(todays_accounts)}개 계정")
     
-    # 카테고리별 분류
+    # 카테고리별 분류 미리보기
     category_counts = {}
     for account in todays_accounts:
         config = SECONDARY_ACCOUNT_SCHEDULE[account]
@@ -314,28 +335,66 @@ def fetch_secondary_tweets(**context):
         category_counts[category] += 1
         print(f"   - {account}: {config['frequency']} ({category}, 우선순위 {config['priority']})")
     
-    print(f"📊 카테고리별: {dict(category_counts)}")
+    print(f"📊 카테고리별 수집 계획: {dict(category_counts)}")
     
-    # 각 계정별 트윗 수집
+    # Rate Limit 체크 (하루 17회 제한)
+    if len(todays_accounts) > 17:
+        print(f"⚠️ 경고: 오늘 수집 계정({len(todays_accounts)}개)이 일일 제한(17회)을 초과합니다")
+        print(f"   처음 17개 계정만 수집합니다")
+        todays_accounts = todays_accounts[:17]
+    
+    # 예상 소요 시간 계산
+    estimated_time = (len(todays_accounts) - 1) * 15  # 15분 간격
+    print(f"⏰ 예상 소요 시간: {estimated_time}분 (15분 간격 × {len(todays_accounts)-1}회 대기)")
+    
+    # 각 계정별 트윗 수집 (15분 딜레이 포함)
     all_tweets = []
     total_api_calls = 0
     category_stats = {}
+    successful_accounts = []
+    failed_accounts = []
     
-    for username in todays_accounts:
+    for i, username in enumerate(todays_accounts):
         try:
+            # 두 번째 계정부터 15분 대기 (Rate Limit 준수)
+            if i > 0:
+                wait_minutes = 15
+                print(f"\n⏰ [RATE LIMIT] {wait_minutes}분 대기 중... (현재 {i+1}/{len(todays_accounts)})")
+                print(f"   다음 계정: {username}")
+                
+                # 실제 환경에서는 15분, 테스트에서는 1분으로 조정 가능
+                time.sleep(wait_minutes * 60)  # 15분 = 900초
+                
+                print(f"✅ 대기 완료! {username} 수집 시작")
+            
+            # DB에서 user_id 조회
+            user_id = get_user_id_from_db(username)
+            if not user_id:
+                print(f"❌ {username}: DB에서 user_id를 찾을 수 없어 건너뜁니다")
+                failed_accounts.append(f"{username} (user_id 없음)")
+                continue
+            
             config = SECONDARY_ACCOUNT_SCHEDULE[username]
-            user_id = config['user_id']
             max_results = config['max_results']
             category = config['category']
             
-            print(f"\n🔍 [{category.upper()}] {username} 트윗 수집 중 (최대 {max_results}개)...")
+            print(f"\n🔍 [{i+1}/{len(todays_accounts)}] [{category.upper()}] {username} 트윗 수집 중...")
+            print(f"   User ID: {user_id}")
+            print(f"   최대 결과: {max_results}개")
             
             # API 호출 (두 번째 토큰 사용)
-            api_response = call_x_api_secondary(username, user_id, max_results)
+            api_response = call_x_api_secondary_with_rate_limit(username, user_id, max_results)
             total_api_calls += 1
             
             if 'data' not in api_response or not api_response['data']:
                 print(f"⚠️ {username}: 최근 24시간 내 트윗 없음")
+                successful_accounts.append(f"{username} (트윗 없음)")
+                
+                # 카테고리별 통계 (API 호출은 했지만 트윗 없음)
+                if category not in category_stats:
+                    category_stats[category] = {'tweets': 0, 'accounts': 0, 'api_calls': 0}
+                category_stats[category]['accounts'] += 1
+                category_stats[category]['api_calls'] += 1
                 continue
             
             # 사용자 정보 추출
@@ -350,48 +409,66 @@ def fetch_secondary_tweets(**context):
                 account_tweets.append(processed_tweet)
             
             all_tweets.extend(account_tweets)
+            successful_accounts.append(f"{username} ({len(account_tweets)}개)")
             
-            # 카테고리별 통계
+            # 카테고리별 통계 업데이트
             if category not in category_stats:
                 category_stats[category] = {'tweets': 0, 'accounts': 0, 'api_calls': 0}
             category_stats[category]['tweets'] += len(account_tweets)
             category_stats[category]['accounts'] += 1
             category_stats[category]['api_calls'] += 1
             
-            print(f"✅ {username}: {len(account_tweets)}개 트윗 수집")
+            print(f"✅ {username}: {len(account_tweets)}개 트윗 수집 완료")
             
         except Exception as e:
             print(f"❌ {username} 수집 실패: {e}")
+            failed_accounts.append(f"{username} ({str(e)[:50]})")
             total_api_calls += 1  # 실패해도 API 호출은 차감
             
             # 실패도 통계에 반영
+            config = SECONDARY_ACCOUNT_SCHEDULE.get(username, {})
             category = config.get('category', 'unknown')
             if category not in category_stats:
                 category_stats[category] = {'tweets': 0, 'accounts': 0, 'api_calls': 0}
             category_stats[category]['api_calls'] += 1
             continue
     
+    # 최종 결과 요약
     print(f"\n📊 [SECONDARY TOKEN] 수집 완료:")
     print(f"   📱 총 트윗: {len(all_tweets)}개")
-    print(f"   🔑 API 호출: {total_api_calls}회")
-    print(f"   📈 카테고리별 결과:")
+    print(f"   🔑 API 호출: {total_api_calls}회 / 17회 (일일 제한)")
+    print(f"   ✅ 성공: {len(successful_accounts)}개 계정")
+    if successful_accounts:
+        for account in successful_accounts:
+            print(f"      - {account}")
+    
+    if failed_accounts:
+        print(f"   ❌ 실패: {len(failed_accounts)}개 계정")
+        for account in failed_accounts:
+            print(f"      - {account}")
+    
+    print(f"📈 카테고리별 수집 결과:")
     for category, stats in category_stats.items():
-        print(f"      - {category}: {stats['tweets']}개 트윗 ({stats['accounts']}개 계정, {stats['api_calls']}회 호출)")
+        print(f"   - {category}: {stats['tweets']}개 트윗 ({stats['accounts']}개 계정, {stats['api_calls']}회 호출)")
     
     # XCom에 결과 저장
     context['ti'].xcom_push(key='collected_tweets', value=all_tweets)
     context['ti'].xcom_push(key='api_calls_made', value=total_api_calls)
     context['ti'].xcom_push(key='category_stats', value=category_stats)
+    context['ti'].xcom_push(key='successful_accounts', value=successful_accounts)
+    context['ti'].xcom_push(key='failed_accounts', value=failed_accounts)
     
     return len(all_tweets)
 
 def store_secondary_tweets_to_db(**context):
     """수집된 확장 계정 트윗을 DB에 저장"""
     
-    # XCom에서 수집된 트윗 가져오기
+    # XCom에서 수집된 데이터 가져오기
     all_tweets = context['ti'].xcom_pull(key='collected_tweets') or []
     api_calls = context['ti'].xcom_pull(key='api_calls_made') or 0
     category_stats = context['ti'].xcom_pull(key='category_stats') or {}
+    successful_accounts = context['ti'].xcom_pull(key='successful_accounts') or []
+    failed_accounts = context['ti'].xcom_pull(key='failed_accounts') or []
     
     if not all_tweets:
         print("ℹ️ 저장할 트윗이 없습니다")
@@ -409,8 +486,8 @@ def store_secondary_tweets_to_db(**context):
             hook.run(UPSERT_SQL, parameters=tweet_data)
             success_count += 1
             
-            # 진행률 표시 (100개마다)
-            if success_count % 100 == 0:
+            # 진행률 표시 (50개마다)
+            if success_count % 50 == 0:
                 print(f"📊 저장 진행률: {success_count}/{len(all_tweets)}")
                 
         except Exception as e:
@@ -420,7 +497,7 @@ def store_secondary_tweets_to_db(**context):
     
     print(f"✅ [SECONDARY] 저장 완료: {success_count}개 성공, {error_count}개 실패")
     
-    # 통계 조회
+    # 통계 조회 및 최종 리포트
     try:
         # 오늘 수집된 secondary 토큰 트윗
         result = hook.get_first("""
@@ -434,30 +511,47 @@ def store_secondary_tweets_to_db(**context):
         result = hook.get_first("SELECT COUNT(*) FROM x_posts")
         total_all = result[0] if result else 0
         
-        print(f"📊 오늘 Secondary 토큰 수집: {secondary_today}개")
-        print(f"📊 전체 저장된 트윗: {total_all}개")
+        # 카테고리별 오늘 수집 통계
+        category_db_stats = {}
+        for category in category_stats.keys():
+            result = hook.get_first("""
+                SELECT COUNT(*) FROM x_posts 
+                WHERE collected_at >= NOW() - INTERVAL '1 day'
+                AND collection_source = 'secondary_token'
+                AND account_category = %s
+            """, parameters=[category])
+            category_db_stats[category] = result[0] if result else 0
         
-        # 카테고리별 통계 출력
-        print(f"📈 카테고리별 수집 결과:")
+        print(f"\n📈 [최종 리포트]")
+        print(f"   📊 오늘 Secondary 토큰 수집: {secondary_today}개")
+        print(f"   📊 전체 저장된 트윗: {total_all}개")
+        print(f"   🔥 오늘 API 호출: {api_calls}회 / 17회")
+        print(f"   ✅ 성공 계정: {len(successful_accounts)}개")
+        print(f"   ❌ 실패 계정: {len(failed_accounts)}개")
+        
+        print(f"\n📈 카테고리별 최종 결과:")
         for category, stats in category_stats.items():
-            print(f"   - {category}: {stats['tweets']}개 트윗, {stats['api_calls']}회 API 호출")
+            db_count = category_db_stats.get(category, 0)
+            print(f"   - {category}: {stats['tweets']}개 수집 → {db_count}개 DB 저장 ({stats['api_calls']}회 API 호출)")
+        
+        # 남은 API 호출 수
+        remaining_calls = 17 - api_calls
+        print(f"   🔋 남은 API 호출: {remaining_calls}회")
         
     except Exception as e:
         print(f"⚠️ 통계 조회 실패: {e}")
-    
-    print(f"🔥 Secondary 토큰 오늘 API 호출: {api_calls}회")
     
     return success_count
 
 # DAG 정의
 with DAG(
-    dag_id='ingest_x_posts_secondary_k8s',
+    dag_id='ingest_x_posts_secondary_with_delay_k8s',
     default_args=default_args,
-    schedule_interval='0 */8 * * *',  # 8시간마다 실행 (Primary와 동일)
+    schedule_interval='0 4 * * *',  # 매일 새벽 4시 실행 (Primary와 2시간 차이)
     catchup=False,
-    description='X API 두 번째 토큰으로 확장 계정 트윗 수집 (암호화폐, 빅테크, 투자기관)',
+    description='X API Secondary Token: 15분 딜레이 + DB 기반 확장 계정 수집 (방안 2)',
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['x_api', 'twitter', 'secondary_token', 'crypto', 'bigtech', 'investment', 'k8s'],
+    tags=['x_api', 'twitter', 'secondary_token', 'rate_limit_safe', 'crypto', 'bigtech', 'k8s'],
 ) as dag:
     
     # 테이블 생성 (이미 존재할 수 있으므로 같은 테이블 사용)
@@ -467,10 +561,10 @@ with DAG(
         sql='create_x_posts.sql',
     )
     
-    # 두 번째 토큰으로 확장 계정들의 트윗 수집
+    # Rate Limit 준수하여 확장 계정 트윗 수집
     fetch_tweets = PythonOperator(
-        task_id='fetch_secondary_tweets',
-        python_callable=fetch_secondary_tweets,
+        task_id='fetch_secondary_tweets_with_delay',
+        python_callable=fetch_secondary_tweets_with_delay,
     )
     
     # DB 저장
