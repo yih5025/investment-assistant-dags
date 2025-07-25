@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import requests
 import os
+import time
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -27,9 +28,9 @@ default_args = {
 # Primary + Secondary DAG에서 사용하는 모든 사용자명
 ALL_USERNAMES = {
     # Primary Token 계정들
-    'elonmusk': {'category': 'core_investors'},
-    'RayDalio': {'category': 'core_investors'},
-    'jimcramer': {'category': 'core_investors'},
+    # 'elonmusk': {'category': 'core_investors'},
+    # 'RayDalio': {'category': 'core_investors'},
+    # 'jimcramer': {'category': 'core_investors'},
     'tim_cook': {'category': 'core_investors'},
     'satyanadella': {'category': 'core_investors'},
     'sundarpichai': {'category': 'core_investors'},
@@ -106,12 +107,12 @@ def fetch_all_user_ids(**context):
             
             collected_users.append(user_info)
             success_count += 1
-            
             print(f"✅ {username}: {user_data['name']} (ID: {user_data['id']})")
-            
+            time.sleep(5)
         except Exception as e:
             print(f"❌ {username} 조회 실패: {e}")
             error_count += 1
+            time.sleep(5)
             continue
     
     print(f"\n📊 수집 완료: {success_count}개 성공, {error_count}개 실패")
