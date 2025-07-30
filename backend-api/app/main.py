@@ -114,7 +114,7 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc",
         "status": "running",
-        "uvicorn_reload_test": "SUCCESS",    # 🔧 테스트 필드
+        "uvicorn_reload_test": "SUCCESS 2",    # 🔧 테스트 필드
         "timestamp": "2025-07-30 17:00:00"   # 🔧 시간 업데이트
     }
 
