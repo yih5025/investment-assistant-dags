@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 import logging
 import logging.config
 
@@ -12,6 +13,23 @@ from .dependencies import verify_db_connection
 logging.config.dictConfig(get_log_config())
 logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info(f"{settings.app_name} v{settings.app_version} 시작 중...")
+    if test_db_connection():
+        logger.info("✅ 데이터베이스 연결 성공")
+    else:
+        logger.error("❌ 데이터베이스 연결 실패")
+    logger.info(f"🚀 서버가 http://{settings.host}:{settings.port} 에서 실행 중")
+    logger.info(f"📚 API 문서: http://{settings.host}:{settings.port}/docs")
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 애플리케이션 종료 중...")
+    logger.info("✅ 정리 작업 완료")
+
 # FastAPI 애플리케이션 생성
 app = FastAPI(
     title=settings.app_name,
@@ -19,7 +37,8 @@ app = FastAPI(
     description="투자 도우미 서비스의 데이터 API",
     docs_url="/docs",          # API 문서 경로: http://localhost:8888/docs
     redoc_url="/redoc",        # ReDoc 문서 경로: http://localhost:8888/redoc
-    openapi_url="/openapi.json"  # OpenAPI 스키마 경로
+    openapi_url="/openapi.json",  # OpenAPI 스키마 경로
+    lifespan=lifespan
 )
 
 # CORS 미들웨어 설정
@@ -32,41 +51,7 @@ app.add_middleware(
     allow_headers=["*"],                     # 모든 헤더 허용
 )
 
-# 애플리케이션 시작 이벤트
-@app.on_event("startup")
-async def startup_event():
-    """
-    애플리케이션 시작 시 실행되는 함수
-    
-    주요 작업:
-    1. 데이터베이스 연결 상태 확인
-    2. 로깅 설정 확인
-    3. 필요한 초기화 작업 수행
-    """
-    logger.info(f"{settings.app_name} v{settings.app_version} 시작 중...")
-    
-    # 데이터베이스 연결 테스트
-    if test_db_connection():
-        logger.info("✅ 데이터베이스 연결 성공")
-    else:
-        logger.error("❌ 데이터베이스 연결 실패")
-        
-    logger.info(f"🚀 서버가 http://{settings.host}:{settings.port} 에서 실행 중")
-    logger.info(f"📚 API 문서: http://{settings.host}:{settings.port}/docs")
 
-# 애플리케이션 종료 이벤트
-@app.on_event("shutdown")
-async def shutdown_event():
-    """
-    애플리케이션 종료 시 실행되는 함수
-    
-    정리 작업:
-    1. 데이터베이스 연결 정리
-    2. 캐시 연결 정리 (Redis)
-    3. 로그 마무리
-    """
-    logger.info("🛑 애플리케이션 종료 중...")
-    logger.info("✅ 정리 작업 완료")
 
 # 루트 엔드포인트
 @app.get("/", tags=["Root"])

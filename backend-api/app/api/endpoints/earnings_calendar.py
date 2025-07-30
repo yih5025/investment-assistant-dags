@@ -332,3 +332,7 @@ async def get_earnings_statistics(db: Session = Depends(get_db)):
             status_code=500,
             detail=f"실적 캘린더 통계 조회 중 오류가 발생했습니다: {str(e)}"
         )
+
+@router.get("/test", tags=["API TEST"])
+async def test():
+    return {"message": "API v1/earnings-calendar/test"}
