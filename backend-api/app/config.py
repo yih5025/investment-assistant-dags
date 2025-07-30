@@ -57,8 +57,7 @@ class Settings(BaseSettings):
     )
     
     # === API 설정 ===
-    api_v1_prefix: str = Field("/api/v1", description="API v1 경로 접두사")
-    
+    api_v1_prefix: str = Field("/api/v1", description="API v1 경로 접두사")    
     # === 로깅 설정 ===
     log_level: str = Field("INFO", description="로그 레벨")
     

@@ -1,13 +1,9 @@
 from fastapi import APIRouter
 
 # 각 도메인별 엔드포인트 라우터들을 import
-# 현재는 earnings_calendar만 구현되어 있고, 나머지는 점진적으로 추가 예정
 from .endpoints import earnings_calendar
-# from .endpoints import crypto    # 향후 구현
-# from .endpoints import stocks    # 향후 구현  
-# from .endpoints import news      # 향후 구현
-# from .endpoints import market    # 향후 구현
-# from .endpoints import health    # 향후 구현
+from app.schemas.earnings_calendar import EarningsCalendarQueryParams, EarningsCalendarResponse, EarningsCalendarListResponse
+from app.services.earnings_calendar_service import EarningsCalendarService
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
