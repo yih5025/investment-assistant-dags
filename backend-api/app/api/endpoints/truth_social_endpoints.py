@@ -51,7 +51,10 @@ async def get_truth_social_posts(
     - **start_date**: 시작 날짜
     - **end_date**: 종료 날짜
     """
-    # 필터 객체 생성
+    # 서비스 호출 (Query 파라미터를 직접 전달)
+    service = TruthSocialPostService(db)
+    
+    # 필터 객체 생성 (None 값들은 자동으로 무시됨)
     filters = TruthSocialPostFilter(
         username=username,
         account_type=account_type,
@@ -62,8 +65,6 @@ async def get_truth_social_posts(
         end_date=end_date
     )
     
-    # 서비스 호출
-    service = TruthSocialPostService(db)
     posts = service.get_posts(skip=skip, limit=limit, filters=filters)
     total = service.get_posts_count(filters=filters)
     
@@ -90,7 +91,8 @@ async def get_trump_posts(
     posts = service.get_trump_posts(skip=skip, limit=limit)
     
     # 트럼프 포스트 총 개수 (캐시 가능)
-    total = service.get_posts_count(TruthSocialPostFilter(username="realDonaldTrump"))
+    trump_filter = TruthSocialPostFilter(username="realDonaldTrump")
+    total = service.get_posts_count(trump_filter)
     
     return TruthSocialPostsResponse(
         items=posts,
@@ -114,7 +116,8 @@ async def get_government_posts(
     service = TruthSocialPostService(db)
     posts = service.get_government_posts(skip=skip, limit=limit)
     
-    total = service.get_posts_count(TruthSocialPostFilter(account_type="government"))
+    gov_filter = TruthSocialPostFilter(account_type="government")
+    total = service.get_posts_count(gov_filter)
     
     return TruthSocialPostsResponse(
         items=posts,
@@ -138,7 +141,8 @@ async def get_high_influence_posts(
     service = TruthSocialPostService(db)
     posts = service.get_high_influence_posts(skip=skip, limit=limit)
     
-    total = service.get_posts_count(TruthSocialPostFilter(min_market_influence=1))
+    influence_filter = TruthSocialPostFilter(min_market_influence=1)
+    total = service.get_posts_count(influence_filter)
     
     return TruthSocialPostsResponse(
         items=posts,
@@ -161,7 +165,8 @@ async def get_posts_with_media(
     service = TruthSocialPostService(db)
     posts = service.get_posts_with_media(skip=skip, limit=limit)
     
-    total = service.get_posts_count(TruthSocialPostFilter(has_media=True))
+    media_filter = TruthSocialPostFilter(has_media=True)
+    total = service.get_posts_count(media_filter)
     
     return TruthSocialPostsResponse(
         items=posts,
