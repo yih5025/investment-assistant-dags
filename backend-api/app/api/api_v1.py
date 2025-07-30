@@ -33,7 +33,7 @@ async def api_v1_info():
         dict: API v1 정보 및 사용 가능한 엔드포인트 목록
     """
     return {
-        "message": "🎯 Uvicorn Auto-Reload 테스트 - Delete Pod 없이 자동 적용! ⚡",
+        "message": "🎯 Git Hash 체크 방식 - 진짜 자동 재시작 테스트! 🚀",
         "version": "1.0.0",
         "available_endpoints": {
             "earnings-calendar": {
