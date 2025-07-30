@@ -1,8 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime, Date, Numeric, Boolean, JSON, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from app.database import Base
+from ..database import Base
 
-class TruthSocial(Base):
+class TruthSocialPost(Base):
     """Truth Social Posts 데이터 모델"""
     __tablename__ = "truth_social_posts"
 

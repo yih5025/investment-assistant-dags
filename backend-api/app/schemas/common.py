@@ -61,4 +61,12 @@ class HealthResponse(BaseModel):
     """
     status: str = Field(..., description="서비스 상태", example="healthy")
     timestamp: str = Field(..., description="체크 시간")
-    services: Optional[dict] = Field(None, description="의존 서비스 상태") 
+    services: Optional[dict] = Field(None, description="의존 서비스 상태")
+
+class APIResponse(BaseModel):
+    """
+    일반적인 API 응답을 위한 공통 스키마
+    """
+    success: bool = Field(..., description="성공 여부")
+    message: str = Field(..., description="응답 메시지")
+    data: Optional[dict] = Field(None, description="응답 데이터") 
