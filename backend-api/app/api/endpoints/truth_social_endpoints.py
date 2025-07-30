@@ -70,7 +70,7 @@ async def get_truth_social_posts(
     
     return TruthSocialPostsResponse(
         items=posts,
-        total=total,
+        total_count=total,  # total -> total_count로 변경
         skip=skip,
         limit=limit,
         has_next=skip + limit < total
@@ -96,7 +96,7 @@ async def get_trump_posts(
     
     return TruthSocialPostsResponse(
         items=posts,
-        total=total,
+        total_count=total,  # total -> total_count로 변경
         skip=skip,
         limit=limit,
         has_next=skip + limit < total
@@ -121,7 +121,7 @@ async def get_government_posts(
     
     return TruthSocialPostsResponse(
         items=posts,
-        total=total,
+        total_count=total,  # total -> total_count로 변경
         skip=skip,
         limit=limit,
         has_next=skip + limit < total
@@ -146,7 +146,7 @@ async def get_high_influence_posts(
     
     return TruthSocialPostsResponse(
         items=posts,
-        total=total,
+        total_count=total,  # total -> total_count로 변경
         skip=skip,
         limit=limit,
         has_next=skip + limit < total
@@ -170,7 +170,7 @@ async def get_posts_with_media(
     
     return TruthSocialPostsResponse(
         items=posts,
-        total=total,
+        total_count=total,  # total -> total_count로 변경
         skip=skip,
         limit=limit,
         has_next=skip + limit < total
@@ -247,7 +247,7 @@ async def get_truth_social_tags(
     
     return TruthSocialTagsResponse(
         items=tags,
-        total=total,
+        total_count=total,  # total -> total_count로 변경
         skip=skip,
         limit=limit,
         has_next=skip + limit < total
@@ -368,7 +368,7 @@ async def get_truth_social_trends(
     
     return TruthSocialTrendsResponse(
         items=trends,
-        total=total,
+        total_count=total,  # total -> total_count로 변경
         skip=skip,
         limit=limit,
         has_next=skip + limit < total
