@@ -33,7 +33,7 @@ async def api_v1_info():
         dict: API v1 정보 및 사용 가능한 엔드포인트 목록
     """
     return {
-        "message": "🚀 Investment Assistant API v1 - File Watcher Test! 🎉",
+        "message": "✨ File Watcher 2차 테스트 - 자동 재시작 확인! 🔄",
         "version": "1.0.0",
         "available_endpoints": {
             "earnings-calendar": {
