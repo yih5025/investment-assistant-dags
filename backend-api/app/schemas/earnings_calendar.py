@@ -16,12 +16,13 @@ class EarningsCalendarBase(BaseModel):
 class EarningsCalendarResponse(EarningsCalendarBase):
     """실적 캘린더 응답 스키마"""
     
-    class Config:
-        orm_mode = True
-        json_encoders = {
+    model_config = {
+        "from_attributes": True,
+        "json_encoders": {
             datetime: lambda v: v.isoformat() if v else None,
             date: lambda v: v.isoformat() if v else None,
         }
+    }
 
 class EarningsCalendarListResponse(BaseModel):
     """실적 캘린더 목록 응답 스키마"""

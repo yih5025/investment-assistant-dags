@@ -80,7 +80,7 @@ async def get_earnings_calendar(
         
         # SQLAlchemy 객체를 Pydantic 응답 모델로 변환
         items = [
-            EarningsCalendarResponse.from_orm(earnings) 
+            EarningsCalendarResponse.model_validate(earnings) 
             for earnings in earnings_list
         ]
         
@@ -127,7 +127,7 @@ async def get_today_earnings(db: Session = Depends(get_db)):
         earnings_list = service.get_today_earnings()
         
         return [
-            EarningsCalendarResponse.from_orm(earnings) 
+            EarningsCalendarResponse.model_validate(earnings) 
             for earnings in earnings_list
         ]
         
@@ -166,7 +166,7 @@ async def get_upcoming_earnings(
         earnings_list = service.get_upcoming_earnings(days)
         
         return [
-            EarningsCalendarResponse.from_orm(earnings) 
+            EarningsCalendarResponse.model_validate(earnings) 
             for earnings in earnings_list
         ]
         
@@ -213,7 +213,7 @@ async def get_earnings_by_symbol(
             )
         
         return [
-            EarningsCalendarResponse.from_orm(earnings) 
+            EarningsCalendarResponse.model_validate(earnings) 
             for earnings in earnings_list
         ]
         
@@ -267,7 +267,7 @@ async def get_earnings_by_date_range(
         earnings_list = service.get_earnings_by_date_range(start_date, end_date)
         
         return [
-            EarningsCalendarResponse.from_orm(earnings) 
+            EarningsCalendarResponse.model_validate(earnings) 
             for earnings in earnings_list
         ]
         
