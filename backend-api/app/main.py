@@ -113,7 +113,9 @@ async def root():
         "version": settings.app_version,
         "docs": "/docs",
         "redoc": "/redoc",
-        "status": "running"
+        "status": "running",
+        "uvicorn_reload_test": "SUCCESS",    # 🔧 테스트 필드
+        "timestamp": "2025-07-30 17:00:00"   # 🔧 시간 업데이트
     }
 
 # 헬스체크 엔드포인트
