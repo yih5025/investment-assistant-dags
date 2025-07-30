@@ -155,3 +155,7 @@ async def api_stats():
             "x_posts": "X(Twitter) 게시물"
         }
     }
+
+@api_router.get("/test", tags=["API TEST"])
+async def test():
+    return {"message": "API v1 test"}
