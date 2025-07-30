@@ -1,9 +1,11 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import logging.config
+import time
+import json
 
 from .config import settings, get_log_config
 from .database import test_db_connection
@@ -40,6 +42,49 @@ app = FastAPI(
     openapi_url="/openapi.json",  # OpenAPI 스키마 경로
     lifespan=lifespan
 )
+
+# 상세 API 로깅 미들웨어
+@app.middleware("http")
+async def detailed_logging_middleware(request: Request, call_next):
+    """
+    상세한 API 요청/응답 로깅 미들웨어
+    """
+    start_time = time.time()
+    
+    # 요청 정보 수집
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    method = request.method
+    url = str(request.url)
+    query_params = dict(request.query_params)
+    
+    # 요청 로깅
+    logger.info(f"📥 {method} {url} - IP: {client_ip}")
+    if query_params:
+        logger.info(f"   Query params: {json.dumps(query_params, ensure_ascii=False)}")
+    if user_agent != "unknown":
+        logger.info(f"   User-Agent: {user_agent}")
+    
+    # 요청 처리
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        # 응답 로깅
+        if response.status_code >= 400:
+            logger.warning(f"❌ {method} {url} - {response.status_code} ({process_time:.3f}s)")
+            if response.status_code == 404:
+                logger.warning(f"   🔍 404 상세: 경로 '{request.url.path}'를 찾을 수 없음")
+                logger.warning(f"   💡 사용 가능한 경로 확인: {url.split('?')[0].replace(request.url.path, '')}/docs")
+        else:
+            logger.info(f"✅ {method} {url} - {response.status_code} ({process_time:.3f}s)")
+            
+        return response
+        
+    except Exception as e:
+        process_time = time.time() - start_time
+        logger.error(f"💥 {method} {url} - ERROR ({process_time:.3f}s): {str(e)}")
+        raise
 
 # CORS 미들웨어 설정
 # 프론트엔드(React, Django)에서 API 호출할 수 있도록 허용
