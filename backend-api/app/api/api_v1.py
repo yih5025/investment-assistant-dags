@@ -33,7 +33,7 @@ async def api_v1_info():
         dict: API v1 정보 및 사용 가능한 엔드포인트 목록
     """
     return {
-        "message": "🎯 Git Hash 체크 방식 - 진짜 자동 재시작 테스트! 🚀",
+        "message": "✨ Deploy 별칭 테스트 - 간단한 명령어로 자동 배포! 🎯",
         "version": "1.0.0",
         "available_endpoints": {
             "earnings-calendar": {
