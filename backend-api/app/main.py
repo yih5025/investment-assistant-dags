@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
         logger.info("✅ 데이터베이스 연결 성공")
     else:
         logger.error("❌ 데이터베이스 연결 실패")
-    logger.info(f"🚀 서버가 http://{settings.host}:{settings.port} 에서 실행 중")
+    logger.info(f"🚀 서버가 http://{settings.host}:{settings.port} 에서 실행 중 입니다....")
     logger.info(f"📚 API 문서: http://{settings.host}:{settings.port}/docs")
     
     yield
