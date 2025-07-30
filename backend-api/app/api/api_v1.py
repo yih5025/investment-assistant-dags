@@ -2,8 +2,6 @@ from fastapi import APIRouter
 
 # 각 도메인별 엔드포인트 라우터들을 import
 from .endpoints import earnings_calendar
-from app.schemas.earnings_calendar import EarningsCalendarQueryParams, EarningsCalendarResponse, EarningsCalendarListResponse
-from app.services.earnings_calendar_service import EarningsCalendarService
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
