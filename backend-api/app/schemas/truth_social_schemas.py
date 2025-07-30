@@ -5,7 +5,7 @@ from .common import PaginatedResponse
 
 
 # ==================== Truth Social Posts Schemas ====================
-
+# 주석 추가
 class TruthSocialPostBase(BaseModel):
     """Truth Social 포스트 기본 스키마"""
     username: str = Field(..., description="사용자명")
