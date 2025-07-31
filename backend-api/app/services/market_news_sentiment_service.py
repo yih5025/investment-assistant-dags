@@ -365,19 +365,26 @@ class MarketNewsSentimentService:
         """주제별 감성 랭킹을 계산합니다."""
         cutoff_date = datetime.now() - timedelta(days=days)
         
-        # PostgreSQL JSONB 집계 쿼리
+        # PostgreSQL JSONB 집계 쿼리 (수정됨)
         query = text("""
-            WITH topic_stats AS (
+            WITH topic_expanded AS (
                 SELECT 
-                    jsonb_array_elements(topics)->>'topic' as topic,
-                    AVG(overall_sentiment_score) as avg_sentiment,
-                    COUNT(*) as news_count,
-                    AVG((jsonb_array_elements(topics)->>'relevance_score')::float) as avg_relevance
+                    overall_sentiment_score,
+                    (jsonb_array_elements(topics)->>'topic') as topic,
+                    (jsonb_array_elements(topics)->>'relevance_score')::float as relevance_score
                 FROM market_news_sentiment 
                 WHERE time_published >= :cutoff_date
                 AND topics IS NOT NULL
                 AND overall_sentiment_score IS NOT NULL
-                GROUP BY jsonb_array_elements(topics)->>'topic'
+            ),
+            topic_stats AS (
+                SELECT 
+                    topic,
+                    AVG(overall_sentiment_score) as avg_sentiment,
+                    COUNT(*) as news_count,
+                    AVG(relevance_score) as avg_relevance
+                FROM topic_expanded
+                GROUP BY topic
                 HAVING COUNT(*) >= :min_mentions
             )
             SELECT topic, avg_sentiment, news_count, avg_relevance
@@ -424,18 +431,25 @@ class MarketNewsSentimentService:
         """티커별 감성 랭킹을 계산합니다."""
         cutoff_date = datetime.now() - timedelta(days=days)
         
-        # PostgreSQL JSONB 집계 쿼리
+        # PostgreSQL JSONB 집계 쿼리 (수정됨)
         query = text("""
-            WITH ticker_stats AS (
+            WITH ticker_expanded AS (
                 SELECT 
-                    jsonb_array_elements(ticker_sentiment)->>'ticker' as ticker,
-                    AVG((jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float) as avg_sentiment,
-                    COUNT(*) as mention_count,
-                    AVG((jsonb_array_elements(ticker_sentiment)->>'relevance_score')::float) as avg_relevance
+                    (jsonb_array_elements(ticker_sentiment)->>'ticker') as ticker,
+                    (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float as ticker_sentiment_score,
+                    (jsonb_array_elements(ticker_sentiment)->>'relevance_score')::float as relevance_score
                 FROM market_news_sentiment 
                 WHERE time_published >= :cutoff_date
                 AND ticker_sentiment IS NOT NULL
-                GROUP BY jsonb_array_elements(ticker_sentiment)->>'ticker'
+            ),
+            ticker_stats AS (
+                SELECT 
+                    ticker,
+                    AVG(ticker_sentiment_score) as avg_sentiment,
+                    COUNT(*) as mention_count,
+                    AVG(relevance_score) as avg_relevance
+                FROM ticker_expanded
+                GROUP BY ticker
                 HAVING COUNT(*) >= :min_mentions
             )
             SELECT ticker, avg_sentiment, mention_count, avg_relevance
@@ -573,16 +587,22 @@ class MarketNewsSentimentService:
         cutoff_date = datetime.now() - timedelta(days=days)
         
         query = text("""
-            WITH topic_tickers AS (
+            WITH ticker_expanded AS (
                 SELECT 
-                    jsonb_array_elements(ticker_sentiment)->>'ticker' as ticker,
-                    AVG((jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float) as avg_sentiment,
-                    COUNT(*) as mention_count
+                    (jsonb_array_elements(ticker_sentiment)->>'ticker') as ticker,
+                    (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float as sentiment_score
                 FROM market_news_sentiment 
                 WHERE topics @> :topic_filter
                 AND time_published >= :cutoff_date
                 AND ticker_sentiment IS NOT NULL
-                GROUP BY jsonb_array_elements(ticker_sentiment)->>'ticker'
+            ),
+            topic_tickers AS (
+                SELECT 
+                    ticker,
+                    AVG(sentiment_score) as avg_sentiment,
+                    COUNT(*) as mention_count
+                FROM ticker_expanded
+                GROUP BY ticker
             )
             SELECT ticker, avg_sentiment, mention_count
             FROM topic_tickers
@@ -612,16 +632,22 @@ class MarketNewsSentimentService:
         cutoff_date = datetime.now() - timedelta(days=days)
         
         query = text("""
-            WITH ticker_topics AS (
+            WITH topic_expanded AS (
                 SELECT 
-                    jsonb_array_elements(topics)->>'topic' as topic,
-                    AVG((jsonb_array_elements(topics)->>'relevance_score')::float) as avg_relevance,
-                    COUNT(*) as mention_count
+                    (jsonb_array_elements(topics)->>'topic') as topic,
+                    (jsonb_array_elements(topics)->>'relevance_score')::float as relevance_score
                 FROM market_news_sentiment 
                 WHERE ticker_sentiment @> :ticker_filter
                 AND time_published >= :cutoff_date
                 AND topics IS NOT NULL
-                GROUP BY jsonb_array_elements(topics)->>'topic'
+            ),
+            ticker_topics AS (
+                SELECT 
+                    topic,
+                    AVG(relevance_score) as avg_relevance,
+                    COUNT(*) as mention_count
+                FROM topic_expanded
+                GROUP BY topic
             )
             SELECT topic, avg_relevance, mention_count
             FROM ticker_topics
@@ -772,16 +798,22 @@ class MarketNewsSentimentService:
     def _calculate_ticker_sentiment_trend(self, ticker: str, cutoff_date: datetime, date_trunc: str) -> List[Dict]:
         """특정 티커의 감정 점수 추이를 계산합니다."""
         query = text(f"""
+            WITH ticker_expanded AS (
+                SELECT 
+                    time_published,
+                    (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float as sentiment_score
+                FROM market_news_sentiment 
+                WHERE ticker_sentiment @> :ticker_filter
+                AND time_published >= :cutoff_date
+            )
             SELECT 
                 DATE_TRUNC('{date_trunc}', time_published) as time_period,
-                AVG((jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float) as avg_sentiment,
+                AVG(sentiment_score) as avg_sentiment,
                 COUNT(*) as news_count,
-                COUNT(CASE WHEN (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float > 0.1 THEN 1 END) as bullish_count,
-                COUNT(CASE WHEN (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float < -0.1 THEN 1 END) as bearish_count,
-                COUNT(CASE WHEN (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float BETWEEN -0.1 AND 0.1 THEN 1 END) as neutral_count
-            FROM market_news_sentiment 
-            WHERE ticker_sentiment @> :ticker_filter
-            AND time_published >= :cutoff_date
+                COUNT(CASE WHEN sentiment_score > 0.1 THEN 1 END) as bullish_count,
+                COUNT(CASE WHEN sentiment_score < -0.1 THEN 1 END) as bearish_count,
+                COUNT(CASE WHEN sentiment_score BETWEEN -0.1 AND 0.1 THEN 1 END) as neutral_count
+            FROM ticker_expanded
             GROUP BY DATE_TRUNC('{date_trunc}', time_published)
             ORDER BY time_period
         """)
