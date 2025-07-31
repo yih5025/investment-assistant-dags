@@ -17,7 +17,7 @@ router = APIRouter(
     tags=["Market News"],
     responses={
         404: {"description": "뉴스를 찾을 수 없습니다"},
-        500: {"description": "서버 내부 오류"}
+        500: {"description": "서버 내부 오류 발생"}
     }
 )
 
