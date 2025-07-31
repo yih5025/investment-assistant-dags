@@ -161,7 +161,7 @@ class SentimentQueryParams(BaseModel):
     
     # 정렬
     sort_by: str = Field("time_published", description="정렬 기준")
-    order: str = Field("desc", regex="^(asc|desc)$", description="정렬 순서")
+    order: str = Field("desc", pattern="^(asc|desc)$", description="정렬 순서")
 
 class RankingQueryParams(BaseModel):
     """랭킹 조회 쿼리 파라미터"""

@@ -66,7 +66,7 @@ async def get_trending_news(
 @router.get("/trending/category/{category}", response_model=CategoryNewsResponse)
 async def get_category_news(
     category: str = Path(..., description="카테고리", 
-                        regex="^(top_gainers|top_losers|most_actively_traded)$"),
+                        pattern="^(top_gainers|top_losers|most_actively_traded)$"),
     db: Session = Depends(get_db),
     days: int = Query(3, ge=1, le=7, description="뉴스 조회 기간 (1-7일)"),
     limit: int = Query(20, ge=1, le=100, description="각 심볼당 최대 뉴스 개수"),

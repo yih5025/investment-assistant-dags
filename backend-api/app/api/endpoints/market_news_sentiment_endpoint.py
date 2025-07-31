@@ -38,7 +38,7 @@ async def get_market_sentiment_news(
     max_sentiment: Optional[float] = Query(None, ge=-1.0, le=1.0, description="최대 감성 점수"),
     sentiment_labels: Optional[str] = Query(None, description="감성 라벨 필터 (쉼표 구분)"),
     sort_by: str = Query("time_published", description="정렬 기준"),
-    order: str = Query("desc", regex="^(asc|desc)$", description="정렬 순서")
+    order: str = Query("desc", pattern="^(asc|desc)$", description="정렬 순서")
 ):
     """
     시장 뉴스 감성 분석 데이터를 조회합니다.
@@ -661,7 +661,7 @@ async def get_topic_ranking(
 @router.get("/sentiment-trends", response_model=SentimentTrendsResponse)
 async def get_sentiment_trends(
     db: Session = Depends(get_db),
-    interval: str = Query("daily", regex="^(hourly|daily)$", description="시간 간격 (hourly/daily)"),
+    interval: str = Query("daily", pattern="^(hourly|daily)$", description="시간 간격 (hourly/daily)"),
     days: int = Query(7, ge=1, le=30, description="분석 기간"),
     tickers: Optional[str] = Query(None, description="분석할 티커들 (쉼표 구분, 예: AAPL,TSLA,NVDA)"),
     topics: Optional[str] = Query(None, description="분석할 주제들 (쉼표 구분, 예: Technology,Energy)")
