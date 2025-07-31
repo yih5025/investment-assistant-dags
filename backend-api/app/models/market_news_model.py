@@ -1,9 +1,9 @@
 from sqlalchemy import Column, String, Text, DateTime, text
 from sqlalchemy.sql import func
-from app.models.base import Base
+from app.models.base import BaseModel   
 
 
-class MarketNews(Base):
+class MarketNews(BaseModel):
     """
     시장 뉴스 테이블 모델
     

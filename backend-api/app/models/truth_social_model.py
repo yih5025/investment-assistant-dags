@@ -1,8 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime, Date, Numeric, Boolean, JSON, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from ..database import Base
+from app.models.base import BaseModel
 
-class TruthSocialPost(Base):
+class TruthSocialPost(BaseModel):
     """Truth Social Posts 데이터 모델"""
     __tablename__ = "truth_social_posts"
 
@@ -56,7 +56,7 @@ class TruthSocialPost(Base):
     updated_at = Column(DateTime, server_default='now()')
 
 
-class TruthSocialTag(Base):
+class TruthSocialTag(BaseModel):
     """Truth Social 해시태그 트렌드 모델"""
     __tablename__ = "truth_social_tags"
     
@@ -91,7 +91,7 @@ class TruthSocialTag(Base):
     updated_at = Column(DateTime, server_default='now()')
 
 
-class TruthSocialTrend(Base):
+class TruthSocialTrend(BaseModel):
     """Truth Social 트렌딩 포스트 모델"""
     __tablename__ = "truth_social_trends"
     

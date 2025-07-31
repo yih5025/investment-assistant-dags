@@ -1,5 +1,4 @@
 from sqlalchemy import Column, Integer, String, DateTime, Float
-from app.database import Base
 from app.models.base import BaseModel
 
 class BithumbTicker(BaseModel):
