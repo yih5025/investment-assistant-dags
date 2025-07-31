@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import requests
 import os
+import time
 
 from airflow import DAG
 from airflow.models import Variable
@@ -27,11 +28,11 @@ default_args = {
 with DAG(
     dag_id='ingest_market_newsapi_to_db_k8s',
     default_args=default_args,
-    schedule_interval='@daily',
+    schedule_interval='0 4 * * *',  # 매일 새벽 4시
     catchup=False,
-    description='Fetch market-moving news (economics, politics, Fed) via NewsAPI',
+    description='Comprehensive news collection via NewsAPI - business, technology, markets',
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['market', 'news', 'newsapi', 'economics', 'politics', 'k8s'],
+    tags=['market', 'news', 'newsapi', 'comprehensive', 'business', 'k8s'],
 ) as dag:
 
     create_table = PostgresOperator(
@@ -40,78 +41,74 @@ with DAG(
         sql='create_market_news.sql',
     )
 
-    def fetch_and_upsert_market_news(**context):
-        """거시경제 영향 뉴스 수집 (NewsAPI)"""
+    def fetch_comprehensive_news(**context):
+        """광범위한 비즈니스/시장 뉴스 수집"""
         hook = PostgresHook(postgres_conn_id='postgres_default')
         api_key = Variable.get('NEWSAPI_API_KEY')
         
-        # 시간 범위 설정 (어제부터 오늘까지)
-        now = datetime.utcnow()
-        since = (now - timedelta(days=1)).isoformat() + "Z"
-        until = now.isoformat() + "Z"
+        print(f"🔑 API 키 확인: {api_key[:8]}...")
         
-        # 효과적인 검색 키워드 (시장에 영향을 주는 주요 이슈들)
-        keywords = [
-            # 중앙은행 및 통화정책
-            "Federal Reserve OR Fed OR interest rate OR inflation OR CPI",
-            "ECB OR Bank of Japan OR BOJ OR monetary policy",
-            
-            # 거시경제 지표
-            "GDP OR unemployment OR jobs report OR retail sales",
-            "housing market OR consumer confidence OR PMI",
-            
-            # 정치 및 정책
-            "Biden OR Trump OR Congress OR stimulus OR infrastructure",
-            "debt ceiling OR government shutdown OR election",
-            
-            # 국제 정치/외교
-            "China trade OR Russia sanctions OR Ukraine war",
-            "OPEC OR oil price OR energy crisis",
-            
-            # 주요 기업 및 시장
-            "earnings OR IPO OR merger OR acquisition",
-            "stock market OR Wall Street OR S&P 500",
-            
-            # 암호화폐 및 신기술
-            "Bitcoin OR cryptocurrency OR blockchain OR AI regulation"
-        ]
+        # 시간 범위 설정 (어제 하루)
+        yesterday = (datetime.utcnow() - timedelta(days=1)).date()
+        from_date = yesterday.isoformat()
+        to_date = yesterday.isoformat()
         
-        print(f"📊 {len(keywords)}개 키워드 그룹으로 뉴스 수집 시작")
+        print(f"📅 수집 날짜: {from_date}")
         
         total_articles = 0
+        error_count = 0
         
-        for i, keyword_group in enumerate(keywords):
+        # ⭐ 전략 1: 카테고리별 헤드라인 수집 (대량 수집)
+        categories = ['business', 'technology', 'general', 'politics']
+        
+        for category in categories:
             try:
-                # NewsAPI 파라미터
-                params = {
-                    'q': keyword_group,
-                    'from': since,
-                    'to': until,
-                    'sortBy': 'relevancy',
-                    'language': 'en',
-                    'apiKey': api_key,
-                    'pageSize': 10,  # 그룹당 최대 10개 기사
-                }
+                print(f"📰 카테고리 '{category}' 헤드라인 수집 중...")
                 
-                # NewsAPI 호출
+                # NewsAPI Headlines 엔드포인트 (더 많은 결과)
                 resp = requests.get(
-                    "https://newsapi.org/v2/everything",
-                    params=params,
+                    "https://newsapi.org/v2/top-headlines",
+                    params={
+                        'category': category,
+                        'language': 'en',
+                        'country': 'us',  # 미국 뉴스
+                        'apiKey': api_key,
+                        'pageSize': 100,  # 최대 100개
+                    },
                     timeout=30
                 )
                 
-                # Rate Limit 처리
                 if resp.status_code == 429:
-                    print(f"⏰ Rate Limit 도달, 오늘은 여기까지")
-                    raise AirflowSkipException("NewsAPI Rate Limit 초과")
+                    print(f"⚠️ Rate Limit 도달")
+                    break
                 
                 resp.raise_for_status()
                 data = resp.json()
                 articles = data.get("articles", [])
                 
-                # 각 기사 저장
+                # 어제 날짜 필터링 (헤드라인은 날짜 필터가 없음)
+                yesterday_articles = []
                 for article in articles:
-                    if article.get('url') and article.get('publishedAt'):
+                    if article.get('publishedAt'):
+                        pub_date = datetime.fromisoformat(article['publishedAt'].replace('Z', '+00:00')).date()
+                        if pub_date >= yesterday - timedelta(days=1):  # 어제 또는 오늘
+                            yesterday_articles.append(article)
+                
+                # 저장
+                saved_count = 0
+                for article in yesterday_articles:
+                    try:
+                        if not article.get('url'):
+                            continue
+                        
+                        # 중복 체크
+                        existing = hook.get_first("""
+                            SELECT 1 FROM market_news WHERE url = %s
+                        """, parameters=[article['url']])
+                        
+                        if existing:
+                            continue
+                        
                         hook.run(UPSERT_SQL, parameters={
                             'source': article["source"]["name"] if article.get("source") else "",
                             'url': article["url"],
@@ -121,29 +118,206 @@ with DAG(
                             'content': article.get("content", ""),
                             'published_at': article["publishedAt"],
                         })
+                        saved_count += 1
+                        
+                    except Exception as e:
+                        print(f"❌ 기사 저장 실패: {str(e)}")
+                        continue
                 
-                total_articles += len(articles)
-                print(f"✅ 그룹 {i+1}: {len(articles)}개 기사 수집")
+                total_articles += saved_count
+                print(f"✅ {category}: {saved_count}개 저장 (전체 {len(articles)}개 중)")
                 
                 # API 호출 간격
-                if i < len(keywords) - 1:  # 마지막이 아니면 대기
-                    import time
-                    time.sleep(1)
+                time.sleep(2.0)
                 
             except Exception as e:
-                print(f"❌ 키워드 그룹 {i+1} 실패: {str(e)}")
+                print(f"❌ 카테고리 {category} 실패: {str(e)}")
+                error_count += 1
                 continue
         
-        # 최종 결과
+        # ⭐ 전략 2: 간단한 키워드로 Everything 검색 (추가 수집)
+        simple_keywords = [
+            'economy',          # 경제
+            'business',         # 비즈니스
+            'technology',       # 기술
+            'IPO',             # 공개상장
+            'inflation',        # 인플레이션
+            'tariff',           # 관세
+            'trade war',        # 무역 전쟁
+            'sanctions',        # 제재
+            'war',             # 전쟁
+            'politics',         # 정치
+            'election',         # 선거
+            'government policy', # 정부 정책
+            'congress',         # 의회
+            'diplomatic',       # 외교
+            'nuclear',          # 핵 관련
+            'military'          # 군사
+        ]
+        
+        print(f"\n🔍 키워드 검색 시작...")
+        
+        for i, keyword in enumerate(simple_keywords):
+            try:
+                print(f"🔍 키워드 '{keyword}' 검색 중... ({i+1}/{len(simple_keywords)})")
+                
+                resp = requests.get(
+                    "https://newsapi.org/v2/everything",
+                    params={
+                        'q': keyword,
+                        'from': from_date,
+                        'to': to_date,
+                        'sortBy': 'popularity',  # 인기도 순
+                        'language': 'en',
+                        'apiKey': api_key,
+                        'pageSize': 30,  # 키워드당 30개
+                    },
+                    timeout=30
+                )
+                
+                if resp.status_code == 429:
+                    print(f"⚠️ Rate Limit 도달, 키워드 검색 중단")
+                    break
+                
+                resp.raise_for_status()
+                data = resp.json()
+                articles = data.get("articles", [])
+                
+                # 저장
+                saved_count = 0
+                for article in articles:
+                    try:
+                        if not article.get('url'):
+                            continue
+                        
+                        # 중복 체크
+                        existing = hook.get_first("""
+                            SELECT 1 FROM market_news WHERE url = %s
+                        """, parameters=[article['url']])
+                        
+                        if existing:
+                            continue
+                        
+                        hook.run(UPSERT_SQL, parameters={
+                            'source': article["source"]["name"] if article.get("source") else "",
+                            'url': article["url"],
+                            'author': article.get("author", ""),
+                            'title': article.get("title", ""),
+                            'description': article.get("description", ""),
+                            'content': article.get("content", ""),
+                            'published_at': article["publishedAt"],
+                        })
+                        saved_count += 1
+                        
+                    except Exception as e:
+                        continue
+                
+                total_articles += saved_count
+                print(f"✅ '{keyword}': {saved_count}개 저장")
+                
+                # API 호출 간격
+                time.sleep(1.5)
+                
+            except Exception as e:
+                print(f"❌ 키워드 '{keyword}' 실패: {str(e)}")
+                error_count += 1
+                continue
+        
+        # ⭐ 전략 3: 주요 비즈니스 소스에서 최신 뉴스 (보너스)
+        business_sources = [
+            'bloomberg',
+            'reuters', 
+            'cnbc',
+            'the-wall-street-journal',
+            'business-insider',
+            'financial-times'
+        ]
+        
+        print(f"\n📺 주요 소스별 수집...")
+        
+        for source in business_sources:
+            try:
+                print(f"📺 {source} 최신 뉴스...")
+                
+                resp = requests.get(
+                    "https://newsapi.org/v2/top-headlines",
+                    params={
+                        'sources': source,
+                        'apiKey': api_key,
+                        'pageSize': 20,
+                    },
+                    timeout=30
+                )
+                
+                if resp.status_code == 429:
+                    print(f"⚠️ Rate Limit 도달, 소스별 수집 중단")
+                    break
+                
+                resp.raise_for_status()
+                data = resp.json()
+                articles = data.get("articles", [])
+                
+                # 저장 (중복 제거)
+                saved_count = 0
+                for article in articles:
+                    try:
+                        if not article.get('url'):
+                            continue
+                        
+                        existing = hook.get_first("""
+                            SELECT 1 FROM market_news WHERE url = %s
+                        """, parameters=[article['url']])
+                        
+                        if existing:
+                            continue
+                        
+                        hook.run(UPSERT_SQL, parameters={
+                            'source': article["source"]["name"] if article.get("source") else "",
+                            'url': article["url"],
+                            'author': article.get("author", ""),
+                            'title': article.get("title", ""),
+                            'description': article.get("description", ""),
+                            'content': article.get("content", ""),
+                            'published_at': article["publishedAt"],
+                        })
+                        saved_count += 1
+                        
+                    except Exception as e:
+                        continue
+                
+                total_articles += saved_count
+                print(f"✅ {source}: {saved_count}개 저장")
+                
+                time.sleep(1.0)
+                
+            except Exception as e:
+                print(f"❌ 소스 {source} 실패: {str(e)}")
+                error_count += 1
+                continue
+        
+        # 최종 통계
         result = hook.get_first("SELECT COUNT(*) FROM market_news")
         total_records = result[0] if result else 0
-        print(f"✅ 완료. 오늘 수집: {total_articles}개, 총 레코드: {total_records}")
+        
+        today_added = hook.get_first("""
+            SELECT COUNT(*) FROM market_news 
+            WHERE fetched_at >= CURRENT_DATE
+        """)
+        today_count = today_added[0] if today_added else 0
+        
+        print(f"\n🏁 완료!")
+        print(f"✅ 오늘 수집: {total_articles}개")
+        print(f"📊 오늘 전체: {today_count}개, 총 레코드: {total_records}개")
+        print(f"❌ 에러: {error_count}개")
+        
+        if total_articles == 0:
+            raise AirflowSkipException("뉴스 수집 실패 - Rate Limit 또는 API 문제")
         
         return total_articles
 
     fetch_upsert = PythonOperator(
-        task_id='fetch_and_upsert_market_news',
-        python_callable=fetch_and_upsert_market_news,
+        task_id='fetch_comprehensive_news',
+        python_callable=fetch_comprehensive_news,
     )
 
     # Task 의존성
