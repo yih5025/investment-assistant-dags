@@ -33,7 +33,7 @@ async def api_v1_info():
         dict: API v1 정보 및 사용 가능한 엔드포인트 목록
     """
     return {
-        "message": "🎉 깔끔한 YAML + Deploy 별칭 = 완벽한 개발 환경! ✨",
+        "message": "api v1",
         "version": "1.0.0",
         "available_endpoints": {
             "earnings-calendar": {
