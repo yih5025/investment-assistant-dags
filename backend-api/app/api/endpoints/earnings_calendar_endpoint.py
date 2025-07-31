@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
 
-from app.schemas.earnings_calendar import (
+from app.schemas.earnings_calendar_schema import (
     EarningsCalendarResponse,
     EarningsCalendarListResponse,
     EarningsCalendarQueryParams

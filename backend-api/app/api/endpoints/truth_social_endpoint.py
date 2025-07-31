@@ -5,14 +5,14 @@ from typing import Optional, List, Dict, Any, Union, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ...dependencies import get_db
-from ...services.truth_social_service import (
+from app.dependencies import get_db
+from app.services.truth_social_service import (
     TruthSocialPostService, 
     TruthSocialTagService, 
     TruthSocialTrendService,
     TruthSocialAnalyticsService
 )
-from ...schemas.truth_social_schemas import (
+from app.schemas.truth_social_schema import (
     TruthSocialPostsResponse, TruthSocialPostResponse,
     TruthSocialTagsResponse, TruthSocialTagResponse,
     TruthSocialTrendsResponse, TruthSocialTrendResponse,

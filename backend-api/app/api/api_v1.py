@@ -1,24 +1,32 @@
 from fastapi import APIRouter
 
 # 각 도메인별 엔드포인트 라우터들을 import
-from .endpoints import earnings_calendar
-from .endpoints import truth_social_endpoints
+from .endpoints import earnings_calendar_endpoint
+from .endpoints import truth_social_endpoint
+from .endpoints import market_news_endpoint
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
 
 # === 실적 발표 캘린더 API ===
 api_router.include_router(
-    earnings_calendar.router,
+    earnings_calendar_endpoint.router,
     prefix="/earnings-calendar",  # /api/v1/earnings-calendar로 시작하는 모든 엔드포인트
     tags=["earnings-calendar"]   # API 문서에서 "earnings-calendar" 그룹으로 분류
 )
 
 # === Truth Social API ===
 api_router.include_router(
-    truth_social_endpoints.router,
+    truth_social_endpoint.router,
     prefix="/truth-social",
     tags=["truth-social"]
+)
+
+# === Market News API ===
+api_router.include_router(
+    market_news_endpoint.router,
+    prefix="/market-news",
+    tags=["market-news"]
 )
 
 # API v1 정보 엔드포인트
@@ -52,6 +60,15 @@ async def api_v1_info():
                     "GET /truth-social/tags - Truth Social 태그 조회",
                     "GET /truth-social/trends - Truth Social 트렌드 조회"
                 ]
+            },
+            "market-news": {
+                "description": "시장 뉴스 API",
+                "endpoints": [
+                    "GET /market-news/ - 뉴스 목록 조회",
+                    "GET /market-news/search - 뉴스 검색",
+                    "GET /market-news/recent - 최근 뉴스",
+                    "GET /market-news/{source}/{url} - 특정 뉴스 상세"
+                ]
             }
         },
         "documentation": {
@@ -72,8 +89,8 @@ async def api_stats():
         dict: API 통계 정보
     """
     return {
-        "total_endpoints": 1,  # 현재 구현된 도메인 수
-        "implemented_domains": ["earnings-calendar", "truth-social"],
+        "total_endpoints": 3,  # 현재 구현된 도메인 수
+        "implemented_domains": ["earnings-calendar", "truth-social", "market-news"],
         "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers", "news-market", "news-sentiment"],
         "database_tables": {
             "earnings_calendar": "실적 발표 일정",

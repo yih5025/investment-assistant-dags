@@ -4,8 +4,8 @@ from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, and_, or_, func, text
-from ..models.truth_social_models import TruthSocialPost, TruthSocialTag, TruthSocialTrend
-from ..schemas.truth_social_schemas import (
+from app.models.truth_social_model import TruthSocialPost, TruthSocialTag, TruthSocialTrend
+from app.schemas.truth_social_schema import (
     TruthSocialPostFilter, TruthSocialTagFilter, TruthSocialTrendFilter
 )
 

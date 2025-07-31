@@ -3,8 +3,8 @@ from sqlalchemy import and_, asc, desc, func
 from typing import List, Optional, Tuple
 from datetime import date, datetime, timedelta
 
-from app.models.earnings_calendar import EarningsCalendar
-from app.schemas.earnings_calendar import EarningsCalendarQueryParams
+from app.models.earnings_calendar_model import EarningsCalendar
+from app.schemas.earnings_calendar_schema import EarningsCalendarQueryParams
 
 class EarningsCalendarService:
     """실적 발표 캘린더 관련 비즈니스 로직 서비스"""
