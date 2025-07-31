@@ -15,7 +15,6 @@ from app.schemas.financial_news_schema import (
 
 # 라우터 생성 (태그로 API 문서 그룹화)
 router = APIRouter(
-    prefix="/api/v1/financial-news",
     tags=["Financial News"],
     responses={
         404: {"description": "뉴스를 찾을 수 없습니다"},
