@@ -27,7 +27,7 @@ default_args = {
 with DAG(
     dag_id='ingest_company_news_to_db_k8s',
     default_args=default_args,
-    schedule_interval='10 * * * *',  # 매시간 10분에 실행
+    schedule_interval='0 9,15,21 * * *',
     catchup=False,
     description='Fetch news for trending stocks from top_gainers table with Rate Limit protection',
     template_searchpath=[INITDB_SQL_DIR],
@@ -107,11 +107,11 @@ with DAG(
                 print(f"⚠️ 비정상적인 데이터 수: {total}개")
         
         success_count = 0
-        error_count = 0
+        error_count = 0 
         api_call_count = 0
         
-        # 시간 범위 설정 (최근 1시간)
-        from_date = (datetime.today() - timedelta(hours=1)).strftime("%Y-%m-%d")
+        # 시간 범위 설정 (최근 24시간)
+        from_date = (datetime.today() - timedelta(hours=24)).strftime("%Y-%m-%d")
         to_date = datetime.today().strftime("%Y-%m-%d")
         
         start_time = datetime.now()

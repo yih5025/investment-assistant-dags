@@ -6,6 +6,7 @@ from .endpoints import earnings_calendar_news_endpoint
 from .endpoints import truth_social_endpoint
 from .endpoints import market_news_endpoint
 from .endpoints import financial_news_endpoint
+from .endpoints import company_news_endpoint
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
@@ -44,6 +45,14 @@ api_router.include_router(
     prefix="/financial-news",
     tags=["financial-news"]
 )
+
+# === Company News API ===
+api_router.include_router(
+    company_news_endpoint.router,
+    prefix="/company-news",
+    tags=["company-news"]
+)
+
 # API v1 정보 엔드포인트
 @api_router.get("/", tags=["API Info"])
 async def api_v1_info():
@@ -101,6 +110,14 @@ async def api_v1_info():
                     "GET /financial-news/recent - 최근 뉴스",
                     "GET /financial-news/{category}/{news_id} - 특정 뉴스 상세"
                 ]
+            },
+            "company-news": {
+                "description": "기업 뉴스 API",
+                "endpoints": [
+                    "GET /company-news/trending - 트렌딩 주식 뉴스 조회",
+                    "GET /company-news/trending/category/{category} - 트렌딩 주식 뉴스 조회 (카테고리별)",
+                    "GET /company-news/symbol/{symbol} - 특정 주식 뉴스 조회",
+                ]
             }
         },
         "documentation": {
@@ -122,14 +139,15 @@ async def api_stats():
     """
     return {
         "total_endpoints": 5,
-        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news"],
-        "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers", "news-market", "news-sentiment"],
+        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news", "company-news"],
+        "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers", "news-sentiment"],
         "database_tables": {
             "earnings_calendar": "실적 발표 일정",
             "earnings_calendar_news": "실적 관련 뉴스",
             "truth_social_posts": "Truth Social 게시물",
             "financial_news": "Finnhub 금융 뉴스",
             "market_news": "News API 뉴스",
+            "company_news": "Finnhub 기업 뉴스",
         }
     }
 
