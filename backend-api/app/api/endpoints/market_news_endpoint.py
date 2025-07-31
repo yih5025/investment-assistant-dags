@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db
 from app.services.market_news_service import MarketNewsService
+from app.models.market_news_model import MarketNews
 from app.schemas.market_news_schema import (
     MarketNewsResponse,
     MarketNewsListResponse,
@@ -328,7 +329,7 @@ async def health_check(db: Session = Depends(get_db)):
         service = MarketNewsService(db)
         
         # 기본 통계 조회로 DB 연결 테스트
-        total_count = service.db.query(service.db.query(MarketNews).count().label('count')).scalar()
+        total_count = service.db.query(MarketNews).count()
         
         # 최신 뉴스 날짜 조회
         latest_news = service.db.query(MarketNews.published_at).order_by(
