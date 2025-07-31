@@ -115,7 +115,3 @@ if [ $COUNTER -eq $MAX_API_WAIT ]; then
 fi
 
 print_success "🎯 자동 재시작 프로세스 완료! [$(current_time)]"
-echo ""
-echo "💡 다음번에는 다음 명령어로 간단하게 실행하세요:"
-echo "   ./auto-restart-pod.sh"
-echo ""
