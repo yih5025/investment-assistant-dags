@@ -8,6 +8,7 @@ from .endpoints import market_news_endpoint
 from .endpoints import financial_news_endpoint
 from .endpoints import company_news_endpoint
 from .endpoints import market_news_sentiment_endpoint
+from .endpoints import inflation_endpoint
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
@@ -59,6 +60,13 @@ api_router.include_router(
     market_news_sentiment_endpoint.router,
     prefix="/market-news-sentiment",
     tags=["market-news-sentiment"]
+)
+
+# === Inflation API ===
+api_router.include_router(
+    inflation_endpoint.router,
+    prefix="/inflation",
+    tags=["inflation"]
 )
 
 # API v1 정보 엔드포인트
@@ -148,6 +156,17 @@ async def api_v1_info():
                     "GET /market-news-sentiment/info - API 정보",
                     "GET /market-news-sentiment/stats - 감성 분석 통계"
                 ]
+            },
+            "inflation": {
+                "description": "인플레이션 데이터 API",
+                "endpoints": [
+                    "GET /inflation/ - 전체 인플레이션 데이터 조회",
+                    "GET /inflation/chart - 인플레이션 차트 데이터",
+                    "GET /inflation/recent - 최근 인플레이션 데이터",
+                    "GET /inflation/year/{year} - 특정 연도 인플레이션 데이터",
+                    "GET /inflation/statistics - 인플레이션 통계 정보",
+                    "GET /inflation/range - 지정 범위의 인플레이션 데이터"
+                ]
             }
         },
         "documentation": {
@@ -169,7 +188,7 @@ async def api_stats():
     """
     return {
         "total_endpoints": 6,
-        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news", "company-news", "market-news-sentiment"],
+        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news", "company-news", "market-news-sentiment", "inflation"],
         "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers"],
         "database_tables": {
             "earnings_calendar": "실적 발표 일정",
