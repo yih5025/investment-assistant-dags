@@ -14,7 +14,6 @@ from app.schemas.market_news_schema import (
 
 # 라우터 생성 (태그로 API 문서 그룹화)
 router = APIRouter(
-    prefix="/api/v1/market-news",
     tags=["Market News"],
     responses={
         404: {"description": "뉴스를 찾을 수 없습니다"},
