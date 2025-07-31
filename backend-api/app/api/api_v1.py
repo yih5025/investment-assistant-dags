@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from .endpoints import earnings_calendar_endpoint
 from .endpoints import truth_social_endpoint
 from .endpoints import market_news_endpoint
+from .endpoints import financial_news_endpoint
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
@@ -11,8 +12,8 @@ api_router = APIRouter()
 # === 실적 발표 캘린더 API ===
 api_router.include_router(
     earnings_calendar_endpoint.router,
-    prefix="/earnings-calendar",  # /api/v1/earnings-calendar로 시작하는 모든 엔드포인트
-    tags=["earnings-calendar"]   # API 문서에서 "earnings-calendar" 그룹으로 분류
+    prefix="/earnings-calendar", 
+    tags=["earnings-calendar"]  
 )
 
 # === Truth Social API ===
@@ -29,6 +30,12 @@ api_router.include_router(
     tags=["market-news"]
 )
 
+# === Financial News API ===
+api_router.include_router(
+    financial_news_endpoint.router,
+    prefix="/financial-news",
+    tags=["financial-news"]
+)
 # API v1 정보 엔드포인트
 @api_router.get("/", tags=["API Info"])
 async def api_v1_info():
@@ -69,6 +76,15 @@ async def api_v1_info():
                     "GET /market-news/recent - 최근 뉴스",
                     "GET /market-news/{source}/{url} - 특정 뉴스 상세"
                 ]
+            },
+            "financial-news": {
+                "description": "금융 뉴스 API",
+                "endpoints": [
+                    "GET /financial-news/ - 뉴스 목록 조회",
+                    "GET /financial-news/search - 뉴스 검색",
+                    "GET /financial-news/recent - 최근 뉴스",
+                    "GET /financial-news/{category}/{news_id} - 특정 뉴스 상세"
+                ]
             }
         },
         "documentation": {
@@ -89,16 +105,14 @@ async def api_stats():
         dict: API 통계 정보
     """
     return {
-        "total_endpoints": 3,  # 현재 구현된 도메인 수
-        "implemented_domains": ["earnings-calendar", "truth-social", "market-news"],
+        "total_endpoints": 4,
+        "implemented_domains": ["earnings-calendar", "truth-social", "market-news", "financial-news"],
         "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers", "news-market", "news-sentiment"],
         "database_tables": {
             "earnings_calendar": "실적 발표 일정",
-            "bithumb_ticker": "빗썸 암호화폐 데이터",
-            "finnhub_trades": "Finnhub 주식 거래 데이터",
-            "market_news": "시장 뉴스",
             "truth_social_posts": "Truth Social 게시물",
-            "x_posts": "X(Twitter) 게시물"
+            "financial_news": "Finnhub 금융 뉴스",
+            "market_news": "News API 뉴스",
         }
     }
 
