@@ -16,7 +16,8 @@ from app.schemas.market_news_sentiment_schema import (
     CrossAnalysisResponse,
     BatchInfo,
     SentimentQueryParams,
-    RankingQueryParams
+    RankingQueryParams,
+    SentimentTrendsResponse
 )
 from app.services.market_news_sentiment_service import MarketNewsSentimentService
 
@@ -652,3 +653,56 @@ async def get_topic_ranking(
         hot_topics=hot_topics,
         cold_topics=cold_topics
     )
+
+# =============================================================================
+# 감정 점수 추이 API (프론트엔드 차트용)
+# =============================================================================
+
+@router.get("/sentiment-trends", response_model=SentimentTrendsResponse)
+async def get_sentiment_trends(
+    db: Session = Depends(get_db),
+    interval: str = Query("daily", regex="^(hourly|daily)$", description="시간 간격 (hourly/daily)"),
+    days: int = Query(7, ge=1, le=30, description="분석 기간"),
+    tickers: Optional[str] = Query(None, description="분석할 티커들 (쉼표 구분, 예: AAPL,TSLA,NVDA)"),
+    topics: Optional[str] = Query(None, description="분석할 주제들 (쉼표 구분, 예: Technology,Energy)")
+):
+    """
+    프론트엔드 차트용 감정 점수 추이 데이터를 제공합니다.
+    
+    원시 감정 점수 수치를 시간대별로 제공하여 차트나 그래프를 그릴 수 있습니다.
+    
+    Args:
+        interval: 시간 간격 ('hourly' 또는 'daily')
+        days: 분석 기간 (1-30일)
+        tickers: 특정 티커들의 추이 분석 (선택사항)
+        topics: 특정 주제들의 추이 분석 (선택사항)
+        
+    Returns:
+        SentimentTrendsResponse: 시간대별 감정 점수 추이 (원시 수치)
+        
+    Example:
+        - GET /sentiment-trends?interval=daily&days=7
+        - GET /sentiment-trends?interval=hourly&days=3&tickers=AAPL,TSLA
+        - GET /sentiment-trends?days=14&topics=Technology,Energy
+    """
+    service = MarketNewsSentimentService(db)
+    
+    # 티커 목록 파싱
+    ticker_list = None
+    if tickers:
+        ticker_list = [ticker.strip().upper() for ticker in tickers.split(",")]
+    
+    # 주제 목록 파싱
+    topic_list = None
+    if topics:
+        topic_list = [topic.strip() for topic in topics.split(",")]
+    
+    # 감정 점수 추이 계산
+    trends_data = service.get_sentiment_trends(
+        interval=interval,
+        days=days,
+        tickers=ticker_list,
+        topics=topic_list
+    )
+    
+    return SentimentTrendsResponse(**trends_data)

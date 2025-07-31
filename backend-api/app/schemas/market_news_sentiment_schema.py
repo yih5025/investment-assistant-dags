@@ -169,3 +169,34 @@ class RankingQueryParams(BaseModel):
     top_count: int = Field(10, ge=1, le=50, description="상위 항목 개수")
     bottom_count: int = Field(10, ge=1, le=50, description="하위 항목 개수")
     min_mentions: int = Field(2, ge=1, description="최소 언급 횟수")
+
+# =============================================================================
+# 감정 점수 추이 스키마 (프론트엔드 차트용)
+# =============================================================================
+
+class SentimentTrendPoint(BaseModel):
+    """시간대별 감정 점수 데이터 포인트"""
+    timestamp: datetime = Field(..., description="시간")
+    avg_sentiment_score: float = Field(..., description="평균 감정 점수")
+    news_count: int = Field(..., description="해당 시간대 뉴스 개수")
+    bullish_count: int = Field(..., description="긍정적 뉴스 개수")
+    bearish_count: int = Field(..., description="부정적 뉴스 개수")
+    neutral_count: int = Field(..., description="중립적 뉴스 개수")
+
+class TickerSentimentTrend(BaseModel):
+    """티커별 감정 점수 추이"""
+    ticker: str = Field(..., description="주식 심볼")
+    trend_data: List[SentimentTrendPoint] = Field(..., description="시간대별 감정 점수")
+
+class TopicSentimentTrend(BaseModel):
+    """주제별 감정 점수 추이"""
+    topic: str = Field(..., description="주제명")
+    trend_data: List[SentimentTrendPoint] = Field(..., description="시간대별 감정 점수")
+
+class SentimentTrendsResponse(BaseModel):
+    """감정 점수 추이 응답 (차트용)"""
+    period: str = Field(..., description="분석 기간")
+    interval: str = Field(..., description="시간 간격 (hourly/daily)")
+    overall_trend: List[SentimentTrendPoint] = Field(..., description="전체 감정 점수 추이")
+    ticker_trends: List[TickerSentimentTrend] = Field([], description="티커별 추이 (요청 시)")
+    topic_trends: List[TopicSentimentTrend] = Field([], description="주제별 추이 (요청 시)")

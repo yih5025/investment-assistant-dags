@@ -675,3 +675,167 @@ class MarketNewsSentimentService:
         """특정 티커의 관련 주제 목록을 조회합니다."""
         topics_data = self.get_topics_by_ticker(ticker, days, 10)
         return [item["topic"] for item in topics_data]
+    
+    # =========================================================================
+    # 감정 점수 추이 메서드 (프론트엔드 차트용)
+    # =========================================================================
+    
+    def get_sentiment_trends(self, interval: str = "daily", days: int = 7, 
+                           tickers: Optional[List[str]] = None, 
+                           topics: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        시간대별 감정 점수 추이를 계산합니다.
+        
+        Args:
+            interval: 'hourly' 또는 'daily'
+            days: 분석 기간
+            tickers: 특정 티커들의 추이 (선택사항)
+            topics: 특정 주제들의 추이 (선택사항)
+            
+        Returns:
+            Dict: 전체/티커별/주제별 감정 점수 추이
+        """
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        # 시간 간격 설정
+        if interval == "hourly":
+            date_trunc = "hour"
+            interval_text = "시간별"
+        else:
+            date_trunc = "day"
+            interval_text = "일별"
+        
+        # 전체 감정 점수 추이
+        overall_trend = self._calculate_overall_sentiment_trend(cutoff_date, date_trunc)
+        
+        # 티커별 추이 (요청된 경우)
+        ticker_trends = []
+        if tickers:
+            for ticker in tickers:
+                trend_data = self._calculate_ticker_sentiment_trend(ticker, cutoff_date, date_trunc)
+                if trend_data:
+                    ticker_trends.append({
+                        "ticker": ticker,
+                        "trend_data": trend_data
+                    })
+        
+        # 주제별 추이 (요청된 경우)
+        topic_trends = []
+        if topics:
+            for topic in topics:
+                trend_data = self._calculate_topic_sentiment_trend(topic, cutoff_date, date_trunc)
+                if trend_data:
+                    topic_trends.append({
+                        "topic": topic,
+                        "trend_data": trend_data
+                    })
+        
+        return {
+            "period": f"최근 {days}일",
+            "interval": interval_text,
+            "overall_trend": overall_trend,
+            "ticker_trends": ticker_trends,
+            "topic_trends": topic_trends
+        }
+    
+    def _calculate_overall_sentiment_trend(self, cutoff_date: datetime, date_trunc: str) -> List[Dict]:
+        """전체 감정 점수 추이를 계산합니다."""
+        query = text(f"""
+            SELECT 
+                DATE_TRUNC('{date_trunc}', time_published) as time_period,
+                AVG(overall_sentiment_score) as avg_sentiment,
+                COUNT(*) as news_count,
+                COUNT(CASE WHEN overall_sentiment_score > 0.1 THEN 1 END) as bullish_count,
+                COUNT(CASE WHEN overall_sentiment_score < -0.1 THEN 1 END) as bearish_count,
+                COUNT(CASE WHEN overall_sentiment_score BETWEEN -0.1 AND 0.1 THEN 1 END) as neutral_count
+            FROM market_news_sentiment 
+            WHERE time_published >= :cutoff_date
+            AND overall_sentiment_score IS NOT NULL
+            GROUP BY DATE_TRUNC('{date_trunc}', time_published)
+            ORDER BY time_period
+        """)
+        
+        result = self.db.execute(query, {"cutoff_date": cutoff_date}).fetchall()
+        
+        return [
+            {
+                "timestamp": row[0],
+                "avg_sentiment_score": float(row[1]) if row[1] else 0.0,
+                "news_count": row[2],
+                "bullish_count": row[3],
+                "bearish_count": row[4],
+                "neutral_count": row[5]
+            }
+            for row in result
+        ]
+    
+    def _calculate_ticker_sentiment_trend(self, ticker: str, cutoff_date: datetime, date_trunc: str) -> List[Dict]:
+        """특정 티커의 감정 점수 추이를 계산합니다."""
+        query = text(f"""
+            SELECT 
+                DATE_TRUNC('{date_trunc}', time_published) as time_period,
+                AVG((jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float) as avg_sentiment,
+                COUNT(*) as news_count,
+                COUNT(CASE WHEN (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float > 0.1 THEN 1 END) as bullish_count,
+                COUNT(CASE WHEN (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float < -0.1 THEN 1 END) as bearish_count,
+                COUNT(CASE WHEN (jsonb_array_elements(ticker_sentiment)->>'ticker_sentiment_score')::float BETWEEN -0.1 AND 0.1 THEN 1 END) as neutral_count
+            FROM market_news_sentiment 
+            WHERE ticker_sentiment @> :ticker_filter
+            AND time_published >= :cutoff_date
+            GROUP BY DATE_TRUNC('{date_trunc}', time_published)
+            ORDER BY time_period
+        """)
+        
+        ticker_filter = json.dumps([{"ticker": ticker}])
+        result = self.db.execute(query, {
+            "ticker_filter": ticker_filter,
+            "cutoff_date": cutoff_date
+        }).fetchall()
+        
+        return [
+            {
+                "timestamp": row[0],
+                "avg_sentiment_score": float(row[1]) if row[1] else 0.0,
+                "news_count": row[2],
+                "bullish_count": row[3],
+                "bearish_count": row[4],
+                "neutral_count": row[5]
+            }
+            for row in result
+        ]
+    
+    def _calculate_topic_sentiment_trend(self, topic: str, cutoff_date: datetime, date_trunc: str) -> List[Dict]:
+        """특정 주제의 감정 점수 추이를 계산합니다."""
+        query = text(f"""
+            SELECT 
+                DATE_TRUNC('{date_trunc}', time_published) as time_period,
+                AVG(overall_sentiment_score) as avg_sentiment,
+                COUNT(*) as news_count,
+                COUNT(CASE WHEN overall_sentiment_score > 0.1 THEN 1 END) as bullish_count,
+                COUNT(CASE WHEN overall_sentiment_score < -0.1 THEN 1 END) as bearish_count,
+                COUNT(CASE WHEN overall_sentiment_score BETWEEN -0.1 AND 0.1 THEN 1 END) as neutral_count
+            FROM market_news_sentiment 
+            WHERE topics @> :topic_filter
+            AND time_published >= :cutoff_date
+            AND overall_sentiment_score IS NOT NULL
+            GROUP BY DATE_TRUNC('{date_trunc}', time_published)
+            ORDER BY time_period
+        """)
+        
+        topic_filter = json.dumps([{"topic": topic}])
+        result = self.db.execute(query, {
+            "topic_filter": topic_filter,
+            "cutoff_date": cutoff_date
+        }).fetchall()
+        
+        return [
+            {
+                "timestamp": row[0],
+                "avg_sentiment_score": float(row[1]) if row[1] else 0.0,
+                "news_count": row[2],
+                "bullish_count": row[3],
+                "bearish_count": row[4],
+                "neutral_count": row[5]
+            }
+            for row in result
+        ]
