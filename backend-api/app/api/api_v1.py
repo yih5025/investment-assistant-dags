@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 # 각 도메인별 엔드포인트 라우터들을 import
 from .endpoints import earnings_calendar_endpoint
+from .endpoints import earnings_calendar_news_endpoint
 from .endpoints import truth_social_endpoint
 from .endpoints import market_news_endpoint
 from .endpoints import financial_news_endpoint
@@ -14,6 +15,13 @@ api_router.include_router(
     earnings_calendar_endpoint.router,
     prefix="/earnings-calendar", 
     tags=["earnings-calendar"]  
+)
+
+# === 실적 캘린더 뉴스 API ===
+api_router.include_router(
+    earnings_calendar_news_endpoint.router,
+    prefix="/earnings-calendar-news",
+    tags=["earnings-calendar-news"]
 )
 
 # === Truth Social API ===
@@ -58,6 +66,14 @@ async def api_v1_info():
                     "GET /earnings-calendar/today - 오늘의 실적 발표",
                     "GET /earnings-calendar/upcoming - 다가오는 실적 발표",
                     "GET /earnings-calendar/symbol/{symbol} - 특정 심볼의 실적 일정"
+                ]
+            },
+            "earnings-calendar-news": {
+                "description": "실적 캘린더 뉴스 API",
+                "endpoints": [
+                    "GET /earnings-calendar-news/symbol/{symbol}/report-date/{date} - 특정 실적 뉴스 조회",
+                    "GET /earnings-calendar-news/symbol/{symbol} - 기업별 실적 뉴스 조회",
+                    "GET /earnings-calendar-news/recent-summary?symbol={symbol} - 특정 기업 최근 실적 뉴스"
                 ]
             },
             "truth-social": {
@@ -105,11 +121,12 @@ async def api_stats():
         dict: API 통계 정보
     """
     return {
-        "total_endpoints": 4,
-        "implemented_domains": ["earnings-calendar", "truth-social", "market-news", "financial-news"],
+        "total_endpoints": 5,
+        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news"],
         "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers", "news-market", "news-sentiment"],
         "database_tables": {
             "earnings_calendar": "실적 발표 일정",
+            "earnings_calendar_news": "실적 관련 뉴스",
             "truth_social_posts": "Truth Social 게시물",
             "financial_news": "Finnhub 금융 뉴스",
             "market_news": "News API 뉴스",
