@@ -10,6 +10,7 @@ from .endpoints import company_news_endpoint
 from .endpoints import market_news_sentiment_endpoint
 from .endpoints import inflation_endpoint
 from .endpoints import federal_funds_rate_endpoint
+from .endpoints import cpi_endpoint
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
@@ -75,6 +76,13 @@ api_router.include_router(
     federal_funds_rate_endpoint.router,
     prefix="/federal-funds-rate",
     tags=["federal-funds-rate"]
+)
+
+# === CPI API ===
+api_router.include_router(
+    cpi_endpoint.router,
+    prefix="/cpi",
+    tags=["cpi"]
 )
 
 # API v1 정보 엔드포인트
@@ -184,6 +192,19 @@ async def api_v1_info():
                     "GET /federal-funds-rate/recent - 최근 연방기금금리 데이터",
                     "GET /federal-funds-rate/statistics - 연방기금금리 통계 정보",
                     "GET /federal-funds-rate/trend - 연방기금금리 트렌드 분석"
+                ]
+            },
+            "cpi": {
+                "description": "소비자물가지수 API",
+                "endpoints": [
+                    "GET /cpi/ - 전체 CPI 데이터 조회",
+                    "GET /cpi/chart - 소비자물가지수 차트 데이터",
+                    "GET /cpi/recent - 최근 CPI 데이터",
+                    "GET /cpi/year/{year} - 특정 연도 CPI 데이터",
+                    "GET /cpi/statistics - CPI 통계 정보",
+                    "GET /cpi/inflation-analysis - CPI 인플레이션 분석",
+                    "GET /cpi/compare - CPI 기간별 비교",
+                    "GET /cpi/month/{year}/{month} - 특정월 CPI 상세 정보"
                 ]
             }
         },
