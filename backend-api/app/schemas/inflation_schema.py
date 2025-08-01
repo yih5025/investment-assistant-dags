@@ -1,19 +1,24 @@
 from datetime import date
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from decimal import Decimal
 
 class InflationBase(BaseModel):
     """인플레이션 데이터 기본 스키마"""
     date: date = Field(..., description="데이터 날짜 (연도별)")
-    inflation_rate: Optional[Decimal] = Field(None, description="인플레이션율 (%)")
+    inflation_rate: Optional[float] = Field(None, description="인플레이션율 (%)")
     interval_type: str = Field(default="annual", description="데이터 간격")
     unit: str = Field(default="percent", description="단위")
     name: str = Field(default="Inflation - US Consumer Prices", description="데이터 설명")
 
 class InflationResponse(InflationBase):
     """API 응답용 인플레이션 스키마"""
-    model_config = {"from_attributes": True}  # SQLAlchemy 모델에서 데이터 변환 허용
+    
+    model_config = {
+        "from_attributes": True,
+        "json_encoders": {
+            date: lambda v: v.isoformat() if v else None,
+        }
+    }
 
 class InflationChartData(BaseModel):
     """그래프 시각화용 간소화된 스키마"""
