@@ -257,9 +257,9 @@ class XPostsService:
         if request.category:
             query = query.filter(XPost.account_category == request.category.value)
         
-        # 기간 필터
-        since_date = self._get_period_filter(request.period)
-        query = query.filter(XPost.created_at >= since_date)
+        # 기간 필터 (임시 비활성화)
+        # since_date = self._get_period_filter(request.period)
+        # query = query.filter(XPost.created_at >= since_date)
         
         # 랭킹 유형별 정렬
         if ranking_type == 'most-engaged':
