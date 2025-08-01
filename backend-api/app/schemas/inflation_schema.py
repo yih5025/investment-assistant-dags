@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 class InflationBase(BaseModel):
     """인플레이션 데이터 기본 스키마"""
-    date: date = Field(..., description="데이터 날짜 (연도별)")
+    datetime: date = Field(..., alias="date", description="데이터 날짜 (연도별)")
     inflation_rate: Optional[float] = Field(None, description="인플레이션율 (%)")
     interval_type: str = Field(default="annual", description="데이터 간격")
     unit: str = Field(default="percent", description="단위")
@@ -13,12 +13,7 @@ class InflationBase(BaseModel):
 class InflationResponse(InflationBase):
     """API 응답용 인플레이션 스키마"""
     
-    model_config = {
-        "from_attributes": True,
-        "json_encoders": {
-            date: lambda v: v.isoformat() if v else None,
-        }
-    }
+    model_config = {"from_attributes": True}
 
 class InflationChartData(BaseModel):
     """그래프 시각화용 간소화된 스키마"""
