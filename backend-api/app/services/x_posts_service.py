@@ -262,24 +262,28 @@ class XPostsService:
         query = query.filter(XPost.created_at >= since_date)
         
         # 랭킹 유형별 정렬
-        ranking_columns = {
-            'most-liked': XPost.like_count,
-            'most-retweeted': XPost.retweet_count,
-            'most-replied': XPost.reply_count,
-            'most-quoted': XPost.quote_count,
-            'most-bookmarked': XPost.bookmark_count,
-            'most-viewed': XPost.impression_count,
-            'most-engaged': (
-                func.coalesce(XPost.like_count, 0) * 1 +
-                func.coalesce(XPost.retweet_count, 0) * 2 +
-                func.coalesce(XPost.reply_count, 0) * 3 +
-                func.coalesce(XPost.quote_count, 0) * 2 +
-                func.coalesce(XPost.bookmark_count, 0) * 1
+        if ranking_type == 'most-engaged':
+            # 종합 인게이지먼트는 별도 처리
+            engagement_expr = (
+                (XPost.like_count * 1) +
+                (XPost.retweet_count * 2) +
+                (XPost.reply_count * 3) +
+                (XPost.quote_count * 2) +
+                (XPost.bookmark_count * 1)
             )
-        }
-        
-        sort_column = ranking_columns.get(ranking_type, XPost.like_count)
-        query = query.order_by(desc(sort_column))
+            query = query.order_by(desc(engagement_expr))
+        else:
+            ranking_columns = {
+                'most-liked': XPost.like_count,
+                'most-retweeted': XPost.retweet_count,
+                'most-replied': XPost.reply_count,
+                'most-quoted': XPost.quote_count,
+                'most-bookmarked': XPost.bookmark_count,
+                'most-viewed': XPost.impression_count,
+            }
+            
+            sort_column = ranking_columns.get(ranking_type, XPost.like_count)
+            query = query.order_by(desc(sort_column))
         
         return query.limit(request.limit).all()
     
