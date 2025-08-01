@@ -58,7 +58,7 @@ class InflationService:
         for item in inflation_data:
             if item.inflation_rate is not None:
                 year = item.date.year
-                rate = float(item.inflation_rate)
+                rate = item.inflation_rate  # 이미 float이므로 변환 불필요
                 
                 chart_data.append(InflationChartData(year=year, rate=rate))
                 rates.append(rate)
