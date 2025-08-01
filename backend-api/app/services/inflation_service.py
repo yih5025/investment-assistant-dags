@@ -31,7 +31,7 @@ class InflationService:
             query = query.order_by(asc(Inflation.date))
             
         inflation_data = query.all()
-        return [InflationResponse.from_orm(item) for item in inflation_data]
+        return [InflationResponse.model_validate(item) for item in inflation_data]
 
     def get_chart_data(self) -> InflationChartResponse:
         """
@@ -91,7 +91,7 @@ class InflationService:
             .limit(years)
             .all()
         )
-        return [InflationResponse.from_orm(item) for item in inflation_data]
+        return [InflationResponse.model_validate(item) for item in inflation_data]
 
     def get_year_data(self, year: int) -> Optional[InflationResponse]:
         """
@@ -111,7 +111,7 @@ class InflationService:
             .first()
         )
         
-        return InflationResponse.from_orm(inflation_data) if inflation_data else None
+        return InflationResponse.model_validate(inflation_data) if inflation_data else None
 
     def get_statistics(self) -> InflationStatsResponse:
         """
@@ -167,4 +167,4 @@ class InflationService:
             .all()
         )
         
-        return [InflationResponse.from_orm(item) for item in inflation_data]
+        return [InflationResponse.model_validate(item) for item in inflation_data]

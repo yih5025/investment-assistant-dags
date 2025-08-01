@@ -13,9 +13,7 @@ class InflationBase(BaseModel):
 
 class InflationResponse(InflationBase):
     """API 응답용 인플레이션 스키마"""
-    
-    class Config:
-        from_attributes = True  # SQLAlchemy 모델에서 데이터 변환 허용
+    model_config = {"from_attributes": True}  # SQLAlchemy 모델에서 데이터 변환 허용
 
 class InflationChartData(BaseModel):
     """그래프 시각화용 간소화된 스키마"""
