@@ -10,7 +10,7 @@ from ..schemas.inflation_schema import (
 )
 
 class InflationService:
-    """인플레이션 데이터 비즈니스 로직"""
+    """인플레이션 데이터 비즈니스 로직(에러 수정)"""
     
     def __init__(self, db: Session):
         self.db = db
