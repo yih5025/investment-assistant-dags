@@ -257,13 +257,33 @@ class XPostsService:
         if request.category:
             query = query.filter(XPost.account_category == request.category.value)
         
-        # 기간 필터 (임시 비활성화)
-        # since_date = self._get_period_filter(request.period)
-        # query = query.filter(XPost.created_at >= since_date)
+        # 기간 필터
+        since_date = self._get_period_filter(request.period)
+        query = query.filter(XPost.created_at >= since_date)
         
-        # 랭킹 유형별 정렬 (간단하게 수정)
-        # 모든 랭킹을 like_count로 임시 처리
-        query = query.order_by(desc(XPost.like_count))
+        # 랭킹 유형별 정렬
+        if ranking_type == 'most-engaged':
+            # 종합 인게이지먼트: 간단한 더하기만 사용
+            engagement_expr = (
+                XPost.like_count + 
+                XPost.retweet_count + 
+                XPost.reply_count + 
+                XPost.quote_count + 
+                XPost.bookmark_count
+            )
+            query = query.order_by(desc(engagement_expr))
+        else:
+            ranking_columns = {
+                'most-liked': XPost.like_count,
+                'most-retweeted': XPost.retweet_count,
+                'most-replied': XPost.reply_count,
+                'most-quoted': XPost.quote_count,
+                'most-bookmarked': XPost.bookmark_count,
+                'most-viewed': XPost.impression_count,
+            }
+            
+            sort_column = ranking_columns.get(ranking_type, XPost.like_count)
+            query = query.order_by(desc(sort_column))
         
         return query.limit(request.limit).all()
     
