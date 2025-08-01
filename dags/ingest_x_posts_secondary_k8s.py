@@ -199,19 +199,16 @@ def get_todays_secondary_accounts():
     
     return todays_accounts
 
-def call_x_api_secondary_with_rate_limit(username, user_id, max_results=50):
-    """Rate Limit을 고려한 두 번째 토큰 X API 호출"""
+def call_x_api_with_rate_limit(username, user_id, max_results=10):
+    """start_time 없이 최신 트윗만 가져오기"""
     try:
-        bearer_token = Variable.get('X_API_BEARER_TOKEN_2')  # 두 번째 토큰
+        bearer_token = Variable.get('X_API_BEARER_TOKEN_2')
         
         url = f"https://api.twitter.com/2/users/{user_id}/tweets"
         
-        # 24시간 전부터 수집
-        start_time = (datetime.utcnow() - timedelta(hours=24)).isoformat() + 'Z'
-        
+        # ✅ start_time 제거 - 최신 트윗들만 가져오기
         params = {
-            "max_results": min(max_results, 50),  # Free Tier 최대 100개
-            "start_time": start_time,
+            "max_results": min(max_results, 10),  # Free Tier는 10개 제한
             "tweet.fields": "created_at,text,public_metrics,context_annotations,entities,lang,edit_history_tweet_ids",
             "expansions": "author_id",
             "user.fields": "name,username,verified,public_metrics"
@@ -222,16 +219,13 @@ def call_x_api_secondary_with_rate_limit(username, user_id, max_results=50):
             "User-Agent": "InvestmentAssistant-Secondary/2.0"
         }
         
-        print(f"🔍 API 호출 중: {username} (user_id: {user_id})")
+        print(f"🔍 API 호출 중: {username} (user_id: {user_id}) - 최신 트윗")
+        
         response = requests.get(url, headers=headers, params=params, timeout=30)
         
-        # Rate Limit 에러 체크
-        if response.status_code == 429:
-            print(f"⚠️ Rate Limit 도달: {username}")
-            reset_time = response.headers.get('x-rate-limit-reset', '')
-            if reset_time:
-                print(f"   재설정 시간: {datetime.fromtimestamp(int(reset_time))}")
-            raise Exception(f"Rate Limit exceeded for {username}")
+        if response.status_code == 400:
+            print(f"❌ 400 Bad Request:")
+            print(f"   Response: {response.text}")
         
         response.raise_for_status()
         data = response.json()
@@ -345,7 +339,7 @@ def fetch_secondary_tweets_with_delay(**context):
     
     # 예상 소요 시간 계산
     estimated_time = (len(todays_accounts) - 1) * 15  # 15분 간격
-    print(f"⏰ 예상 소요 시간: {estimated_time}분 (15분 간격 × {len(todays_accounts)-1}회 대기)")
+    print(f"⏰ 예상 소요 시간: {estimated_time}분 (15분 간격 {len(todays_accounts)-1}회 대기)")
     
     # 각 계정별 트윗 수집 (15분 딜레이 포함)
     all_tweets = []
@@ -383,7 +377,7 @@ def fetch_secondary_tweets_with_delay(**context):
             print(f"   최대 결과: {max_results}개")
             
             # API 호출 (두 번째 토큰 사용)
-            api_response = call_x_api_secondary_with_rate_limit(username, user_id, max_results)
+            api_response = call_x_api_with_rate_limit(username, user_id, max_results)
             total_api_calls += 1
             
             if 'data' not in api_response or not api_response['data']:
