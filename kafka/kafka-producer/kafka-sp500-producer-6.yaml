@@ -1,0 +1,329 @@
+# S&P 500 WebSocket Producer Pod 6
+# API_KEY_6 사용, 심볼 251-300번 담당
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sp500-websocket-6-code
+  namespace: investment-assistant
+  labels:
+    app: sp500-websocket
+    pod-index: "6"
+data:
+  websocket_producer.py: |
+    import asyncio
+    import json
+    import os
+    import time
+    import logging
+    import psycopg2
+    import websockets
+    from kafka import KafkaProducer
+    import threading
+
+    # 로깅 설정
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+    logger = logging.getLogger(__name__)
+
+    class SP500WebSocketProducer:
+        def __init__(self):
+            # 환경변수에서 설정 로드
+            self.kafka_servers = os.getenv('KAFKA_SERVERS')
+            self.api_key = os.getenv('FINNHUB_API_KEY')
+            self.pod_index = int(os.getenv('POD_INDEX', '6'))  # Pod 번호 (1~10)
+            self.pod_name = os.getenv('POD_NAME', 'sp500-websocket-6')
+            
+            # WebSocket 설정
+            self.websocket = None
+            self.producer = None
+            self.running = True
+            
+            # 통계
+            self.message_count = 0
+            self.error_count = 0
+            self.start_time = time.time()
+            
+            # 이 Pod가 담당할 심볼들
+            self.symbols = self.load_symbols()
+            
+            logger.info(f"🚀 Pod {self.pod_name} 초기화 완료")
+            logger.info(f"   📊 담당 심볼: {len(self.symbols)}개")
+            logger.info(f"   🔑 Pod Index: {self.pod_index}")
+            logger.info(f"   🔑 API Key: {self.api_key[:20]}...")
+            
+        def load_symbols(self):
+            """이 Pod가 담당할 50개 심볼 로드"""
+            try:
+                conn = psycopg2.connect(
+                    host=os.getenv('POSTGRES_HOST'),
+                    database=os.getenv('POSTGRES_DB'),
+                    user=os.getenv('POSTGRES_USER'),
+                    password=os.getenv('POSTGRES_PASSWORD'),
+                    port=5432
+                )
+                
+                with conn.cursor() as cursor:
+                    # Pod Index 기준으로 offset 계산
+                    # Pod 1 → offset 0   (symbols[0:50])
+                    # Pod 2 → offset 50  (symbols[50:100])  
+                    # Pod 3 → offset 100 (symbols[100:150])
+                    offset = (self.pod_index - 1) * 50
+                    
+                    cursor.execute("""
+                        SELECT symbol 
+                        FROM sp500_companies 
+                        WHERE founded IS NOT NULL 
+                        ORDER BY founded DESC 
+                        LIMIT 50 OFFSET %s
+                    """, (offset,))
+                    
+                    symbols = [row[0] for row in cursor.fetchall()]
+                    
+                conn.close()
+                logger.info(f"📊 DB에서 심볼 로드: {len(symbols)}개 (Pod-{self.pod_index}, offset: {offset})")
+                
+                # 로드된 심볼들 로그 출력 (디버깅용)
+                if symbols:
+                    logger.info(f"   첫 5개 심볼: {symbols[:5]}")
+                    logger.info(f"   마지막 5개 심볼: {symbols[-5:]}")
+                
+                return symbols
+                
+            except Exception as e:
+                logger.error(f"❌ DB 심볼 로드 실패: {e}")
+                return []
+        
+        def init_kafka(self):
+            """Kafka Producer 초기화"""
+            try:
+                self.producer = KafkaProducer(
+                    bootstrap_servers=self.kafka_servers,
+                    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                    key_serializer=lambda k: k.encode('utf-8'),
+                    compression_type='lz4',
+                    batch_size=16384,
+                    linger_ms=10
+                )
+                logger.info("✅ Kafka Producer 초기화 완료")
+                return True
+            except Exception as e:
+                logger.error(f"❌ Kafka 초기화 실패: {e}")
+                return False
+        
+        async def connect_websocket(self):
+            """Finnhub WebSocket 연결"""
+            try:
+                if self.websocket:
+                    await self.websocket.close()
+                    
+                uri = f"wss://ws.finnhub.io?token={self.api_key}"
+                self.websocket = await websockets.connect(uri)
+                logger.info(f"✅ WebSocket 연결 성공 (Pod-{self.pod_index})")
+                
+                # 모든 심볼 구독
+                for i, symbol in enumerate(self.symbols):
+                    subscribe_msg = {"type": "subscribe", "symbol": symbol}
+                    await self.websocket.send(json.dumps(subscribe_msg))
+                    
+                    # 구독 속도 조절 (API Rate Limit 방지)
+                    if i % 20 == 19:
+                        await asyncio.sleep(1)
+                    else:
+                        await asyncio.sleep(0.05)
+                        
+                logger.info(f"✅ {len(self.symbols)}개 심볼 구독 완료 (Pod-{self.pod_index})")
+                
+            except Exception as e:
+                logger.error(f"❌ WebSocket 연결 실패: {e}")
+                raise
+        
+        async def process_message(self, message):
+            """WebSocket 메시지 처리 및 Kafka 전송"""
+            try:
+                data = json.loads(message)
+                
+                if data.get('type') == 'trade' and data.get('data'):
+                    for trade in data['data']:
+                        symbol = trade.get('s')
+                        
+                        # 이 Pod가 담당하는 심볼만 처리
+                        if symbol not in self.symbols:
+                            continue
+                        
+                        kafka_message = {
+                            'symbol': symbol,
+                            'price': trade.get('p'),
+                            'volume': trade.get('v'),
+                            'timestamp_ms': trade.get('t'),
+                            'trade_conditions': trade.get('c', []),
+                            'pod_index': self.pod_index,
+                            'pod_name': self.pod_name,
+                            'source': 'finnhub_sp500_websocket'
+                        }
+                        
+                        key = f"{symbol}_{trade.get('t')}"
+                        self.producer.send("sp500-websocket-trades", key=key, value=kafka_message)
+                        
+                        self.message_count += 1
+                        
+            except Exception as e:
+                logger.error(f"❌ 메시지 처리 실패: {e}")
+                self.error_count += 1
+        
+        def log_statistics(self):
+            """주기적 통계 로깅"""
+            def log_stats():
+                while self.running:
+                    try:
+                        elapsed = time.time() - self.start_time
+                        rate = self.message_count / elapsed if elapsed > 0 else 0
+                        current_time = time.strftime("%H:%M:%S")
+                        
+                        logger.info(f"📊 {self.pod_name} | 시간: {current_time} | "
+                                  f"메시지: {self.message_count} | 에러: {self.error_count} | "
+                                  f"속도: {rate:.1f}/sec | Pod: {self.pod_index}")
+                        
+                        time.sleep(60)
+                        
+                    except Exception as e:
+                        logger.error(f"❌ 통계 로깅 오류: {e}")
+                        time.sleep(60)
+            
+            threading.Thread(target=log_stats, daemon=True).start()
+        
+        async def run(self):
+            """메인 실행 루프"""
+            logger.info(f"🚀 {self.pod_name} WebSocket Producer 시작")
+            
+            if not self.init_kafka():
+                logger.error("❌ Kafka 초기화 실패로 종료")
+                return
+            
+            self.log_statistics()
+            
+            try:
+                while self.running:
+                    try:
+                        await self.connect_websocket()
+                        
+                        async for message in self.websocket:
+                            await self.process_message(message)
+                            
+                    except websockets.exceptions.ConnectionClosed:
+                        logger.warning("⚠️ WebSocket 연결 끊김, 5초 후 재연결 시도")
+                        await asyncio.sleep(5)
+                        
+                    except Exception as e:
+                        logger.error(f"❌ WebSocket 오류: {e}")
+                        await asyncio.sleep(10)
+                        
+            except KeyboardInterrupt:
+                logger.info("🛑 사용자 중단 요청")
+                
+            finally:
+                self.running = False
+                if self.websocket:
+                    await self.websocket.close()
+                if self.producer:
+                    self.producer.close()
+                
+                logger.info(f"✅ {self.pod_name} 정상 종료")
+
+    if __name__ == "__main__":
+        producer = SP500WebSocketProducer()
+        asyncio.run(producer.run())
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sp500-websocket-6
+  namespace: investment-assistant
+  labels:
+    app: sp500-websocket
+    pod-index: "6"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sp500-websocket-6
+  template:
+    metadata:
+      labels:
+        app: sp500-websocket-6
+        pod-index: "6"
+    spec:
+      containers:
+      - name: websocket-producer
+        image: python:3.11-slim
+        command: ["sh", "-c"]
+        args:
+        - |
+          apt-get update && apt-get install -y procps
+          pip install --no-cache-dir kafka-python psycopg2-binary websockets lz4
+          python /app/websocket_producer.py
+        env:
+        # Kafka 설정
+        - name: KAFKA_SERVERS
+          value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+          
+        # PostgreSQL 설정
+        - name: POSTGRES_HOST
+          value: "postgresql.investment-assistant.svc.cluster.local"
+        - name: POSTGRES_DB
+          value: "investment_db"
+        - name: POSTGRES_USER
+          value: "airflow"
+        - name: POSTGRES_PASSWORD
+          value: "airflow123"
+          
+        # Finnhub API 설정 (수정된 부분)
+        - name: FINNHUB_API_KEY
+          value: "d263rl1r01qh25llefigd263rl1r01qh25llefj0"  # 실제 API 키로 교체 필요
+        - name: POD_INDEX
+          value: "6"                       # Pod 번호 (1~10)
+        - name: POD_NAME
+          value: "sp500-websocket-6"       # Pod 이름
+          
+        volumeMounts:
+        - name: producer-code
+          mountPath: /app
+          
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+            
+        livenessProbe:
+          exec:
+            command: ["pgrep", "-f", "websocket_producer.py"]
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          failureThreshold: 3
+          
+        readinessProbe:
+          exec:
+            command: ["pgrep", "-f", "websocket_producer.py"]
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          
+      volumes:
+      - name: producer-code
+        configMap:
+          name: sp500-websocket-6-code
+          
+      restartPolicy: Always
+      
+      # Pod 배치 최적화 (각 노드에 분산 배치)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: sp500-websocket
+              topologyKey: kubernetes.io/hostname

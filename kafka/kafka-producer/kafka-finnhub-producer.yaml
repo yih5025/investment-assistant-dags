@@ -249,7 +249,8 @@ spec:
         command: ["sh", "-c"]
         args:
         - |
-          pip install kafka-python psycopg2-binary websockets lz4
+          apt-get update && apt-get install -y procps
+          pip install --no-cache-dir kafka-python psycopg2-binary websockets lz4
           python /app/websocket_producer.py
         env:
         - name: KAFKA_SERVERS
