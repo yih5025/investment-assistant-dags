@@ -16,7 +16,7 @@ router = APIRouter()
 
 @router.get("/", response_model=FederalFundsRateListResponse)
 async def get_federal_funds_rate_list(
-    order_by: str = Query("desc", regex="^(desc|asc)$"),
+    order_by: str = Query("desc", pattern="^(desc|asc)$"),
     db: Session = Depends(get_db)
 ):
     """

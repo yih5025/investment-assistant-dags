@@ -23,7 +23,7 @@ router = APIRouter(
 
 @router.get("/", response_model=InflationListResponse, summary="인플레이션 전체 데이터 조회")
 async def get_inflation_list(
-    order_by: str = Query("desc", regex="^(desc|asc)$", description="정렬 순서"),
+    order_by: str = Query("desc", pattern="^(desc|asc)$", description="정렬 순서"),
     db: Session = Depends(get_db)
 ):
     """

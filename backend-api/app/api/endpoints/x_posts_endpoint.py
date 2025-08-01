@@ -228,7 +228,7 @@ async def get_category_users(
 async def get_most_liked_posts(
     limit: int = Query(5, ge=1, le=50, description="조회할 포스트 수"),
     category: Optional[AccountCategory] = Query(None, description="계정 카테고리 필터"),
-    period: str = Query("24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
+    period: str = Query("24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
     db: Session = Depends(get_db)
 ):
     """
@@ -258,7 +258,7 @@ async def get_most_liked_posts(
 async def get_most_retweeted_posts(
     limit: int = Query(5, ge=1, le=50, description="조회할 포스트 수"),
     category: Optional[AccountCategory] = Query(None, description="계정 카테고리 필터"),
-    period: str = Query("24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
+    period: str = Query("24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
     db: Session = Depends(get_db)
 ):
     """리트윗 수가 가장 많은 포스트 랭킹을 조회합니다."""
@@ -279,7 +279,7 @@ async def get_most_retweeted_posts(
 async def get_most_replied_posts(
     limit: int = Query(5, ge=1, le=50, description="조회할 포스트 수"),
     category: Optional[AccountCategory] = Query(None, description="계정 카테고리 필터"),
-    period: str = Query("24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
+    period: str = Query("24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
     db: Session = Depends(get_db)
 ):
     """댓글 수가 가장 많은 포스트 랭킹을 조회합니다."""
@@ -300,7 +300,7 @@ async def get_most_replied_posts(
 async def get_most_quoted_posts(
     limit: int = Query(5, ge=1, le=50, description="조회할 포스트 수"),
     category: Optional[AccountCategory] = Query(None, description="계정 카테고리 필터"),
-    period: str = Query("24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
+    period: str = Query("24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
     db: Session = Depends(get_db)
 ):
     """인용 수가 가장 많은 포스트 랭킹을 조회합니다."""
@@ -321,7 +321,7 @@ async def get_most_quoted_posts(
 async def get_most_bookmarked_posts(
     limit: int = Query(5, ge=1, le=50, description="조회할 포스트 수"),
     category: Optional[AccountCategory] = Query(None, description="계정 카테고리 필터"),
-    period: str = Query("24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
+    period: str = Query("24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
     db: Session = Depends(get_db)
 ):
     """북마크 수가 가장 많은 포스트 랭킹을 조회합니다."""
@@ -342,7 +342,7 @@ async def get_most_bookmarked_posts(
 async def get_most_viewed_posts(
     limit: int = Query(5, ge=1, le=50, description="조회할 포스트 수"),
     category: Optional[AccountCategory] = Query(None, description="계정 카테고리 필터"),
-    period: str = Query("24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
+    period: str = Query("24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
     db: Session = Depends(get_db)
 ):
     """노출 수(impression)가 가장 많은 포스트 랭킹을 조회합니다."""
@@ -363,7 +363,7 @@ async def get_most_viewed_posts(
 async def get_most_engaged_posts(
     limit: int = Query(5, ge=1, le=50, description="조회할 포스트 수"),
     category: Optional[AccountCategory] = Query(None, description="계정 카테고리 필터"),
-    period: str = Query("24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
+    period: str = Query("24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터"),
     db: Session = Depends(get_db)
 ):
     """

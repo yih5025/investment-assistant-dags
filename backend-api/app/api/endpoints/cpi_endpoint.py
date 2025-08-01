@@ -28,7 +28,7 @@ router = APIRouter(
 
 @router.get("/", response_model=CPIListResponse, summary="CPI 전체 데이터 조회")
 async def get_cpi_list(
-    order_by: str = Query("desc", regex="^(desc|asc)$", description="정렬 순서"),
+    order_by: str = Query("desc", pattern="^(desc|asc)$", description="정렬 순서"),
     db: Session = Depends(get_db)
 ):
     """
@@ -216,8 +216,8 @@ async def get_current_cpi(db: Session = Depends(get_db)):
 
 @router.get("/compare", response_model=CPIComparisonResponse)
 async def compare_cpi_periods(
-   start_date: str = Query(..., description="시작 날짜 (YYYY-MM-DD)", regex=r"^\d{4}-\d{2}-\d{2}$"),
-   end_date: str = Query(..., description="종료 날짜 (YYYY-MM-DD)", regex=r"^\d{4}-\d{2}-\d{2}$"),
+       start_date: str = Query(..., description="시작 날짜 (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    end_date: str = Query(..., description="종료 날짜 (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$"),
    db: Session = Depends(get_db)
 ):
    """

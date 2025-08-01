@@ -62,7 +62,7 @@ class XPostRankingRequest(BaseModel):
     """X Posts 랭킹 조회 요청"""
     limit: int = Field(default=5, ge=1, le=50, description="조회할 포스트 수")
     category: Optional[AccountCategory] = Field(default=None, description="계정 카테고리 필터")
-    period: str = Field(default="24h", regex="^(1h|6h|24h|7d|30d)$", description="기간 필터")
+    period: str = Field(default="24h", pattern="^(1h|6h|24h|7d|30d)$", description="기간 필터")
 
 
 class UserPostsRequest(BaseModel):

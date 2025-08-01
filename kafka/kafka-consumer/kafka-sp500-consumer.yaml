@@ -76,10 +76,10 @@ data:
                     insert_sql = '''
                         INSERT INTO sp500_websocket_trades (
                             symbol, price, volume, timestamp_ms, trade_conditions,
-                            api_key_index, pod_name, source, created_at
+                            pod_index, pod_name, source, created_at
                         ) VALUES (
                             %(symbol)s, %(price)s, %(volume)s, %(timestamp_ms)s, %(trade_conditions)s,
-                            %(api_key_index)s, %(pod_name)s, %(source)s, NOW()
+                            %(pod_index)s, %(pod_name)s, %(source)s, NOW()
                         )
                         ON CONFLICT (symbol, timestamp_ms) DO NOTHING
                     '''
