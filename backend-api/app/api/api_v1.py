@@ -1,258 +1,217 @@
 from fastapi import APIRouter
 
-# 각 도메인별 엔드포인트 라우터들을 import
-from .endpoints import earnings_calendar_endpoint
-from .endpoints import earnings_calendar_news_endpoint
-from .endpoints import truth_social_endpoint
-from .endpoints import market_news_endpoint
-from .endpoints import financial_news_endpoint
-from .endpoints import company_news_endpoint
-from .endpoints import market_news_sentiment_endpoint
-from .endpoints import inflation_endpoint
-from .endpoints import federal_funds_rate_endpoint
-from .endpoints import cpi_endpoint
+# 도메인별 엔드포인트 라우터 imports
+from .endpoints import (
+    earnings_calendar_endpoint,
+    earnings_calendar_news_endpoint,
+    truth_social_endpoint,
+    market_news_endpoint,
+    financial_news_endpoint,
+    company_news_endpoint,
+    market_news_sentiment_endpoint,
+    inflation_endpoint,
+    federal_funds_rate_endpoint,
+    cpi_endpoint,
+    x_posts_endpoint
+)
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
 
-# === 실적 발표 캘린더 API ===
-api_router.include_router(
-    earnings_calendar_endpoint.router,
-    prefix="/earnings-calendar", 
-    tags=["earnings-calendar"]  
-)
+# 라우터 설정 구성
+ROUTER_CONFIGS = [
+    # 뉴스 관련 API
+    {
+        "router": market_news_endpoint.router,
+        "prefix": "/market-news",
+        "tags": ["market-news"],
+        "description": "시장 뉴스 API"
+    },
+    {
+        "router": financial_news_endpoint.router,
+        "prefix": "/financial-news", 
+        "tags": ["financial-news"],
+        "description": "금융 뉴스 API"
+    },
+    {
+        "router": company_news_endpoint.router,
+        "prefix": "/company-news",
+        "tags": ["company-news"], 
+        "description": "기업 뉴스 API"
+    },
+    {
+        "router": market_news_sentiment_endpoint.router,
+        "prefix": "/market-news-sentiment",
+        "tags": ["market-news-sentiment"],
+        "description": "시장 뉴스 감성 분석 API"
+    },
+    
+    # 소셜 미디어 API
+    {
+        "router": truth_social_endpoint.router,
+        "prefix": "/truth-social",
+        "tags": ["truth-social"],
+        "description": "Truth Social API"
+    },
+    {
+        "router": x_posts_endpoint.router,
+        "prefix": "/x-posts",
+        "tags": ["x-posts"],
+        "description": "X Posts API"
+    },
+    
+    # 실적 관련 API
+    {
+        "router": earnings_calendar_endpoint.router,
+        "prefix": "/earnings-calendar",
+        "tags": ["earnings-calendar"],
+        "description": "실적 발표 캘린더 API"
+    },
+    {
+        "router": earnings_calendar_news_endpoint.router,
+        "prefix": "/earnings-calendar-news",
+        "tags": ["earnings-calendar-news"],
+        "description": "실적 캘린더 뉴스 API"
+    },
+    
+    # 경제 지표 API
+    {
+        "router": inflation_endpoint.router,
+        "prefix": "/inflation",
+        "tags": ["inflation"],
+        "description": "인플레이션 데이터 API"
+    },
+    {
+        "router": federal_funds_rate_endpoint.router,
+        "prefix": "/federal-funds-rate",
+        "tags": ["federal-funds-rate"],
+        "description": "연방기금금리 API"
+    },
+    {
+        "router": cpi_endpoint.router,
+        "prefix": "/cpi",
+        "tags": ["cpi"],
+        "description": "소비자물가지수 API"
+    }
+]
 
-# === 실적 캘린더 뉴스 API ===
-api_router.include_router(
-    earnings_calendar_news_endpoint.router,
-    prefix="/earnings-calendar-news",
-    tags=["earnings-calendar-news"]
-)
+# 라우터 등록
+for config in ROUTER_CONFIGS:
+    api_router.include_router(
+        config["router"],
+        prefix=config["prefix"],
+        tags=config["tags"]
+    )
 
-# === Truth Social API ===
-api_router.include_router(
-    truth_social_endpoint.router,
-    prefix="/truth-social",
-    tags=["truth-social"]
-)
 
-# === Market News API ===
-api_router.include_router(
-    market_news_endpoint.router,
-    prefix="/market-news",
-    tags=["market-news"]
-)
+# ========== API 정보 엔드포인트 ==========
 
-# === Financial News API ===
-api_router.include_router(
-    financial_news_endpoint.router,
-    prefix="/financial-news",
-    tags=["financial-news"]
-)
-
-# === Company News API ===
-api_router.include_router(
-    company_news_endpoint.router,
-    prefix="/company-news",
-    tags=["company-news"]
-)
-
-# === Market News Sentiment API ===
-api_router.include_router(
-    market_news_sentiment_endpoint.router,
-    prefix="/market-news-sentiment",
-    tags=["market-news-sentiment"]
-)
-
-# === Inflation API ===
-api_router.include_router(
-    inflation_endpoint.router,
-    prefix="/inflation",
-    tags=["inflation"]
-)
-
-# === Federal Funds Rate API ===
-api_router.include_router(
-    federal_funds_rate_endpoint.router,
-    prefix="/federal-funds-rate",
-    tags=["federal-funds-rate"]
-)
-
-# === CPI API ===
-api_router.include_router(
-    cpi_endpoint.router,
-    prefix="/cpi",
-    tags=["cpi"]
-)
-
-# API v1 정보 엔드포인트
-@api_router.get("/", tags=["API Info"])
+@api_router.get("/", tags=["API Info"], summary="API v1 정보")
 async def api_v1_info():
     """
-    API v1 정보를 반환합니다.
-    
-    현재 사용 가능한 엔드포인트 목록과 기본 정보를 제공합니다.
+    API v1 기본 정보와 사용 가능한 엔드포인트 목록을 반환합니다.
     
     Returns:
-        dict: API v1 정보 및 사용 가능한 엔드포인트 목록
+        dict: API 버전, 설명, 사용 가능한 엔드포인트 목록
     """
+    # 동적으로 엔드포인트 정보 생성
+    available_endpoints = {}
+    
+    for config in ROUTER_CONFIGS:
+        key = config["prefix"].lstrip("/")
+        available_endpoints[key] = {
+            "description": config["description"],
+            "prefix": config["prefix"],
+            "tag": config["tags"][0] if config["tags"] else None
+        }
+    
     return {
-        "message": "api v1",
+        "service": "Investment Assistant API",
         "version": "1.0.0",
-        "available_endpoints": {
-            "earnings-calendar": {
-                "description": "실적 발표 일정 캘린더 API",
-                "endpoints": [
-                    "GET /earnings-calendar/ - 실적 발표 일정 조회",
-                    "GET /earnings-calendar/today - 오늘의 실적 발표",
-                    "GET /earnings-calendar/upcoming - 다가오는 실적 발표",
-                    "GET /earnings-calendar/symbol/{symbol} - 특정 심볼의 실적 일정"
-                ]
-            },
-            "earnings-calendar-news": {
-                "description": "실적 캘린더 뉴스 API",
-                "endpoints": [
-                    "GET /earnings-calendar-news/symbol/{symbol}/report-date/{date} - 특정 실적 뉴스 조회",
-                    "GET /earnings-calendar-news/symbol/{symbol} - 기업별 실적 뉴스 조회",
-                    "GET /earnings-calendar-news/recent-summary?symbol={symbol} - 특정 기업 최근 실적 뉴스"
-                ]
-            },
-            "truth-social": {
-                "description": "Truth Social API",
-                "endpoints": [
-                    "GET /truth-social/posts - Truth Social 게시물 조회",
-                    "GET /truth-social/tags - Truth Social 태그 조회",
-                    "GET /truth-social/trends - Truth Social 트렌드 조회"
-                ]
-            },
-            "market-news": {
-                "description": "시장 뉴스 API",
-                "endpoints": [
-                    "GET /market-news/ - 뉴스 목록 조회",
-                    "GET /market-news/search - 뉴스 검색",
-                    "GET /market-news/recent - 최근 뉴스",
-                    "GET /market-news/{source}/{url} - 특정 뉴스 상세"
-                ]
-            },
-            "financial-news": {
-                "description": "금융 뉴스 API",
-                "endpoints": [
-                    "GET /financial-news/ - 뉴스 목록 조회",
-                    "GET /financial-news/search - 뉴스 검색",
-                    "GET /financial-news/recent - 최근 뉴스",
-                    "GET /financial-news/{category}/{news_id} - 특정 뉴스 상세"
-                ]
-            },
-            "company-news": {
-                "description": "기업 뉴스 API",
-                "endpoints": [
-                    "GET /company-news/trending - 트렌딩 주식 뉴스 조회",
-                    "GET /company-news/trending/category/{category} - 트렌딩 주식 뉴스 조회 (카테고리별)",
-                    "GET /company-news/symbol/{symbol} - 특정 주식 뉴스 조회",
-                ]
-            },
-            "market-news-sentiment": {
-                "description": "시장 뉴스 감성 분석 API (JSONB 기반)",
-                "endpoints": [
-                    "GET /market-news-sentiment/ - 전체 뉴스 감성 분석 조회",
-                    "GET /market-news-sentiment/latest - 최신 뉴스 (24시간)",
-                    "GET /market-news-sentiment/batch/{batch_id} - 특정 배치 뉴스",
-                    "GET /market-news-sentiment/bullish - 긍정적 뉴스",
-                    "GET /market-news-sentiment/bearish - 부정적 뉴스", 
-                    "GET /market-news-sentiment/neutral - 중립적 뉴스",
-                    "GET /market-news-sentiment/topics - 모든 주제 목록",
-                    "GET /market-news-sentiment/topic/{topic} - 주제별 뉴스",
-                    "GET /market-news-sentiment/topics/ranking - 주제별 감성 랭킹",
-                    "GET /market-news-sentiment/tickers - 모든 티커 목록",
-                    "GET /market-news-sentiment/ticker/{symbol} - 티커별 뉴스",
-                    "GET /market-news-sentiment/tickers/ranking - 티커별 감성 랭킹",
-                    "GET /market-news-sentiment/topic/{topic}/tickers - 주제↔티커 크로스 분석",
-                    "GET /market-news-sentiment/ticker/{symbol}/topics - 티커↔주제 크로스 분석",
-                    "GET /market-news-sentiment/sentiment-trends - 감정 점수 추이 (차트용)",
-                    "GET /market-news-sentiment/info - API 정보",
-                    "GET /market-news-sentiment/stats - 감성 분석 통계"
-                ]
-            },
-            "inflation": {
-                "description": "인플레이션 데이터 API",
-                "endpoints": [
-                    "GET /inflation/ - 전체 인플레이션 데이터 조회",
-                    "GET /inflation/chart - 인플레이션 차트 데이터",
-                    "GET /inflation/recent - 최근 인플레이션 데이터",
-                    "GET /inflation/year/{year} - 특정 연도 인플레이션 데이터",
-                    "GET /inflation/statistics - 인플레이션 통계 정보",
-                    "GET /inflation/range - 지정 범위의 인플레이션 데이터"
-                ]
-            },
-            "federal-funds-rate": {
-                "description": "연방기금금리 API",
-                "endpoints": [
-                    "GET /federal-funds-rate/ - 전체 연방기금금리 데이터 조회",
-                    "GET /federal-funds-rate/chart - 연방기금금리 차트 데이터",
-                    "GET /federal-funds-rate/recent - 최근 연방기금금리 데이터",
-                    "GET /federal-funds-rate/statistics - 연방기금금리 통계 정보",
-                    "GET /federal-funds-rate/trend - 연방기금금리 트렌드 분석"
-                ]
-            },
-            "cpi": {
-                "description": "소비자물가지수 API",
-                "endpoints": [
-                    "GET /cpi/ - 전체 CPI 데이터 조회",
-                    "GET /cpi/chart - 소비자물가지수 차트 데이터",
-                    "GET /cpi/recent - 최근 CPI 데이터",
-                    "GET /cpi/year/{year} - 특정 연도 CPI 데이터",
-                    "GET /cpi/statistics - CPI 통계 정보",
-                    "GET /cpi/inflation-analysis - CPI 인플레이션 분석",
-                    "GET /cpi/compare - CPI 기간별 비교",
-                    "GET /cpi/month/{year}/{month} - 특정월 CPI 상세 정보"
-                ]
-            }
+        "description": "투자 도우미 서비스의 메인 API",
+        "total_endpoints": len(ROUTER_CONFIGS),
+        "categories": {
+            "뉴스": ["market-news", "financial-news", "company-news", "market-news-sentiment"],
+            "소셜미디어": ["truth-social", "x-posts"], 
+            "실적정보": ["earnings-calendar", "earnings-calendar-news"],
+            "경제지표": ["inflation", "federal-funds-rate", "cpi"]
         },
+        "available_endpoints": available_endpoints,
         "documentation": {
-            "swagger": "/docs",
-            "redoc": "/redoc"
+            "swagger_ui": "/docs",
+            "redoc": "/redoc",
+            "openapi_json": "/openapi.json"
         }
     }
 
-# API 통계 엔드포인트 (선택적)
-@api_router.get("/stats", tags=["API Info"])
+
+@api_router.get("/health", tags=["API Info"], summary="API 상태 확인")
+async def health_check():
+    """
+    API 서버의 상태를 확인합니다.
+    
+    Returns:
+        dict: API 상태 정보
+    """
+    return {
+        "status": "healthy",
+        "service": "investment-assistant-api",
+        "version": "1.0.0",
+        "uptime": "operational"
+    }
+
+
+@api_router.get("/stats", tags=["API Info"], summary="API 통계 정보")
 async def api_stats():
     """
-    API 사용 통계를 반환합니다.
-    
-    현재는 기본 정보만 제공하며, 향후 실제 사용량 통계를 추가할 예정입니다.
+    API 사용 통계 및 구성 정보를 반환합니다.
     
     Returns:
-        dict: API 통계 정보
+        dict: API 구성 통계 및 기능 정보
     """
     return {
-        "total_endpoints": 6,
-        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news", "company-news", "market-news-sentiment", "inflation", "federal-funds-rate"],
-        "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers"],
-        "database_tables": {
-            "earnings_calendar": "실적 발표 일정",
-            "earnings_calendar_news": "실적 관련 뉴스",
-            "truth_social_posts": "Truth Social 게시물",
-            "financial_news": "Finnhub 금융 뉴스",
-            "market_news": "News API 뉴스",
-            "company_news": "Finnhub 기업 뉴스",
-            "market_news_sentiment": "시장 뉴스 감성 분석 (JSONB)"
+        "api_summary": {
+            "total_routers": len(ROUTER_CONFIGS),
+            "categories": {
+                "뉴스_관련": 4,
+                "소셜미디어": 2, 
+                "실적_정보": 2,
+                "경제_지표": 3
+            }
+        },
+        "implemented_domains": [config["prefix"].lstrip("/") for config in ROUTER_CONFIGS],
+        "planned_features": [
+            "crypto-prices",
+            "stock-analysis", 
+            "portfolio-management",
+            "risk-assessment"
+        ],
+        "database_integration": {
+            "postgresql": "메인 데이터베이스",
+            "jsonb_support": "복합 데이터 처리",
+            "time_series": "시계열 데이터 최적화"
         },
         "api_features": {
-            "market-news-sentiment": {
-                "total_endpoints": 17,
-                "features": [
-                    "JSONB 기반 복합 데이터 처리",
-                    "주제별/티커별 감성 분석",
-                    "실시간 감성 랭킹",
-                    "크로스 분석 (주제↔티커)",
-                    "프론트엔드 차트용 추이 데이터",
-                    "다양한 필터링 옵션"
-                ]
-            }
+            "pagination": "모든 목록 API에서 지원",
+            "filtering": "다양한 필터링 옵션",
+            "sorting": "정렬 기능 지원",
+            "real_time": "실시간 데이터 업데이트",
+            "sentiment_analysis": "뉴스 감성 분석"
         }
     }
 
-@api_router.get("/test", tags=["API TEST"])
-async def test():
-    return {"message": "API v1 test"}
+
+# 개발/테스트용 엔드포인트
+@api_router.get("/test", tags=["Development"], summary="API 테스트")
+async def api_test():
+    """
+    API 연결 테스트용 엔드포인트입니다.
+    
+    Returns:
+        dict: 테스트 응답 메시지
+    """
+    return {
+        "message": "API v1 연결 테스트 성공",
+        "timestamp": "2025-01-27",
+        "status": "ok"
+    }

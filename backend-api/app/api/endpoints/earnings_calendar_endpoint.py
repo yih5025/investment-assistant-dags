@@ -11,8 +11,15 @@ from app.schemas.earnings_calendar_schema import (
 from app.services.earnings_calendar_service import EarningsCalendarService
 from app.dependencies import get_db
 
-# 실적 캘린더 전용 라우터 생성
-router = APIRouter()
+# 실적 캘린더 라우터 생성
+router = APIRouter(
+    tags=["Earnings Calendar"],
+    responses={
+        404: {"description": "요청한 실적 데이터를 찾을 수 없습니다"},
+        422: {"description": "잘못된 요청 파라미터"},
+        500: {"description": "서버 내부 오류"}
+    }
+)
 
 @router.get(
     "/",

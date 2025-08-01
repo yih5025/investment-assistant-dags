@@ -11,10 +11,17 @@ from app.schemas.company_news_schema import (
 )
 from app.services.company_news_service import CompanyNewsService
 
-# 라우터 생성
-router = APIRouter()
+# Company News 라우터 생성
+router = APIRouter(
+    tags=["Company News"],
+    responses={
+        404: {"description": "요청한 기업 뉴스 데이터를 찾을 수 없습니다"},
+        422: {"description": "잘못된 요청 파라미터"},
+        500: {"description": "서버 내부 오류"}
+    }
+)
 
-@router.get("/trending", response_model=TrendingNewsResponse)
+@router.get("/trending", response_model=TrendingNewsResponse, summary="트렌딩 주식 뉴스 조회")
 async def get_trending_news(
     db: Session = Depends(get_db),
     days: int = Query(3, ge=1, le=7, description="뉴스 조회 기간 (1-7일)"),
@@ -22,30 +29,40 @@ async def get_trending_news(
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    트렌딩 주식의 뉴스를 조회합니다 (전체 통합).
+    **트렌딩 주식의 뉴스를 조회합니다.**
     
-    최신 batch_id의 모든 트렌딩 주식(50개)에 대한 뉴스를 조회합니다.
-    - top_gainers: 상승 주식 (~20개)
-    - top_losers: 하락 주식 (~10개)  
-    - most_actively_traded: 활발한 주식 (~20개)
+    최신 batch_id의 모든 트렌딩 주식(50개)에 대한 뉴스를 통합 조회합니다.
     
-    Args:
-        days: 뉴스 조회 기간 (기본 3일)
-        limit: 각 심볼당 최대 뉴스 개수 (기본 20개)
-        offset: 페이징 오프셋
-        
-    Returns:
-        TrendingNewsResponse: 배치 정보 + 카테고리 요약 + 주식별 뉴스
+    ### 포함 카테고리:
+    - **top_gainers**: 상승 주식 (~20개)
+    - **top_losers**: 하락 주식 (~10개)  
+    - **most_actively_traded**: 활발한 주식 (~20개)
+    
+    ### 파라미터:
+    - **days**: 뉴스 조회 기간 (1-7일, 기본 3일)
+    - **limit**: 각 심볼당 최대 뉴스 개수 (기본 20개)
+    - **offset**: 페이징 오프셋
+    
+    ### 응답:
+    - 배치 정보 + 카테고리 요약 + 주식별 뉴스 목록
     """
-    service = CompanyNewsService(db)
-    
-    # 트렌딩 뉴스 조회
-    batch_info, stocks_with_news = service.get_trending_news(days, limit, offset)
-    
-    if not batch_info:
+    try:
+        service = CompanyNewsService(db)
+        
+        # 트렌딩 뉴스 조회
+        batch_info, stocks_with_news = service.get_trending_news(days, limit, offset)
+        
+        if not batch_info:
+            raise HTTPException(
+                status_code=404, 
+                detail="트렌딩 데이터를 찾을 수 없습니다. top_gainers 테이블을 확인해주세요."
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=404, 
-            detail="트렌딩 데이터를 찾을 수 없습니다. top_gainers 테이블을 확인해주세요."
+            status_code=500,
+            detail=f"트렌딩 뉴스 조회 중 오류가 발생했습니다: {str(e)}"
         )
     
     # 카테고리별 요약 생성

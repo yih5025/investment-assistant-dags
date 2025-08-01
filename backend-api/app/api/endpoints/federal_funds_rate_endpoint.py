@@ -40,52 +40,90 @@ async def get_federal_funds_rate_list(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/chart", response_model=FederalFundsRateChartResponse)
+@router.get("/chart", response_model=FederalFundsRateChartResponse, summary="연방기금금리 차트 데이터 조회")
 async def get_federal_funds_rate_chart_data(db: Session = Depends(get_db)):
     """
-    연방기금금리 차트용 데이터
+    **연방기금금리 차트 시각화용 데이터를 조회합니다.**
     
-    프론트엔드 그래프 최적화 형태:
-    - 월별 금리 데이터
+    프론트엔드 그래프에 최적화된 형태로 데이터를 제공합니다.
+    
+    ### 포함 데이터:
+    - 월별 연방기금금리 데이터
     - 현재 금리 및 트렌드 정보
     - 전월 대비 변화량
     - 12개월 평균, 최고/최저값
+    
+    ### 응답:
+    - 차트용 최적화된 연방기금금리 데이터
     """
     try:
         service = FederalFundsRateService(db)
-        return service.get_chart_data()
+        result = service.get_chart_data()
+        
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="차트용 연방기금금리 데이터를 찾을 수 없습니다"
+            )
+        
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"연방기금금리 차트 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
-@router.get("/recent", response_model=FederalFundsRateListResponse)
+@router.get("/recent", response_model=FederalFundsRateListResponse, summary="최근 연방기금금리 데이터 조회")
 async def get_recent_federal_funds_rate(
-    months: int = Query(12, ge=1, le=60, description="조회할 개월 수 (1-60)"),
+    months: int = Query(12, ge=1, le=60, description="조회할 개월 수 (1-60개월)"),
     db: Session = Depends(get_db)
 ):
     """
-    최근 N개월 연방기금금리 조회
+    **최근 N개월의 연방기금금리 데이터를 조회합니다.**
     
-    Args:
-        months: 조회할 개월 수 (1~60개월, 기본값: 12개월)
+    ### 파라미터:
+    - **months**: 조회할 개월 수 (1~60개월, 기본값: 12개월)
+    
+    ### 응답:
+    - 최근 N개월의 연방기금금리 데이터 목록
     """
     try:
         service = FederalFundsRateService(db)
         data = service.get_recent_months(months)
         
+        if not data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"최근 {months}개월의 연방기금금리 데이터를 찾을 수 없습니다"
+            )
+        
         return FederalFundsRateListResponse(
             total_count=len(data),
             items=data
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"최근 연방기금금리 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
-@router.get("/statistics", response_model=FederalFundsRateStatsResponse)
+@router.get("/statistics", response_model=FederalFundsRateStatsResponse, summary="연방기금금리 통계 정보 조회")
 async def get_federal_funds_rate_statistics(db: Session = Depends(get_db)):
     """
-    연방기금금리 통계 정보
+    **연방기금금리 통계 정보를 조회합니다.**
     
-    Returns:
-        현재 금리, 전월 대비 변화, 트렌드, 12개월 통계 등
+    ### 포함 정보:
+    - 현재 연방기금금리
+    - 전월 대비 변화율
+    - 트렌드 분석
+    - 12개월 통계 (평균, 최고/최저값)
+    
+    ### 응답:
+    - 종합적인 연방기금금리 통계 정보
     """
     try:
         service = FederalFundsRateService(db)

@@ -2,84 +2,132 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from ...dependencies import get_db
-from ...services.inflation_service import InflationService
-from ...schemas.inflation_schema import (
+from app.dependencies import get_db
+from app.services.inflation_service import InflationService
+from app.schemas.inflation_schema import (
     InflationResponse,
     InflationListResponse,
     InflationChartResponse,
     InflationStatsResponse
 )
 
-router = APIRouter()
+# Inflation 라우터 생성
+router = APIRouter(
+    tags=["Inflation"],
+    responses={
+        404: {"description": "요청한 인플레이션 데이터를 찾을 수 없습니다"},
+        422: {"description": "잘못된 요청 파라미터"},
+        500: {"description": "서버 내부 오류"}
+    }
+)
 
-@router.get("/", response_model=InflationListResponse)
+@router.get("/", response_model=InflationListResponse, summary="인플레이션 전체 데이터 조회")
 async def get_inflation_list(
-    order_by: str = Query("desc", description="정렬 순서 (desc/asc)"),
+    order_by: str = Query("desc", regex="^(desc|asc)$", description="정렬 순서"),
     db: Session = Depends(get_db)
 ):
     """
-    인플레이션 전체 데이터 조회
+    **인플레이션 전체 데이터를 조회합니다.**
     
-    Args:
-        order_by: 정렬 순서 ('desc': 최신순, 'asc': 과거순)
-        
-    Returns:
-        전체 인플레이션 데이터 목록
+    미국의 연간 인플레이션율 데이터를 제공합니다.
+    
+    ### 파라미터:
+    - **order_by**: 정렬 순서 ('desc': 최신순, 'asc': 과거순)
+    
+    ### 응답:
+    - 전체 인플레이션 데이터 목록과 총 개수
     """
     try:
         service = InflationService(db)
         inflation_data = service.get_all_inflation_data(order_by=order_by)
         
+        if not inflation_data:
+            raise HTTPException(
+                status_code=404,
+                detail="인플레이션 데이터를 찾을 수 없습니다"
+            )
+        
         return InflationListResponse(
             total_count=len(inflation_data),
             items=inflation_data
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"데이터 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"인플레이션 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
-@router.get("/chart", response_model=InflationChartResponse)
+@router.get("/chart", response_model=InflationChartResponse, summary="인플레이션 차트 데이터 조회")
 async def get_inflation_chart_data(db: Session = Depends(get_db)):
     """
-    차트 시각화용 인플레이션 데이터
+    **인플레이션 차트 시각화용 데이터를 조회합니다.**
     
-    프론트엔드에서 그래프 그리기 최적화된 형태:
-    - 연도와 비율만 포함
-    - 통계 정보 포함 (최신값, 평균, 최고/최저값)
+    프론트엔드 그래프 최적화 형태로 데이터를 제공합니다.
     
-    Returns:
-        차트용 데이터 + 통계 정보
+    ### 포함 데이터:
+    - 연도별 인플레이션율
+    - 통계 정보 (최신값, 평균, 최고/최저값)
+    - 차트 렌더링 최적화 구조
+    
+    ### 응답:
+    - 차트용 최적화된 인플레이션 데이터
     """
     try:
         service = InflationService(db)
-        return service.get_chart_data()
+        result = service.get_chart_data()
+        
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="차트용 인플레이션 데이터를 찾을 수 없습니다"
+            )
+        
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"차트 데이터 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"인플레이션 차트 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
-@router.get("/recent", response_model=InflationListResponse)
+@router.get("/recent", response_model=InflationListResponse, summary="최근 인플레이션 데이터 조회")
 async def get_recent_inflation(
-    years: int = Query(10, ge=1, le=20, description="조회할 연수 (1-20)"),
+    years: int = Query(10, ge=1, le=20, description="조회할 연수 (1-20년)"),
     db: Session = Depends(get_db)
 ):
     """
-    최근 N년 인플레이션 데이터 조회
+    **최근 N년의 인플레이션 데이터를 조회합니다.**
     
-    Args:
-        years: 조회할 연수 (1~20년, 기본값: 10년)
-        
-    Returns:
-        최근 N년 인플레이션 데이터
+    ### 파라미터:
+    - **years**: 조회할 연수 (1~20년, 기본값: 10년)
+    
+    ### 응답:
+    - 최근 N년의 인플레이션 데이터 목록
     """
     try:
         service = InflationService(db)
         inflation_data = service.get_recent_years(years)
         
+        if not inflation_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"최근 {years}년의 인플레이션 데이터를 찾을 수 없습니다"
+            )
+        
         return InflationListResponse(
             total_count=len(inflation_data),
             items=inflation_data
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"최근 데이터 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"최근 인플레이션 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
 @router.get("/year/{year}", response_model=InflationResponse)
 async def get_inflation_by_year(
@@ -111,13 +159,19 @@ async def get_inflation_by_year(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"연도별 데이터 조회 실패: {str(e)}")
 
-@router.get("/statistics", response_model=InflationStatsResponse)
+@router.get("/statistics", response_model=InflationStatsResponse, summary="인플레이션 통계 정보 조회")
 async def get_inflation_statistics(db: Session = Depends(get_db)):
     """
-    인플레이션 통계 정보
+    **인플레이션 통계 정보를 조회합니다.**
     
-    Returns:
-        최신값, 평균, 최고/최저값, 전체 연수 등 통계 정보
+    ### 포함 정보:
+    - 최신 인플레이션율
+    - 평균, 최고/최저값
+    - 전체 데이터 연수
+    - 트렌드 분석
+    
+    ### 응답:
+    - 종합적인 인플레이션 통계 정보
     """
     try:
         service = InflationService(db)

@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import asc
 
+from app.dependencies import get_db
 from app.models.cpi_model import CPI
-from ...dependencies import get_db
-from ...services.cpi_service import CPIService
-from ...schemas.cpi_schema import (
+from app.services.cpi_service import CPIService
+from app.schemas.cpi_schema import (
     CPIResponse,
     CPIListResponse,
     CPIChartResponse,
@@ -16,87 +16,162 @@ from ...schemas.cpi_schema import (
     CPIMonthlyDetailResponse
 )
 
-router = APIRouter()
+# CPI 라우터 생성
+router = APIRouter(
+    tags=["CPI"],
+    responses={
+        404: {"description": "요청한 CPI 데이터를 찾을 수 없습니다"},
+        422: {"description": "잘못된 요청 파라미터"},
+        500: {"description": "서버 내부 오류"}
+    }
+)
 
-@router.get("/", response_model=CPIListResponse)
+@router.get("/", response_model=CPIListResponse, summary="CPI 전체 데이터 조회")
 async def get_cpi_list(
-    order_by: str = Query("desc", regex="^(desc|asc)$"),
+    order_by: str = Query("desc", regex="^(desc|asc)$", description="정렬 순서"),
     db: Session = Depends(get_db)
 ):
     """
-    소비자물가지수(CPI) 전체 데이터 조회
+    **소비자물가지수(CPI) 전체 데이터를 조회합니다.**
     
-    미국 도시 소비자들의 상품/서비스 가격 변화를 측정하는 지수
+    미국 도시 소비자들의 상품/서비스 가격 변화를 측정하는 지수입니다.
+    
+    ### 주요 특징:
     - 월별 데이터 제공
     - 인플레이션 측정의 핵심 지표
     - 기준: 1982-1984년 = 100
     
-    Args:
-        order_by: 정렬 순서 ('desc': 최신순, 'asc': 과거순)
+    ### 파라미터:
+    - **order_by**: 정렬 순서 ('desc': 최신순, 'asc': 과거순)
+    
+    ### 응답:
+    - 전체 CPI 데이터 목록과 총 개수
     """
     try:
         service = CPIService(db)
         data = service.get_all_cpi_data(order_by=order_by)
         
-        return CPIListResponse(
-            total_count=len(data),
-            items=data
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/chart", response_model=CPIChartResponse)
-async def get_cpi_chart_data(db: Session = Depends(get_db)):
-    """
-    CPI 차트용 데이터
-    
-    프론트엔드 그래프 최적화 형태:
-    - 월별 CPI 값 및 인플레이션율
-    - 전월 대비 변화율
-    - 연간 인플레이션율 (전년 동월 대비)
-    - 12개월 평균, 최고/최저값
-    """
-    try:
-        service = CPIService(db)
-        return service.get_chart_data()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/recent", response_model=CPIListResponse)
-async def get_recent_cpi(
-    months: int = Query(12, ge=1, le=60, description="조회할 개월 수 (1-60)"),
-    db: Session = Depends(get_db)
-):
-    """
-    최근 N개월 CPI 조회
-    
-    Args:
-        months: 조회할 개월 수 (1~60개월, 기본값: 12개월)
-    """
-    try:
-        service = CPIService(db)
-        data = service.get_recent_months(months)
+        if not data:
+            raise HTTPException(
+                status_code=404, 
+                detail="CPI 데이터를 찾을 수 없습니다"
+            )
         
         return CPIListResponse(
             total_count=len(data),
             items=data
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, 
+            detail=f"CPI 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
-@router.get("/statistics", response_model=CPIStatsResponse)
-async def get_cpi_statistics(db: Session = Depends(get_db)):
+@router.get("/chart", response_model=CPIChartResponse, summary="CPI 차트 데이터 조회")
+async def get_cpi_chart_data(db: Session = Depends(get_db)):
     """
-    CPI 통계 정보
+    **CPI 차트 시각화용 데이터를 조회합니다.**
     
-    Returns:
-        현재 CPI, 전월 대비 변화, 연간 인플레이션율, 트렌드 등
+    프론트엔드 그래프 최적화 형태로 데이터를 제공합니다.
+    
+    ### 포함 데이터:
+    - 월별 CPI 값 및 인플레이션율
+    - 전월 대비 변화율
+    - 연간 인플레이션율 (전년 동월 대비)
+    - 12개월 평균, 최고/최저값
+    
+    ### 응답:
+    - 차트용 최적화된 CPI 데이터
     """
     try:
         service = CPIService(db)
-        return service.get_statistics()
+        result = service.get_chart_data()
+        
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="차트용 CPI 데이터를 찾을 수 없습니다"
+            )
+        
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"CPI 차트 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.get("/recent", response_model=CPIListResponse, summary="최근 CPI 데이터 조회")
+async def get_recent_cpi(
+    months: int = Query(12, ge=1, le=60, description="조회할 개월 수 (1-60개월)"),
+    db: Session = Depends(get_db)
+):
+    """
+    **최근 N개월의 CPI 데이터를 조회합니다.**
+    
+    ### 파라미터:
+    - **months**: 조회할 개월 수 (1~60개월, 기본값: 12개월)
+    
+    ### 응답:
+    - 최근 N개월의 CPI 데이터 목록
+    """
+    try:
+        service = CPIService(db)
+        data = service.get_recent_months(months)
+        
+        if not data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"최근 {months}개월의 CPI 데이터를 찾을 수 없습니다"
+            )
+        
+        return CPIListResponse(
+            total_count=len(data),
+            items=data
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"최근 CPI 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.get("/statistics", response_model=CPIStatsResponse, summary="CPI 통계 정보 조회")
+async def get_cpi_statistics(db: Session = Depends(get_db)):
+    """
+    **CPI 통계 정보를 조회합니다.**
+    
+    ### 포함 정보:
+    - 현재 CPI 값
+    - 전월 대비 변화율
+    - 연간 인플레이션율
+    - 트렌드 분석
+    
+    ### 응답:
+    - 종합적인 CPI 통계 정보
+    """
+    try:
+        service = CPIService(db)
+        result = service.get_statistics()
+        
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail="CPI 통계 정보를 찾을 수 없습니다"
+            )
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"CPI 통계 정보 조회 중 오류가 발생했습니다: {str(e)}"
+        )
 
 @router.get("/inflation-analysis", response_model=CPIInflationAnalysis)
 async def get_cpi_inflation_analysis(db: Session = Depends(get_db)):

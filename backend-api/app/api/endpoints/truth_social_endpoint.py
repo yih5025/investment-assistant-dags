@@ -20,7 +20,15 @@ from app.schemas.truth_social_schema import (
 )
 from ...schemas.common import APIResponse
 
-router = APIRouter()
+# Truth Social 라우터 생성
+router = APIRouter(
+    tags=["Truth Social"],
+    responses={
+        404: {"description": "요청한 Truth Social 데이터를 찾을 수 없습니다"},
+        422: {"description": "잘못된 요청 파라미터"},
+        500: {"description": "서버 내부 오류"}
+    }
+)
 
 
 # ==================== Truth Social Posts API ====================

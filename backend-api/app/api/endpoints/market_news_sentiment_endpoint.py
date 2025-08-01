@@ -21,8 +21,15 @@ from app.schemas.market_news_sentiment_schema import (
 )
 from app.services.market_news_sentiment_service import MarketNewsSentimentService
 
-# 라우터 생성
-router = APIRouter()
+# Market News Sentiment 라우터 생성
+router = APIRouter(
+    tags=["Market News Sentiment"],
+    responses={
+        404: {"description": "요청한 뉴스 감성 분석 데이터를 찾을 수 없습니다"},
+        422: {"description": "잘못된 요청 파라미터"},
+        500: {"description": "서버 내부 오류"}
+    }
+)
 
 # =============================================================================
 # 기본 뉴스 조회 API
