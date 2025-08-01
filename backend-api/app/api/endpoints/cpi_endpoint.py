@@ -187,8 +187,8 @@ async def compare_cpi_periods(
 
 @router.get("/year/{year}", response_model=CPIListResponse)
 async def get_cpi_by_year(
-   year: int = Query(..., ge=1900, le=2100, description="조회할 연도"),
-   db: Session = Depends(get_db)
+    year: int,
+    db: Session = Depends(get_db)
 ):
    """
    특정 연도의 CPI 데이터 조회
@@ -243,8 +243,8 @@ async def get_cpi_by_year(
 
 @router.get("/month/{year}/{month}", response_model=CPIMonthlyDetailResponse)
 async def get_cpi_monthly_detail(
-    year: int = Query(..., ge=1900, le=2100, description="연도"),
-    month: int = Query(..., ge=1, le=12, description="월 (1-12)"),
+    year: int,
+    month: int,
     db: Session = Depends(get_db)
 ):
     """
