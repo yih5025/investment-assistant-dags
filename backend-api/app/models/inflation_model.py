@@ -13,7 +13,7 @@ class Inflation(BaseModel):
     date = Column(Date, primary_key=True, nullable=False)
     
     # 인플레이션율 (예: 2.950 = 2.95%)
-    inflation_rate = Column(Numeric(6,3), nullable=True)
+    inflation_rate = Column(Numeric, nullable=True)
     
     # 데이터 간격 유형 (기본값: 'annual')
     interval_type = Column(Text, default='annual')
