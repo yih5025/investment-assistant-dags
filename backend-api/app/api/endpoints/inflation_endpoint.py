@@ -83,7 +83,7 @@ async def get_recent_inflation(
 
 @router.get("/year/{year}", response_model=InflationResponse)
 async def get_inflation_by_year(
-    year: int = Query(..., ge=1900, le=2100, description="조회할 연도"),
+    year: int,
     db: Session = Depends(get_db)
 ):
     """
