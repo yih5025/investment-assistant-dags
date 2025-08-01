@@ -9,6 +9,7 @@ from .endpoints import financial_news_endpoint
 from .endpoints import company_news_endpoint
 from .endpoints import market_news_sentiment_endpoint
 from .endpoints import inflation_endpoint
+from .endpoints import federal_funds_rate_endpoint
 
 # API v1 메인 라우터 생성
 api_router = APIRouter()
@@ -67,6 +68,13 @@ api_router.include_router(
     inflation_endpoint.router,
     prefix="/inflation",
     tags=["inflation"]
+)
+
+# === Federal Funds Rate API ===
+api_router.include_router(
+    federal_funds_rate_endpoint.router,
+    prefix="/federal-funds-rate",
+    tags=["federal-funds-rate"]
 )
 
 # API v1 정보 엔드포인트
@@ -167,6 +175,16 @@ async def api_v1_info():
                     "GET /inflation/statistics - 인플레이션 통계 정보",
                     "GET /inflation/range - 지정 범위의 인플레이션 데이터"
                 ]
+            },
+            "federal-funds-rate": {
+                "description": "연방기금금리 API",
+                "endpoints": [
+                    "GET /federal-funds-rate/ - 전체 연방기금금리 데이터 조회",
+                    "GET /federal-funds-rate/chart - 연방기금금리 차트 데이터",
+                    "GET /federal-funds-rate/recent - 최근 연방기금금리 데이터",
+                    "GET /federal-funds-rate/statistics - 연방기금금리 통계 정보",
+                    "GET /federal-funds-rate/trend - 연방기금금리 트렌드 분석"
+                ]
             }
         },
         "documentation": {
@@ -188,7 +206,7 @@ async def api_stats():
     """
     return {
         "total_endpoints": 6,
-        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news", "company-news", "market-news-sentiment", "inflation"],
+        "implemented_domains": ["earnings-calendar", "earnings-calendar-news", "truth-social", "market-news", "financial-news", "company-news", "market-news-sentiment", "inflation", "federal-funds-rate"],
         "planned_domains": ["crypto-prices", "crypto-markets", "stocks-trades", "stocks-gainers"],
         "database_tables": {
             "earnings_calendar": "실적 발표 일정",
