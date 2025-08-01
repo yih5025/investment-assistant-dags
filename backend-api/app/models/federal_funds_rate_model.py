@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Date, Numeric, Text
-from .base import Base
+from .base import BaseModel
 
-class FederalFundsRate(Base):
+class FederalFundsRate(BaseModel):
     """
     연방기금금리 (Federal Funds Rate) 모델
     - 미국 연준(Fed)에서 설정하는 기준금리
