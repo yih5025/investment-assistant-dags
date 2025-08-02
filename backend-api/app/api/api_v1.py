@@ -12,7 +12,8 @@ from .endpoints import (
     inflation_endpoint,
     federal_funds_rate_endpoint,
     cpi_endpoint,
-    x_posts_endpoint
+    x_posts_endpoint,
+    balance_sheet_endpoint
 )
 
 # API v1 메인 라우터 생성
@@ -92,6 +93,14 @@ ROUTER_CONFIGS = [
         "prefix": "/cpi",
         "tags": ["cpi"],
         "description": "소비자물가지수 API"
+    },
+
+    # 재무제표 API
+    {
+        "router": balance_sheet_endpoint.router,
+        "prefix": "/balance-sheet",
+        "tags": ["balance-sheet"],
+        "description": "재무제표 API"
     }
 ]
 
