@@ -143,7 +143,8 @@ async def api_v1_info():
             "뉴스": ["market-news", "financial-news", "company-news", "market-news-sentiment"],
             "소셜미디어": ["truth-social", "x-posts"], 
             "실적정보": ["earnings-calendar", "earnings-calendar-news"],
-            "경제지표": ["inflation", "federal-funds-rate", "cpi"]
+            "경제지표": ["inflation", "federal-funds-rate", "cpi"],
+            "재무제표": ["balance-sheet"]
         },
         "available_endpoints": available_endpoints,
         "documentation": {
@@ -185,7 +186,8 @@ async def api_stats():
                 "뉴스_관련": 4,
                 "소셜미디어": 2, 
                 "실적_정보": 2,
-                "경제_지표": 3
+                "경제_지표": 3,
+                "재무제표": 1
             }
         },
         "implemented_domains": [config["prefix"].lstrip("/") for config in ROUTER_CONFIGS],
