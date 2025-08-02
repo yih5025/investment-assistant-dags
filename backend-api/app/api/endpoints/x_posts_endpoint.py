@@ -65,7 +65,7 @@ async def get_posts_list(
     posts, total_count = service.get_posts_list(request)
     
     return XPostListResponse(
-        items=[XPostBasic.from_orm(post) for post in posts],
+        items=[XPostBasic.model_validate(post) for post in posts],
         total_count=total_count,
         limit=limit,
         offset=offset,
@@ -93,7 +93,7 @@ async def get_recent_posts(
     service = XPostsService(db)
     posts = service.get_recent_posts(limit=limit, category=category)
     
-    return [XPostBasic.from_orm(post) for post in posts]
+    return [XPostBasic.model_validate(post) for post in posts]
 
 
 @router.get("/categories/{category}/", response_model=XPostListResponse, summary="카테고리별 포스트 조회")
@@ -118,7 +118,7 @@ async def get_posts_by_category(
     posts, total_count = service.get_posts_by_category(category, limit=limit, offset=offset)
     
     return XPostListResponse(
-        items=[XPostBasic.from_orm(post) for post in posts],
+        items=[XPostBasic.model_validate(post) for post in posts],
         total_count=total_count,
         limit=limit,
         offset=offset,
@@ -163,7 +163,7 @@ async def get_user_posts(
         raise HTTPException(status_code=404, detail=f"사용자 '{username}'을 찾을 수 없습니다.")
     
     return XPostListResponse(
-        items=[XPostBasic.from_orm(post) for post in posts],
+        items=[XPostBasic.model_validate(post) for post in posts],
         total_count=total_count,
         limit=limit,
         offset=offset,
@@ -193,7 +193,7 @@ async def get_user_recent_posts(
     if not posts:
         raise HTTPException(status_code=404, detail=f"사용자 '{username}'의 포스트를 찾을 수 없습니다.")
     
-    return [XPostBasic.from_orm(post) for post in posts]
+    return [XPostBasic.model_validate(post) for post in posts]
 
 
 @router.get("/categories/{category}/users/", response_model=CategoryUsersResponse, summary="카테고리별 사용자 目록")
@@ -247,7 +247,7 @@ async def get_most_liked_posts(
     posts = service.get_ranking_posts('most-liked', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.from_orm(post) for post in posts],
+        items=[XPostDetailed.model_validate(post) for post in posts],
         ranking_type="most-liked",
         period=period,
         total_count=len(posts)
@@ -268,7 +268,7 @@ async def get_most_retweeted_posts(
     posts = service.get_ranking_posts('most-retweeted', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.from_orm(post) for post in posts],
+        items=[XPostDetailed.model_validate(post) for post in posts],
         ranking_type="most-retweeted", 
         period=period,
         total_count=len(posts)
@@ -289,7 +289,7 @@ async def get_most_replied_posts(
     posts = service.get_ranking_posts('most-replied', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.from_orm(post) for post in posts],
+        items=[XPostDetailed.model_validate(post) for post in posts],
         ranking_type="most-replied",
         period=period,
         total_count=len(posts)
@@ -310,7 +310,7 @@ async def get_most_quoted_posts(
     posts = service.get_ranking_posts('most-quoted', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.from_orm(post) for post in posts],
+        items=[XPostDetailed.model_validate(post) for post in posts],
         ranking_type="most-quoted",
         period=period,
         total_count=len(posts)
@@ -331,7 +331,7 @@ async def get_most_bookmarked_posts(
     posts = service.get_ranking_posts('most-bookmarked', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.from_orm(post) for post in posts],
+        items=[XPostDetailed.model_validate(post) for post in posts],
         ranking_type="most-bookmarked",
         period=period,
         total_count=len(posts)
@@ -352,7 +352,7 @@ async def get_most_viewed_posts(
     posts = service.get_ranking_posts('most-viewed', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.from_orm(post) for post in posts],
+        items=[XPostDetailed.model_validate(post) for post in posts],
         ranking_type="most-viewed",
         period=period,
         total_count=len(posts)
@@ -382,7 +382,7 @@ async def get_most_engaged_posts(
     posts = service.get_ranking_posts('most-engaged', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.from_orm(post) for post in posts],
+        items=[XPostDetailed.model_validate(post) for post in posts],
         ranking_type="most-engaged",
         period=period,
         total_count=len(posts)
@@ -425,7 +425,7 @@ async def search_posts(
     posts, total_count = service.search_posts(request)
     
     return XPostListResponse(
-        items=[XPostBasic.from_orm(post) for post in posts],
+        items=[XPostBasic.model_validate(post) for post in posts],
         total_count=total_count,
         limit=limit,
         offset=0,
@@ -464,7 +464,7 @@ async def search_mentions(
             detail=f"'{username}' 사용자에 대한 멘션을 찾을 수 없습니다."
         )
     
-    return [XPostBasic.from_orm(post) for post in posts]
+    return [XPostBasic.model_validate(post) for post in posts]
 
 
 # ===== 통계 API =====
