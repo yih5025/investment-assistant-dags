@@ -35,9 +35,13 @@ def get_db() -> Generator[Session, None, None]:
     except Exception as e:
         # 세션에서 예외 발생 시 롤백
         db.rollback()
+        # 임시 디버깅: 실제 에러 내용 노출
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Database error in get_db(): {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="데이터베이스 연결 중 오류가 발생했습니다."
+            detail=f"데이터베이스 연결 중 오류가 발생했습니다: {str(e)}"
         )
     finally:
         # 항상 세션 종료
