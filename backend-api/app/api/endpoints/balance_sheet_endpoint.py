@@ -10,8 +10,8 @@ from app.schemas.balance_sheet_schema import (
     BalanceSheetTrends, BalanceSheetStatistics, PeriodBalanceSheetResponse
 )
 
-# 라우터 생성
-router = APIRouter(prefix="/balance-sheet", tags=["Balance Sheet"])
+# 라우터 생성 (prefix는 api_v1.py에서 설정됨)
+router = APIRouter(tags=["Balance Sheet"])
 
 @router.get("/", response_model=BalanceSheetListResponse)
 async def get_balance_sheets(
