@@ -247,7 +247,7 @@ async def get_most_liked_posts(
     posts = service.get_ranking_posts('most-liked', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.model_validate(post) for post in posts],
+        items=[XPostDetailed.model_validate(post.to_dict_full()) for post in posts],
         ranking_type="most-liked",
         period=period,
         total_count=len(posts)
@@ -268,7 +268,7 @@ async def get_most_retweeted_posts(
     posts = service.get_ranking_posts('most-retweeted', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.model_validate(post) for post in posts],
+        items=[XPostDetailed.model_validate(post.to_dict_full()) for post in posts],
         ranking_type="most-retweeted", 
         period=period,
         total_count=len(posts)
@@ -289,7 +289,7 @@ async def get_most_replied_posts(
     posts = service.get_ranking_posts('most-replied', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.model_validate(post) for post in posts],
+        items=[XPostDetailed.model_validate(post.to_dict_full()) for post in posts],
         ranking_type="most-replied",
         period=period,
         total_count=len(posts)
@@ -310,7 +310,7 @@ async def get_most_quoted_posts(
     posts = service.get_ranking_posts('most-quoted', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.model_validate(post) for post in posts],
+        items=[XPostDetailed.model_validate(post.to_dict_full()) for post in posts],
         ranking_type="most-quoted",
         period=period,
         total_count=len(posts)
@@ -331,7 +331,7 @@ async def get_most_bookmarked_posts(
     posts = service.get_ranking_posts('most-bookmarked', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.model_validate(post) for post in posts],
+        items=[XPostDetailed.model_validate(post.to_dict_full()) for post in posts],
         ranking_type="most-bookmarked",
         period=period,
         total_count=len(posts)
@@ -352,7 +352,7 @@ async def get_most_viewed_posts(
     posts = service.get_ranking_posts('most-viewed', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.model_validate(post) for post in posts],
+        items=[XPostDetailed.model_validate(post.to_dict_full()) for post in posts],
         ranking_type="most-viewed",
         period=period,
         total_count=len(posts)
@@ -382,7 +382,7 @@ async def get_most_engaged_posts(
     posts = service.get_ranking_posts('most-engaged', request)
     
     return XPostRankingResponse(
-        items=[XPostDetailed.model_validate(post) for post in posts],
+        items=[XPostDetailed.model_validate(post.to_dict_full()) for post in posts],
         ranking_type="most-engaged",
         period=period,
         total_count=len(posts)
