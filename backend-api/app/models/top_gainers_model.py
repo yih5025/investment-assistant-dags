@@ -10,6 +10,7 @@ class TopGainers(BaseModel):
     이 테이블은 Finnhub API에서 수집한 상승 주식, 하락 주식, 활발히 거래되는 주식 정보를 저장합니다.
     """
     __tablename__ = "top_gainers"
+    __table_args__ = {'extend_existing': True}
     
     # 복합 Primary Key
     batch_id = Column(BigInteger, primary_key=True, nullable=False, 

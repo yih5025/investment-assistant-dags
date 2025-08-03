@@ -32,30 +32,3 @@ class CompanyNews(BaseModel):
     def __repr__(self):
         return f"<CompanyNews(symbol='{self.symbol}', title='{self.title[:50]}...')>"
 
-
-class TopGainers(BaseModel):
-    """
-    상위 상승/하락/활발 주식 테이블 모델
-    
-    company_news와 JOIN하여 트렌딩 주식의 뉴스를 조회하는데 사용됩니다.
-    - batch_id: 수집 배치를 구분하는 ID
-    - category: top_gainers, top_losers, most_actively_traded
-    """
-    __tablename__ = "top_gainers"
-    
-    # 복합 기본키
-    batch_id = Column('batch_id', Text, primary_key=True, nullable=False)
-    symbol = Column(Text, primary_key=True, nullable=False)
-    category = Column(Text, primary_key=True, nullable=False)
-    
-    # 주식 정보
-    last_updated = Column(DateTime, nullable=False)
-    rank_position = Column('rank_position', Text)
-    price = Column('price', Text)
-    change_amount = Column(Text)
-    change_percentage = Column(Text)
-    volume = Column('volume', Text)
-    created_at = Column(DateTime, default=func.now())
-    
-    def __repr__(self):
-        return f"<TopGainers(symbol='{self.symbol}', category='{self.category}', rank={self.rank_position})>"
