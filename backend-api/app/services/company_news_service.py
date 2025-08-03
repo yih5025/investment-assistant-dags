@@ -3,7 +3,8 @@ from sqlalchemy import func, and_, desc
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime, timedelta
 
-from app.models.company_news_model import CompanyNews, TopGainers
+from app.models.company_news_model import CompanyNews
+from app.models.top_gainers_model import TopGainers
 
 class CompanyNewsService:
     """
