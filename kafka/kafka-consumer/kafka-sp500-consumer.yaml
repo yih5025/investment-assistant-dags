@@ -1,7 +1,3 @@
-# S&P 500 WebSocket Consumer
-# 10개 Producer Pod에서 전송되는 데이터를 통합 처리
-
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -16,6 +12,7 @@ data:
     import time
     from kafka import KafkaConsumer
     import psycopg2
+    import redis
     import logging
 
     # 로깅 설정
@@ -31,6 +28,10 @@ data:
             self.processed_count = 0
             self.error_count = 0
             self.start_time = time.time()
+            
+            # Redis 통계
+            self.redis_success_count = 0
+            self.redis_error_count = 0
             
             # API 키별 통계
             self.api_key_stats = {}
@@ -48,6 +49,56 @@ data:
                 password=os.getenv('POSTGRES_PASSWORD'),
                 port=5432
             )
+            
+        def get_redis_connection(self):
+            """Redis 연결"""
+            try:
+                return redis.Redis(
+                    host=os.getenv('REDIS_HOST', 'redis.investment-assistant.svc.cluster.local'),
+                    port=int(os.getenv('REDIS_PORT', '6379')),
+                    db=int(os.getenv('REDIS_DB', '0')),
+                    decode_responses=True,
+                    socket_timeout=5
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Redis 연결 실패: {e}")
+                return None
+        
+        def store_to_redis(self, data):
+            """Redis에 SP500 주식 데이터 저장"""
+            try:
+                redis_conn = self.get_redis_connection()
+                if not redis_conn:
+                    return False
+                
+                symbol = data.get('symbol', 'unknown')
+                current_timestamp = int(time.time())
+                
+                # 🔑 키 구조: sp500 소스 명시 (finnhub와 구분!)
+                realtime_key = f"realtime:stocks:sp500:{symbol}:{current_timestamp}"
+                latest_key = f"latest:stocks:sp500:{symbol}"
+                
+                # Redis용 간소화된 데이터
+                redis_data = {
+                    'symbol': symbol,
+                    'price': data.get('price'),
+                    'volume': data.get('volume'),
+                    'pod_index': data.get('pod_index'),
+                    'timestamp': current_timestamp,
+                    'source': 'sp500_websocket'
+                }
+                
+                # 1시간 TTL로 저장
+                redis_conn.setex(realtime_key, 3600, json.dumps(redis_data))
+                redis_conn.setex(latest_key, 3600, json.dumps(redis_data))
+                
+                self.redis_success_count += 1
+                return True
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Redis 저장 실패: {e}")
+                self.redis_error_count += 1
+                return False
         
         def safe_numeric(self, value):
             """안전한 숫자 변환"""
@@ -68,7 +119,7 @@ data:
                 return None
         
         def insert_trade_data(self, data):
-            """S&P 500 WebSocket 거래 데이터 삽입"""
+            """PostgreSQL에 S&P 500 WebSocket 거래 데이터 삽입 (기존 로직)"""
             conn = None
             try:
                 conn = self.get_db_connection()
@@ -110,14 +161,12 @@ data:
                     return True
                     
             except psycopg2.errors.UniqueViolation:
-                # 중복 데이터는 정상적인 상황 (같은 거래가 여러 번 수신될 수 있음)
                 if conn:
                     conn.rollback()
                 return True
                 
             except Exception as e:
                 logger.error(f"❌ DB 삽입 실패: {e}")
-                logger.error(f"   데이터: {data}")
                 if conn:
                     conn.rollback()
                 return False
@@ -137,6 +186,7 @@ data:
             
             logger.info(f"📊 === S&P 500 Consumer 상세 통계 ({current_time}) ===")
             logger.info(f"   전체: {self.processed_count}개 처리, {self.error_count}개 에러, {overall_rate:.1f}/sec")
+            logger.info(f"   ⚡ Redis: 성공 {self.redis_success_count}, 실패 {self.redis_error_count}")
             
             # Pod Index별 통계
             total_symbols = set()
@@ -167,9 +217,11 @@ data:
                     heartbeat_interval_ms=10000
                 )
                 
-                logger.info("🔄 S&P 500 WebSocket Consumer 시작")
+                logger.info("🔄 S&P 500 WebSocket Consumer 시작 (PostgreSQL + Redis)")
                 logger.info(f"   📡 구독 Topic: {self.topic}")
                 logger.info(f"   👥 Consumer Group: sp500-websocket-consumer-group")
+                logger.info(f"   🗄️ PostgreSQL: {os.getenv('POSTGRES_HOST')}")
+                logger.info(f"   ⚡ Redis: {os.getenv('REDIS_HOST', 'redis.investment-assistant.svc.cluster.local')}")
                 
                 last_stats_time = time.time()
                 stats_interval = 60  # 1분마다 상세 통계
@@ -178,10 +230,16 @@ data:
                     try:
                         data = message.value
                         symbol = data.get('symbol', 'UNKNOWN')
-                        api_key_index = data.get('api_key_index', 0)
-                        pod_name = data.get('pod_name', 'unknown')
+                        price = data.get('price', 0)
                         
-                        if self.insert_trade_data(data):
+                        # 1. PostgreSQL 저장 (기존)
+                        postgres_success = self.insert_trade_data(data)
+                        
+                        # 2. Redis 저장 (신규)
+                        redis_success = self.store_to_redis(data)
+                        
+                        # 3. 통계 업데이트
+                        if postgres_success:
                             self.processed_count += 1
                             
                             # 간단한 진행 상황 (100개마다)
@@ -191,6 +249,9 @@ data:
                                 current_time = time.strftime("%H:%M:%S")
                                 logger.info(f"📈 처리: {self.processed_count}, 에러: {self.error_count}, "
                                           f"시간: {current_time}, 속도: {rate:.1f}/sec")
+                                logger.info(f"   💾 PostgreSQL: {self.processed_count}개 저장")
+                                logger.info(f"   ⚡ Redis: 성공 {self.redis_success_count}, 실패 {self.redis_error_count}")
+                                logger.info(f"   📈 최근 처리: {symbol} -> ${price}")
                             
                         else:
                             self.error_count += 1
@@ -203,7 +264,6 @@ data:
                             
                     except Exception as e:
                         logger.error(f"❌ 메시지 처리 오류: {e}")
-                        logger.error(f"   메시지: {message.value}")
                         self.error_count += 1
 
             except KeyboardInterrupt:
@@ -218,12 +278,6 @@ data:
                 logger.info("✅ S&P 500 WebSocket Consumer 종료")
                 logger.info(f"   최종 통계: {self.processed_count}개 처리, {self.error_count}개 에러")
                 logger.info(f"   실행 시간: {elapsed:.1f}초")
-                
-                if self.api_key_stats:
-                    logger.info("   Pod별 최종 통계:")
-                    for pod_index in sorted(self.api_key_stats.keys()):
-                        stats = self.api_key_stats[pod_index]
-                        logger.info(f"     Pod-{pod_index}: {stats['count']}개, {len(stats['symbols'])}개 심볼")
 
     if __name__ == "__main__":
         consumer = SP500WebSocketConsumer()
@@ -253,9 +307,17 @@ spec:
         command: ["sh", "-c"]
         args:
         - |
+          echo "📦 S&P 500 Consumer 패키지 설치 시작..."
           apt-get update && apt-get install -y procps
-          pip install --no-cache-dir kafka-python psycopg2-binary lz4
-          python /app/consumer.py
+          pip install --no-cache-dir kafka-python psycopg2-binary lz4 redis
+          echo "✅ 패키지 설치 완료"
+          
+          echo "🔍 파일 확인..."
+          ls -la /app/
+          
+          echo "🚀 S&P 500 Consumer 실행 시작 - $(date)"
+          exec python /app/consumer.py
+        
         env:
         # Kafka 설정
         - name: KAFKA_SERVERS
@@ -271,13 +333,21 @@ spec:
         - name: POSTGRES_PASSWORD
           value: "airflow123"
           
+        # Redis 설정
+        - name: REDIS_HOST
+          value: "redis.investment-assistant.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_DB
+          value: "0"
+          
         volumeMounts:
         - name: consumer-code
           mountPath: /app
           
         resources:
           requests:
-            memory: "512Mi"  # Consumer는 더 많은 메모리 필요
+            memory: "512Mi"
             cpu: "200m"
           limits:
             memory: "1Gi"
@@ -286,14 +356,14 @@ spec:
         livenessProbe:
           exec:
             command: ["pgrep", "-f", "consumer.py"]
-          initialDelaySeconds: 60
+          initialDelaySeconds: 120  # 2분으로 증가 (패키지 설치 시간 고려)
           periodSeconds: 60
           failureThreshold: 3
           
         readinessProbe:
           exec:
             command: ["pgrep", "-f", "consumer.py"]
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60   # 1분으로 증가
           periodSeconds: 30
           
       volumes:

@@ -11,12 +11,17 @@ data:
     from kafka import KafkaConsumer
     import psycopg2
     from psycopg2.extras import RealDictCursor
+    import redis
 
     class BithumbTickerConsumer:
         def __init__(self):
             self.kafka_servers = os.getenv('KAFKA_SERVERS')
             self.topic = "bithumb-ticker"
             self.consumer = None
+            
+            # Redis 통계
+            self.redis_success_count = 0
+            self.redis_error_count = 0
             
         def init_consumer(self):
             self.consumer = KafkaConsumer(
@@ -28,9 +33,10 @@ data:
                 auto_offset_reset='latest',
                 enable_auto_commit=True
             )
-            print(f"Consumer connected to topic: {self.topic}")
+            print(f"🔄 Consumer connected to topic: {self.topic}")
             
         def get_db_connection(self):
+            """PostgreSQL 연결"""
             return psycopg2.connect(
                 host=os.getenv('POSTGRES_HOST'),
                 database=os.getenv('POSTGRES_DB'),
@@ -39,7 +45,74 @@ data:
                 port=5432
             )
             
+        def get_redis_connection(self):
+            """Redis 연결"""
+            try:
+                return redis.Redis(
+                    host=os.getenv('REDIS_HOST', 'redis.investment-assistant.svc.cluster.local'),
+                    port=int(os.getenv('REDIS_PORT', '6379')),
+                    db=int(os.getenv('REDIS_DB', '0')),
+                    decode_responses=True,  # 자동으로 문자열 디코딩
+                    socket_timeout=5,       # 5초 타임아웃
+                    socket_connect_timeout=5
+                )
+            except Exception as e:
+                print(f"⚠️ Redis 연결 실패: {e}")
+                return None
+            
+        def store_to_redis(self, data):
+            """Redis에 실시간 데이터 저장"""
+            try:
+                redis_conn = self.get_redis_connection()
+                if not redis_conn:
+                    return False
+                
+                symbol = data.get('market', 'unknown')
+                current_timestamp = int(time.time())
+                
+                # 1. 시계열 데이터 저장 (1시간 TTL)
+                realtime_key = f"realtime:crypto:{symbol}:{current_timestamp}"
+                
+                # Redis용 간소화된 데이터 (WebSocket 전송용)
+                redis_data = {
+                    'symbol': symbol,
+                    'price': data.get('trade_price'),
+                    'change_rate': data.get('signed_change_rate'),
+                    'change_price': data.get('signed_change_price'),
+                    'volume': data.get('trade_volume'),
+                    'timestamp': current_timestamp,
+                    'source': 'bithumb'
+                }
+                
+                # 1시간 TTL로 시계열 데이터 저장
+                redis_conn.setex(
+                    realtime_key, 
+                    3600,  # 1시간 = 3600초
+                    json.dumps(redis_data)
+                )
+                
+                # 2. 최신 데이터 저장 (1시간 TTL)
+                latest_key = f"latest:crypto:{symbol}"
+                redis_conn.setex(
+                    latest_key,
+                    3600,  # 1시간
+                    json.dumps(redis_data)
+                )
+                
+                self.redis_success_count += 1
+                return True
+                
+            except redis.RedisError as e:
+                print(f"⚠️ Redis 저장 실패: {e}")
+                self.redis_error_count += 1
+                return False
+            except Exception as e:
+                print(f"⚠️ Redis 예상치 못한 오류: {e}")
+                self.redis_error_count += 1
+                return False
+            
         def insert_ticker_data(self, data):
+            """PostgreSQL에 데이터 저장 (기존 로직)"""
             try:
                 conn = self.get_db_connection()
                 with conn.cursor() as cursor:
@@ -100,12 +173,13 @@ data:
                 return True
                 
             except Exception as e:
-                print(f"DB insert error: {e}")
+                print(f"❌ PostgreSQL 저장 실패: {e}")
                 if 'conn' in locals():
                     conn.close()
                 return False
                 
         def safe_decimal(self, value):
+            """안전한 숫자 변환"""
             if value is None or value == '':
                 return None
             try:
@@ -114,31 +188,50 @@ data:
                 return None
                 
         def run(self):
+            """메인 Consumer 실행"""
             self.init_consumer()
             
             processed_count = 0
             error_count = 0
             start_time = time.time()
             
-            print("Consumer started - waiting for messages...")
+            print("🚀 빗썸 Ticker Consumer 시작 (PostgreSQL + Redis)")
+            print(f"   📡 Topic: {self.topic}")
+            print(f"   🗄️ PostgreSQL: {os.getenv('POSTGRES_HOST')}")
+            print(f"   ⚡ Redis: {os.getenv('REDIS_HOST', 'redis.investment-assistant.svc.cluster.local')}")
             
             for message in self.consumer:
                 try:
                     data = message.value
                     market = data.get('market', 'unknown')
+                    trade_price = data.get('trade_price', 0)
                     
-                    if self.insert_ticker_data(data):
+                    # 1. PostgreSQL 저장 (기존 로직)
+                    postgres_success = self.insert_ticker_data(data)
+                    
+                    # 2. Redis 저장 (신규 로직) - PostgreSQL 성공 여부와 무관하게 시도
+                    redis_success = self.store_to_redis(data)
+                    
+                    # 3. 통계 업데이트
+                    if postgres_success:
                         processed_count += 1
+                        
+                        # 100개마다 상세 통계 출력
                         if processed_count % 100 == 0:
                             elapsed = time.time() - start_time
                             rate = processed_count / elapsed if elapsed > 0 else 0
                             current_time = time.strftime("%H:%M:%S")
-                            print(f"Processed: {processed_count}, Errors: {error_count}, Time: {current_time}, Rate: {rate:.1f}/sec")
+                            
+                            print(f"📊 처리: {processed_count}, 에러: {error_count}, 시간: {current_time}, 속도: {rate:.1f}/sec")
+                            print(f"   💾 PostgreSQL: {processed_count}개 저장")
+                            print(f"   ⚡ Redis: 성공 {self.redis_success_count}, 실패 {self.redis_error_count}")
+                            print(f"   🪙 최근 처리: {market} -> {trade_price:,}원")
+                            
                     else:
                         error_count += 1
                         
                 except Exception as e:
-                    print(f"Message processing error: {e}")
+                    print(f"❌ 메시지 처리 오류: {e}")
                     error_count += 1
 
     if __name__ == "__main__":
@@ -169,11 +262,14 @@ spec:
         args:
         - |
           apt-get update && apt-get install -y procps
-          pip install --no-cache-dir kafka-python psycopg2-binary lz4
+          pip install --no-cache-dir kafka-python psycopg2-binary lz4 redis
           python /app/consumer.py
         env:
+        # Kafka 설정
         - name: KAFKA_SERVERS
           value: "my-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+          
+        # PostgreSQL 설정 (기존)
         - name: POSTGRES_HOST
           value: "postgresql.investment-assistant.svc.cluster.local"
         - name: POSTGRES_DB
@@ -182,9 +278,19 @@ spec:
           value: "airflow"
         - name: POSTGRES_PASSWORD
           value: "airflow123"
+          
+        # Redis 설정 (신규)
+        - name: REDIS_HOST
+          value: "redis.investment-assistant.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_DB
+          value: "0"
+          
         volumeMounts:
         - name: consumer-code
           mountPath: /app
+          
         resources:
           requests:
             memory: "128Mi"
@@ -192,8 +298,22 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "100m"
+            
+        livenessProbe:
+          exec:
+            command: ["pgrep", "-f", "consumer.py"]
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          
+        readinessProbe:
+          exec:
+            command: ["pgrep", "-f", "consumer.py"]
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          
       volumes:
       - name: consumer-code
         configMap:
           name: bithumb-consumer-code
+          
       restartPolicy: Always
