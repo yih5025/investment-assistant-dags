@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import WebSocket
 
 from app.schemas.websocket_schema import (
-    WebSocketMessageType, SubscriptionType, ClientMessage, SubscribeMessage,
+    WebSocketMessageType, SubscriptionType,
     create_error_message, StatusMessage
 )
 
