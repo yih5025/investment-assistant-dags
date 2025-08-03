@@ -12,8 +12,8 @@ from datetime import datetime
 
 # 테스트 설정
 SERVER_URL = "ws://localhost:30888"
-CRYPTO_ENDPOINT = f"{SERVER_URL}/ws/crypto"
-CRYPTO_SYMBOL_ENDPOINT = f"{SERVER_URL}/ws/crypto/KRW-BTC"  # 비트코인 테스트
+CRYPTO_ENDPOINT = f"{SERVER_URL}/api/v1/ws/crypto"
+CRYPTO_SYMBOL_ENDPOINT = f"{SERVER_URL}/api/v1/ws/crypto/KRW-BTC"  # 비트코인 테스트
 
 async def test_crypto_all():
     """전체 암호화폐 WebSocket 테스트"""
@@ -123,7 +123,7 @@ async def test_server_status():
         import aiohttp
         
         async with aiohttp.ClientSession() as session:
-            status_url = f"http://localhost:30888/ws/status"
+            status_url = f"http://localhost:30888/api/v1/ws/status"
             
             async with session.get(status_url) as response:
                 if response.status == 200:

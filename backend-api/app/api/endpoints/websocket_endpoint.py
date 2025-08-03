@@ -26,9 +26,8 @@ websocket_manager = WebSocketManager()
 websocket_service = WebSocketService()
 redis_streamer = None  # 첫 연결 시 초기화
 
-@router.on_event("startup")
-async def startup_websocket_services():
-    """WebSocket 서비스 초기화"""
+async def initialize_websocket_services():
+    """WebSocket 서비스 초기화 (main.py에서 호출)"""
     global redis_streamer
     
     logger.info("🚀 WebSocket 서비스 초기화 시작...")
@@ -82,7 +81,7 @@ async def websocket_topgainers(websocket: WebSocket):
         await websocket.send_text(status_msg.model_dump_json())
         
         # Redis 스트리머 시작 (아직 시작되지 않은 경우)
-        if not redis_streamer.is_streaming_topgainers:
+        if redis_streamer and not redis_streamer.is_streaming_topgainers:
             asyncio.create_task(redis_streamer.start_topgainers_stream())
         
         # 클라이언트 메시지 대기 (현재는 단순히 연결 유지용)
@@ -166,7 +165,7 @@ async def websocket_topgainers_symbol(websocket: WebSocket, symbol: str):
         
         # 특정 심볼 스트리머 시작
         stream_key = f"topgainers:{symbol}"
-        if stream_key not in redis_streamer.symbol_streams:
+        if redis_streamer and stream_key not in redis_streamer.symbol_streams:
             asyncio.create_task(redis_streamer.start_symbol_stream(symbol, "topgainers"))
         
         # 클라이언트 메시지 대기
@@ -240,7 +239,7 @@ async def websocket_crypto(websocket: WebSocket):
         await websocket.send_text(status_msg.model_dump_json())
         
         # Redis 스트리머 시작
-        if not redis_streamer.is_streaming_crypto:
+        if redis_streamer and not redis_streamer.is_streaming_crypto:
             asyncio.create_task(redis_streamer.start_crypto_stream())
         
         # 클라이언트 메시지 대기
@@ -318,7 +317,7 @@ async def websocket_crypto_symbol(websocket: WebSocket, symbol: str):
         
         # 특정 심볼 스트리머 시작
         stream_key = f"crypto:{symbol}"
-        if stream_key not in redis_streamer.symbol_streams:
+        if redis_streamer and stream_key not in redis_streamer.symbol_streams:
             asyncio.create_task(redis_streamer.start_symbol_stream(symbol, "crypto"))
         
         # 클라이언트 메시지 대기
@@ -390,7 +389,7 @@ async def websocket_sp500(websocket: WebSocket):
         await websocket.send_text(status_msg.model_dump_json())
         
         # Redis 스트리머 시작
-        if not redis_streamer.is_streaming_sp500:
+        if redis_streamer and not redis_streamer.is_streaming_sp500:
             asyncio.create_task(redis_streamer.start_sp500_stream())
         
         # 클라이언트 메시지 대기
@@ -466,7 +465,7 @@ async def websocket_sp500_symbol(websocket: WebSocket, symbol: str):
         
         # 특정 심볼 스트리머 시작
         stream_key = f"sp500:{symbol}"
-        if stream_key not in redis_streamer.symbol_streams:
+        if redis_streamer and stream_key not in redis_streamer.symbol_streams:
             asyncio.create_task(redis_streamer.start_symbol_stream(symbol, "sp500"))
         
         # 클라이언트 메시지 대기
@@ -540,7 +539,7 @@ async def websocket_dashboard(websocket: WebSocket):
         await websocket.send_text(status_msg.model_dump_json())
         
         # 대시보드 스트리머 시작
-        if not redis_streamer.is_streaming_dashboard:
+        if redis_streamer and not redis_streamer.is_streaming_dashboard:
             asyncio.create_task(redis_streamer.start_dashboard_stream())
         
         # 클라이언트 메시지 대기
@@ -649,9 +648,8 @@ async def get_websocket_stats():
 # 서버 종료 시 정리
 # =========================
 
-@router.on_event("shutdown")
 async def shutdown_websocket_services():
-    """WebSocket 서비스 종료 시 정리"""
+    """WebSocket 서비스 종료 시 정리 (main.py에서 호출)"""
     global redis_streamer
     
     logger.info("🛑 WebSocket 서비스 종료 시작...")
@@ -662,7 +660,7 @@ async def shutdown_websocket_services():
             await redis_streamer.shutdown()
         
         # WebSocket 매니저 종료
-        await websocket_manager.shutdown()
+        await websocket_manager.shutdown_all_connections()
         
         # WebSocket 서비스 종료
         if hasattr(websocket_service, 'shutdown'):

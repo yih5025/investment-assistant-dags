@@ -25,6 +25,15 @@ async def lifespan(app: FastAPI):
         logger.info("✅ 데이터베이스 연결 성공")
     else:
         logger.error("❌ 데이터베이스 연결 실패")
+    
+    # WebSocket 서비스들 초기화
+    try:
+        from .api.endpoints.websocket_endpoint import initialize_websocket_services
+        await initialize_websocket_services()
+        logger.info("✅ WebSocket 서비스 초기화 완료")
+    except Exception as e:
+        logger.error(f"❌ WebSocket 서비스 초기화 실패: {e}")
+    
     logger.info(f"🚀 서버가 http://{settings.host}:{settings.port} 에서 실행 중 입니다....")
     logger.info(f"📚 API 문서: http://{settings.host}:{settings.port}/docs")
     
@@ -32,6 +41,12 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 애플리케이션 종료 중...")
+    try:
+        from .api.endpoints.websocket_endpoint import shutdown_websocket_services
+        await shutdown_websocket_services()
+        logger.info("✅ WebSocket 서비스 종료 완료")
+    except Exception as e:
+        logger.error(f"❌ WebSocket 서비스 종료 실패: {e}")
     logger.info("✅ 정리 작업 완료")
 
 # FastAPI 애플리케이션 생성
