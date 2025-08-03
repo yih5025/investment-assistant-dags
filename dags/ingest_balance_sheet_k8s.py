@@ -28,9 +28,9 @@ default_args = {
 with DAG(
     dag_id='ingest_balance_sheet_sp500_k8s',  # DAG 이름도 명확하게 변경
     default_args=default_args,
-    schedule_interval='@weekly',
+    schedule_interval='0 6 * * 2,4,6',  # 화/목/토 오전 6시
     catchup=False,
-    description='Fetch S&P 500 balance sheet data in batches (API rate limit optimized)',
+    description='Fetch S&P 500 balance sheet data 3x per week (Tue/Thu/Sat: 20 companies each)',
     template_searchpath=[INITDB_SQL_DIR],
     tags=['balance_sheet', 'alpha_vantage', 'sp500', 'batch', 'k8s'],
 ) as dag:
