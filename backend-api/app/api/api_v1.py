@@ -13,7 +13,8 @@ from .endpoints import (
     federal_funds_rate_endpoint,
     cpi_endpoint,
     x_posts_endpoint,
-    balance_sheet_endpoint
+    balance_sheet_endpoint,
+    treasury_yield_endpoint
 )
 
 # API v1 메인 라우터 생성
@@ -101,6 +102,12 @@ ROUTER_CONFIGS = [
         "prefix": "/balance-sheet",
         "tags": ["balance-sheet"],
         "description": "재무제표 API"
+    },
+    {
+        "router": treasury_yield_endpoint.router,
+        "prefix": "/treasury-yield",
+        "tags": ["treasury-yield"],
+        "description": "국채 수익률 API"
     }
 ]
 
@@ -144,7 +151,8 @@ async def api_v1_info():
             "소셜미디어": ["truth-social", "x-posts"], 
             "실적정보": ["earnings-calendar", "earnings-calendar-news"],
             "경제지표": ["inflation", "federal-funds-rate", "cpi"],
-            "재무제표": ["balance-sheet"]
+            "재무제표": ["balance-sheet"],
+            "국채수익률": ["treasury-yield"]
         },
         "available_endpoints": available_endpoints,
         "documentation": {
@@ -187,7 +195,8 @@ async def api_stats():
                 "소셜미디어": 2, 
                 "실적_정보": 2,
                 "경제_지표": 3,
-                "재무제표": 1
+                "재무제표": 1,
+                "국채수익률": 1
             }
         },
         "implemented_domains": [config["prefix"].lstrip("/") for config in ROUTER_CONFIGS],
