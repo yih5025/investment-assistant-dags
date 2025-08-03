@@ -14,7 +14,8 @@ from .endpoints import (
     cpi_endpoint,
     x_posts_endpoint,
     balance_sheet_endpoint,
-    treasury_yield_endpoint
+    treasury_yield_endpoint,
+    websocket_endpoint
 )
 
 # API v1 메인 라우터 생성
@@ -108,6 +109,14 @@ ROUTER_CONFIGS = [
         "prefix": "/treasury-yield",
         "tags": ["treasury-yield"],
         "description": "국채 수익률 API"
+    },
+    
+    # WebSocket 실시간 데이터 API
+    {
+        "router": websocket_endpoint.router,
+        "prefix": "",  # WebSocket은 이미 "/ws" prefix를 가지고 있음
+        "tags": ["websocket"],
+        "description": "실시간 WebSocket 데이터 API"
     }
 ]
 
