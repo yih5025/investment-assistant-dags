@@ -21,7 +21,7 @@ const LoadingFallback = () => (
   </div>
 );
 
-// 보호된 라우트 컴포넌트
+// 보호된 라우트 컴포넌트 (개인화 기능에만 사용)
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
@@ -53,7 +53,224 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 // 라우터 설정
 export const router = createBrowserRouter([
-  // 공개 라우트 (인증 불필요)
+  // 메인 레이아웃 - 공개 접근 가능 (로그인 선택적)
+  {
+    path: '/',
+    element: <AuthenticatedLayout />,
+    children: [
+      {
+        index: true,
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <Dashboard />
+          </React.Suspense>
+        ),
+      },
+      {
+        path: 'dashboard',
+        element: <Navigate to="/" replace />,
+      },
+    ],
+  },
+
+  // 주식 관련 라우트 - 공개 접근 가능
+  {
+    path: '/stocks',
+    element: <AuthenticatedLayout />,
+    children: [
+      {
+        index: true,
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <StocksList />
+          </React.Suspense>
+        ),
+      },
+      {
+        path: ':symbol',
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <StockDetail />
+          </React.Suspense>
+        ),
+      },
+    ],
+  },
+
+  // 암호화폐 관련 라우트 - 공개 접근 가능
+  {
+    path: '/crypto',
+    element: <AuthenticatedLayout />,
+    children: [
+      {
+        index: true,
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <CryptoList />
+          </React.Suspense>
+        ),
+      },
+      {
+        path: ':symbol',
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <CryptoList />
+          </React.Suspense>
+        ),
+      },
+    ],
+  },
+
+  // 뉴스 관련 라우트 - 공개 접근 가능
+  {
+    path: '/news',
+    element: <AuthenticatedLayout />,
+    children: [
+      {
+        index: true,
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <NewsList />
+          </React.Suspense>
+        ),
+      },
+      {
+        path: ':id',
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <NewsDetail />
+          </React.Suspense>
+        ),
+      },
+    ],
+  },
+
+  // 경제지표 라우트 - 공개 접근 가능
+  {
+    path: '/economic',
+    element: <AuthenticatedLayout />,
+    children: [
+      {
+        index: true,
+        element: (
+          <React.Suspense fallback={<LoadingFallback />}>
+            <EconomicData />
+          </React.Suspense>
+        ),
+      },
+    ],
+  },
+
+  // 개인화 기능들 - 로그인 필수
+  {
+    path: '/portfolio',
+    element: (
+      <ProtectedRoute>
+        <AuthenticatedLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <div className="p-6">
+            <div className="bg-card rounded-lg p-8 text-center">
+              <h1 className="text-2xl font-bold mb-4">개인 포트폴리오</h1>
+              <p className="text-muted-foreground mb-4">
+                회원님의 투자 포트폴리오를 관리할 수 있습니다.
+              </p>
+              <div className="text-sm text-muted-foreground">
+                🚧 개발 진행 중...
+              </div>
+            </div>
+          </div>
+        ),
+      },
+    ],
+  },
+
+  {
+    path: '/watchlist',
+    element: (
+      <ProtectedRoute>
+        <AuthenticatedLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <div className="p-6">
+            <div className="bg-card rounded-lg p-8 text-center">
+              <h1 className="text-2xl font-bold mb-4">관심 종목</h1>
+              <p className="text-muted-foreground mb-4">
+                관심 있는 주식과 암호화폐를 저장하고 추적할 수 있습니다.
+              </p>
+              <div className="text-sm text-muted-foreground">
+                🚧 개발 진행 중...
+              </div>
+            </div>
+          </div>
+        ),
+      },
+    ],
+  },
+
+  {
+    path: '/settings',
+    element: (
+      <ProtectedRoute>
+        <AuthenticatedLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <div className="p-6">
+            <div className="bg-card rounded-lg p-8 text-center">
+              <h1 className="text-2xl font-bold mb-4">설정</h1>
+              <p className="text-muted-foreground mb-4">
+                개인화 설정과 알림 설정을 관리할 수 있습니다.
+              </p>
+              <div className="text-sm text-muted-foreground">
+                🚧 개발 진행 중...
+              </div>
+            </div>
+          </div>
+        ),
+      },
+    ],
+  },
+
+  {
+    path: '/notifications',
+    element: (
+      <ProtectedRoute>
+        <AuthenticatedLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <div className="p-6">
+            <div className="bg-card rounded-lg p-8 text-center">
+              <h1 className="text-2xl font-bold mb-4">알림</h1>
+              <p className="text-muted-foreground mb-4">
+                가격 알림과 뉴스 알림을 확인할 수 있습니다.
+              </p>
+              <div className="text-sm text-muted-foreground">
+                🚧 개발 진행 중...
+              </div>
+            </div>
+          </div>
+        ),
+      },
+    ],
+  },
+
+  // 인증 관련 페이지들
   {
     path: '/login',
     element: (
@@ -77,213 +294,6 @@ export const router = createBrowserRouter([
         </PublicRoute>
       </PublicLayout>
     ),
-  },
-
-  // 보호된 라우트 (인증 필요)
-  {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <Dashboard />
-          </React.Suspense>
-        ),
-      },
-      {
-        path: 'dashboard',
-        element: <Navigate to="/" replace />,
-      },
-    ],
-  },
-
-  // 주식 관련 라우트
-  {
-    path: '/stocks',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <StocksList />
-          </React.Suspense>
-        ),
-      },
-      {
-        path: ':symbol',
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <StockDetail />
-          </React.Suspense>
-        ),
-      },
-      {
-        path: 'watchlist',
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <StocksList />
-          </React.Suspense>
-        ),
-      },
-    ],
-  },
-
-  // 암호화폐 관련 라우트
-  {
-    path: '/crypto',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <CryptoList />
-          </React.Suspense>
-        ),
-      },
-      {
-        path: ':symbol',
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <CryptoList />
-          </React.Suspense>
-        ),
-      },
-      {
-        path: 'portfolio',
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <CryptoList />
-          </React.Suspense>
-        ),
-      },
-    ],
-  },
-
-  // 뉴스 관련 라우트
-  {
-    path: '/news',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <NewsList />
-          </React.Suspense>
-        ),
-      },
-      {
-        path: ':id',
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <NewsDetail />
-          </React.Suspense>
-        ),
-      },
-    ],
-  },
-
-  // 경제지표 라우트
-  {
-    path: '/economic',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <EconomicData />
-          </React.Suspense>
-        ),
-      },
-    ],
-  },
-
-  // 사용자 관련 라우트
-  {
-    path: '/profile',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: <div className="p-6">프로필 페이지 (개발 예정)</div>,
-      },
-    ],
-  },
-
-  {
-    path: '/settings',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: <div className="p-6">설정 페이지 (개발 예정)</div>,
-      },
-    ],
-  },
-
-  // 검색 라우트
-  {
-    path: '/search',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: <div className="p-6">검색 결과 페이지 (개발 예정)</div>,
-      },
-    ],
-  },
-
-  // 알림 라우트
-  {
-    path: '/notifications',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: <div className="p-6">알림 페이지 (개발 예정)</div>,
-      },
-    ],
   },
 
   // 404 페이지
