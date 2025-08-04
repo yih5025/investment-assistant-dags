@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { authApi } from '../services/authApi';
 import { STORAGE_KEYS } from '../utils/constants';
 import { safeLocalStorage, normalizeError } from '../utils/helpers';
-import type { LoginCredentials, RegisterData } from '../types/auth';
+import type { LoginCredentials, RegisterData, User } from '../types/auth';
 
 export function useAuth() {
   const {
@@ -114,7 +114,7 @@ export function useAuth() {
         
         // 상태 업데이트 (사용자 정보는 유지)
         setAuth({
-          user,
+          user: user!,
           tokens: { accessToken, refreshToken: newRefreshToken, expiresIn },
         });
         
@@ -163,8 +163,15 @@ export function useAuth() {
   }, [tokens, setAuth, clearAuth, setLoading]);
 
   // 프로필 업데이트
-  const updateProfile = useCallback(async (data: Partial<typeof user>) => {
+  const updateProfile = useCallback(async (data: Partial<User>) => {
     if (!user) return;
+
+    // 토큰 유효성 확인
+    const token = safeLocalStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+    if (!token) {
+      clearAuth();
+      throw new Error('인증 토큰이 없습니다. 다시 로그인해주세요.');
+    }
 
     setLoading(true);
     setError(null);
@@ -175,7 +182,11 @@ export function useAuth() {
       if (response.success && response.data) {
         setAuth({
           user: response.data,
-          tokens,
+          tokens: tokens || {
+            accessToken: token,
+            refreshToken: safeLocalStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) || '',
+            expiresIn: 0
+          },
         });
         
         return { success: true, user: response.data };
@@ -189,7 +200,7 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
-  }, [user, tokens, setAuth, setLoading, setError]);
+  }, [user, tokens, setAuth, setLoading, setError, clearAuth]);
 
   // 비밀번호 변경
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
@@ -228,14 +239,14 @@ export function useAuth() {
   }, [isAuthenticated, loadProfile, clearAuth]);
 
   // 권한 확인
-  const hasPermission = useCallback((permission: string) => {
+  const hasPermission = useCallback((_permission: string) => {
     // 실제 구현에서는 사용자의 권한을 확인
     // 현재는 로그인 여부만 확인
     return isAuthenticated;
   }, [isAuthenticated]);
 
   // 역할 확인
-  const hasRole = useCallback((role: string) => {
+  const hasRole = useCallback((_role: string) => {
     // 실제 구현에서는 사용자의 역할을 확인
     // 현재는 단순화된 구현
     return isAuthenticated && user?.username === 'admin';
