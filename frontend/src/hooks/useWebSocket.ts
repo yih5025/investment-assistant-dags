@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { io, Socket, SocketOptions } from 'socket.io-client';
+import { io, type Socket, type SocketOptions } from 'socket.io-client';
 import { WS_EVENTS } from '../utils/constants';
 import { normalizeError } from '../utils/helpers';
 
@@ -38,8 +38,8 @@ export function useWebSocket(
   });
 
   const socketRef = useRef<Socket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const eventListenersRef = useRef<Map<string, Function[]>>(new Map());
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eventListenersRef = useRef<Map<string, ((...args: any[]) => void)[]>>(new Map());
 
   // WebSocket URL 설정
   const wsUrl = url || import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000';
@@ -158,7 +158,7 @@ export function useWebSocket(
   }, []);
 
   // 이벤트 리스너 등록
-  const on = useCallback((event: string, listener: Function) => {
+  const on = useCallback((event: string, listener: (...args: any[]) => void) => {
     // 리스너 목록에 추가
     const listeners = eventListenersRef.current.get(event) || [];
     listeners.push(listener);
@@ -185,7 +185,7 @@ export function useWebSocket(
   }, []);
 
   // 이벤트 리스너 제거
-  const off = useCallback((event: string, listener?: Function) => {
+  const off = useCallback((event: string, listener?: (...args: any[]) => void) => {
     if (listener) {
       const listeners = eventListenersRef.current.get(event) || [];
       const index = listeners.indexOf(listener);

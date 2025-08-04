@@ -1,10 +1,10 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { STORAGE_KEYS } from '../utils/constants';
 import { safeLocalStorage, normalizeError } from '../utils/helpers';
 
 // API 클라이언트 설정
 const createApiClient = (): AxiosInstance => {
-  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:30888';
   
   const client = axios.create({
     baseURL,

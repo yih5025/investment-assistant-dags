@@ -1,4 +1,4 @@
-import { Stock, Crypto, News, EconomicIndicator } from './api';
+import type { Stock } from './api';
 
 // 대시보드 위젯 타입
 export type WidgetType = 
