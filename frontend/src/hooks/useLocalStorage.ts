@@ -112,14 +112,14 @@ export function useLocalStorage<T>(
 export function useLocalStorageBoolean(
   key: string,
   initialValue: boolean = false
-): [boolean, () => void, () => void, () => void] {
+): [boolean, () => void, () => void, () => void, () => void] {
   const [value, setValue, removeValue] = useLocalStorage(key, initialValue);
 
   const setTrue = useCallback(() => setValue(true), [setValue]);
   const setFalse = useCallback(() => setValue(false), [setValue]);
   const toggle = useCallback(() => setValue(prev => !prev), [setValue]);
 
-  return [value, setTrue, setFalse, toggle];
+  return [value, setTrue, setFalse, toggle, removeValue];
 }
 
 // 배열을 위한 특화된 훅

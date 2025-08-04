@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import useSWR, { SWRConfiguration, SWRResponse, mutate } from 'swr';
+import useSWR, { type SWRConfiguration, type SWRResponse, mutate } from 'swr';
 import { normalizeError } from '../utils/helpers';
 
 // API 호출 상태 타입
