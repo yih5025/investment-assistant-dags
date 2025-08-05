@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "../ui/button";
 import { Menu, X, TrendingUp, Calendar, BarChart3, DollarSign } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
