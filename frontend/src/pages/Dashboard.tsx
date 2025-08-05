@@ -62,7 +62,7 @@ export const Dashboard: React.FC = () => {
         {/* Hero Section */}
         <div className="text-center space-y-4">
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Smart Investment Dashboard
+            Smart Investment Dashboard old v 
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             포트폴리오와 시장 현황을 실시간으로 확인하고, 데이터 기반의 투자 결정을 내리세요.
