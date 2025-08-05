@@ -3,22 +3,76 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthenticatedLayout, PublicLayout } from './components/layout/Layout';
 import { useAuth } from './hooks/useAuth';
 
-// 페이지 컴포넌트들 (Lazy Loading)
-const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
-const Dashboard = React.lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const Login = React.lazy(() => import('./pages/Auth/Login').then(m => ({ default: m.Login })));
-const Register = React.lazy(() => import('./pages/Auth/Register').then(m => ({ default: m.Register })));
-const StocksList = React.lazy(() => import('./pages/Stocks/StocksList').then(m => ({ default: m.StocksList })));
-const StockDetail = React.lazy(() => import('./pages/Stocks/StockDetail').then(m => ({ default: m.StockDetail })));
-const CryptoList = React.lazy(() => import('./pages/Crypto/CryptoList').then(m => ({ default: m.CryptoList })));
-const NewsList = React.lazy(() => import('./pages/News/NewsList').then(m => ({ default: m.NewsList })));
-const NewsDetail = React.lazy(() => import('./pages/News/NewsDetail').then(m => ({ default: m.NewsDetail })));
-const EconomicData = React.lazy(() => import('./pages/Economic/EconomicData').then(m => ({ default: m.EconomicData })));
+// 페이지 컴포넌트들 (Lazy Loading) - K8s 환경에서 안전한 방식
+const Home = React.lazy(() => import('./pages/Home'));
+
+// 임시 페이지 컴포넌트 (아직 생성되지 않은 페이지들용)
+const TempPage: React.FC<{ title: string; description: string }> = ({ title, description }) => (
+  <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+    <div className="max-w-md mx-auto p-8">
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 rounded-3xl"></div>
+        <div className="relative backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-8 text-center shadow-2xl">
+          <div className="text-6xl mb-4">🚧</div>
+          <h1 className="text-2xl font-bold text-white mb-4">{title}</h1>
+          <p className="text-white/70 mb-6">{description}</p>
+          <div className="text-sm text-white/50">개발 진행 중...</div>
+          <button 
+            onClick={() => window.history.back()}
+            className="mt-6 px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 text-white rounded-xl font-bold hover:scale-105 transition-all duration-300"
+          >
+            뒤로 가기
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// 각 페이지별 임시 컴포넌트들
+const Dashboard = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="대시보드" description="투자 현황을 한눈에 볼 수 있는 대시보드입니다." /> 
+}));
+
+const Login = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="로그인" description="W.E.I 계정으로 로그인하세요." /> 
+}));
+
+const Register = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="회원가입" description="W.E.I에 가입하여 맞춤형 투자 정보를 받아보세요." /> 
+}));
+
+const StocksList = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="주식 목록" description="실시간 주식 정보와 분석을 확인하세요." /> 
+}));
+
+const StockDetail = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="주식 상세" description="선택한 주식의 상세 정보와 차트를 확인하세요." /> 
+}));
+
+const CryptoList = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="암호화폐" description="실시간 암호화폐 시세와 트렌드를 확인하세요." /> 
+}));
+
+const NewsList = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="뉴스" description="투자에 도움되는 최신 뉴스를 확인하세요." /> 
+}));
+
+const NewsDetail = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="뉴스 상세" description="선택한 뉴스의 전체 내용을 확인하세요." /> 
+}));
+
+const EconomicData = React.lazy(() => Promise.resolve({ 
+  default: () => <TempPage title="경제 지표" description="주요 경제 지표와 그래프를 확인하세요." /> 
+}));
 
 // 로딩 컴포넌트
 const LoadingFallback = () => (
-  <div className="flex items-center justify-center min-h-[400px]">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+  <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+      <div className="text-white/70">로딩 중...</div>
+    </div>
   </div>
 );
 
@@ -46,7 +100,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />; // 홈으로 리다이렉트
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -67,7 +121,6 @@ export const router = createBrowserRouter([
           </React.Suspense>
         ),
       },
-      // dashboard 경로를 홈으로 리다이렉트 (기존 URL 호환성 유지)
       {
         path: 'dashboard',
         element: <Navigate to="/" replace />,
@@ -75,7 +128,7 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // 주식 관련 라우트 - 공개 접근 가능
+  // 주식 관련 라우트
   {
     path: '/stocks',
     element: <AuthenticatedLayout />,
@@ -99,7 +152,7 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // 암호화폐 관련 라우트 - 공개 접근 가능
+  // 암호화폐 관련 라우트
   {
     path: '/crypto',
     element: <AuthenticatedLayout />,
@@ -112,18 +165,10 @@ export const router = createBrowserRouter([
           </React.Suspense>
         ),
       },
-      {
-        path: ':symbol',
-        element: (
-          <React.Suspense fallback={<LoadingFallback />}>
-            <CryptoList />
-          </React.Suspense>
-        ),
-      },
     ],
   },
 
-  // 뉴스 관련 라우트 - 공개 접근 가능
+  // 뉴스 관련 라우트
   {
     path: '/news',
     element: <AuthenticatedLayout />,
@@ -147,7 +192,7 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // 경제지표 라우트 - 공개 접근 가능
+  // 경제지표 라우트
   {
     path: '/economic',
     element: <AuthenticatedLayout />,
@@ -174,19 +219,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: (
-          <div className="p-6">
-            <div className="bg-card rounded-lg p-8 text-center">
-              <h1 className="text-2xl font-bold mb-4">개인 포트폴리오</h1>
-              <p className="text-muted-foreground mb-4">
-                회원님의 투자 포트폴리오를 관리할 수 있습니다.
-              </p>
-              <div className="text-sm text-muted-foreground">
-                🚧 개발 진행 중...
-              </div>
-            </div>
-          </div>
-        ),
+        element: <TempPage title="포트폴리오" description="개인 투자 포트폴리오를 관리하세요." />,
       },
     ],
   },
@@ -201,73 +234,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: (
-          <div className="p-6">
-            <div className="bg-card rounded-lg p-8 text-center">
-              <h1 className="text-2xl font-bold mb-4">관심 종목</h1>
-              <p className="text-muted-foreground mb-4">
-                관심 있는 주식과 암호화폐를 저장하고 추적할 수 있습니다.
-              </p>
-              <div className="text-sm text-muted-foreground">
-                🚧 개발 진행 중...
-              </div>
-            </div>
-          </div>
-        ),
-      },
-    ],
-  },
-
-  {
-    path: '/settings',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <div className="p-6">
-            <div className="bg-card rounded-lg p-8 text-center">
-              <h1 className="text-2xl font-bold mb-4">설정</h1>
-              <p className="text-muted-foreground mb-4">
-                개인화 설정과 알림 설정을 관리할 수 있습니다.
-              </p>
-              <div className="text-sm text-muted-foreground">
-                🚧 개발 진행 중...
-              </div>
-            </div>
-          </div>
-        ),
-      },
-    ],
-  },
-
-  {
-    path: '/notifications',
-    element: (
-      <ProtectedRoute>
-        <AuthenticatedLayout />
-      </ProtectedRoute>
-    ),
-    children: [
-      {
-        index: true,
-        element: (
-          <div className="p-6">
-            <div className="bg-card rounded-lg p-8 text-center">
-              <h1 className="text-2xl font-bold mb-4">알림</h1>
-              <p className="text-muted-foreground mb-4">
-                가격 알림과 뉴스 알림을 확인할 수 있습니다.
-              </p>
-              <div className="text-sm text-muted-foreground">
-                🚧 개발 진행 중...
-              </div>
-            </div>
-          </div>
-        ),
+        element: <TempPage title="관심 종목" description="관심 있는 주식과 암호화폐를 추적하세요." />,
       },
     ],
   },
@@ -302,20 +269,19 @@ export const router = createBrowserRouter([
   {
     path: '*',
     element: (
-      <PublicLayout>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-muted-foreground mb-4">404</h1>
-            <p className="text-muted-foreground mb-8">페이지를 찾을 수 없습니다.</p>
-            <a 
-              href="/" 
-              className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              홈으로 돌아가기
-            </a>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-8xl mb-6">🔍</div>
+          <h1 className="text-4xl font-bold text-white mb-4">404</h1>
+          <p className="text-white/70 mb-8">페이지를 찾을 수 없습니다.</p>
+          <a 
+            href="/" 
+            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 text-white rounded-xl font-bold hover:scale-105 transition-all duration-300 shadow-2xl"
+          >
+            홈으로 돌아가기
+          </a>
         </div>
-      </PublicLayout>
+      </div>
     ),
   },
 ]);
