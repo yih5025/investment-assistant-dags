@@ -4,6 +4,7 @@ import { AuthenticatedLayout, PublicLayout } from './components/layout/Layout';
 import { useAuth } from './hooks/useAuth';
 
 // 페이지 컴포넌트들 (Lazy Loading)
+const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
 const Dashboard = React.lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const Login = React.lazy(() => import('./pages/Auth/Login').then(m => ({ default: m.Login })));
 const Register = React.lazy(() => import('./pages/Auth/Register').then(m => ({ default: m.Register })));
@@ -36,7 +37,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-// 공개 라우트 컴포넌트 (로그인된 사용자는 대시보드로 리다이렉트)
+// 공개 라우트 컴포넌트 (로그인된 사용자는 홈으로 리다이렉트)
 const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
 
@@ -45,7 +46,7 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/" replace />; // 홈으로 리다이렉트
   }
 
   return <>{children}</>;
@@ -62,10 +63,11 @@ export const router = createBrowserRouter([
         index: true,
         element: (
           <React.Suspense fallback={<LoadingFallback />}>
-            <Dashboard />
+            <Home />
           </React.Suspense>
         ),
       },
+      // dashboard 경로를 홈으로 리다이렉트 (기존 URL 호환성 유지)
       {
         path: 'dashboard',
         element: <Navigate to="/" replace />,
