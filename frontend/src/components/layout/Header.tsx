@@ -7,7 +7,8 @@ import {
   LogOut, 
   Moon, 
   Sun,
-  Menu
+  Menu,
+  TrendingUp
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { SearchBox } from '../common/SearchBox';
@@ -76,12 +77,13 @@ export const Header: React.FC<HeaderProps> = ({
           )}
           
           <Link to="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">I</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent">
+              <TrendingUp className="h-5 w-5 text-white" />
             </div>
-            <span className="font-bold text-xl hidden sm:block">
-              Investment Assistant
-            </span>
+            <div className="hidden font-bold text-foreground sm:block">
+              <span className="text-lg">I.A</span>
+              <div className="text-xs text-muted-foreground">Investment Assistant</div>
+            </div>
           </Link>
         </div>
 
