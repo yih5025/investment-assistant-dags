@@ -1,7 +1,7 @@
 // src/components/layout/Header.tsx
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import {SearchBox} from '../common/SearchBox';
+import SearchBox from '../common/SearchBox';
 import './Header.css';
 
 const Header: React.FC = () => {
