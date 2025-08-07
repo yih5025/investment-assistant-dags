@@ -1,7 +1,6 @@
-// src/pages/Home.tsx
 import React, { useState, useEffect } from 'react';
 
-// 타입 정의
+// 타입 정의들 (그대로 유지)
 interface CalendarEvent {
   company: string;
   event: string;
@@ -49,7 +48,6 @@ interface NewsItem {
   trending: boolean;
 }
 
-// 캘린더 이벤트 타입 정의
 type CalendarEvents = {
   [key: string]: CalendarEvent[];
 };
@@ -59,6 +57,7 @@ const Home: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
+  // 데이터들 (그대로 유지)
   const calendarEvents: CalendarEvents = {
     "2024-01-15": [
       { company: "AAPL", event: "Q4 실적발표", type: "earnings", time: "16:30", impact: "high" },
@@ -321,243 +320,221 @@ const Home: React.FC = () => {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-pulse"></div>
       </div>
 
-      {/* 헤더 */}
-      <header className="relative backdrop-blur-xl bg-black/20 border-b border-white/10 sticky top-0 z-50">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center space-x-3">
-            <button className="p-2 hover:bg-white/10 rounded-xl md:hidden transition-all duration-300">
-              ☰
-            </button>
-            <div>
-              <h1 className="text-2xl font-black bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-                W.E.I
-              </h1>
-              <p className="text-xs text-white/60 font-medium">Wise & Easy Investment</p>
+      {/* 메인 콘텐츠 */}
+      <div className="relative">
+        {/* 모바일: 중앙 정렬 컨테이너 / 데스크톱: 전체 너비 */}
+        <div className="max-w-md mx-auto lg:max-w-none lg:mx-0 p-4 lg:p-8 space-y-8">
+          {/* 캘린더 섹션 */}
+          <section>
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl">
+                📅
+              </div>
+              <h2 className="text-xl font-bold text-white">투자 캘린더</h2>
+              <span className="animate-pulse">⭐</span>
             </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button className="p-3 hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-110">
-              🔍
-            </button>
-            <button className="p-3 hover:bg-white/10 rounded-xl relative transition-all duration-300 hover:scale-110">
-              🔔
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-red-500 to-pink-500 rounded-full animate-pulse shadow-lg shadow-red-500/50"></div>
-            </button>
-          </div>
-        </div>
-      </header>
+            {renderCalendar()}
+          </section>
 
-      <div className="relative max-w-md mx-auto p-4 space-y-8">
-        {/* 캘린더 섹션 */}
-        <section>
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl">
-              📅
-            </div>
-            <h2 className="text-xl font-bold text-white">투자 캘린더</h2>
-            <span className="animate-pulse">⭐</span>
-          </div>
-          {renderCalendar()}
-        </section>
-
-        {/* 실시간 주식 배너 */}
-        <section>
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="p-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl">
-              📈
-            </div>
-            <h2 className="text-xl font-bold text-white">실시간 주식</h2>
-            <span className="animate-bounce">⚡</span>
-          </div>
-          
-          <div className="relative overflow-hidden rounded-3xl">
-            <div
-              className="flex transition-transform duration-700 ease-in-out"
-              style={{ transform: `translateX(-${currentBannerIndex * 100}%)` }}
-            >
-              {stockBanners.map((banner, index) => (
-                <div
-                  key={index}
-                  className={`w-full flex-shrink-0 bg-gradient-to-br ${banner.gradient} p-6 rounded-3xl relative overflow-hidden`}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-50"></div>
-                  
-                  <div className="relative z-10">
-                    <div className="flex items-center space-x-3 mb-4">
-                      <div className="p-2 bg-black/20 rounded-xl backdrop-blur-sm">
-                        📊
-                      </div>
-                      <h3 className="font-bold text-lg text-white">{banner.title}</h3>
-                    </div>
-                    <div className="space-y-3">
-                      {banner.stocks.slice(0, 3).map((stock, idx) => (
-                        <div key={idx} className="flex justify-between items-center p-3 bg-black/20 backdrop-blur-sm rounded-2xl border border-white/20">
-                          <div className="flex items-center space-x-3">
-                            <span className="text-2xl">{stock.logo}</span>
-                            <div>
-                              <span className="font-bold text-white">{stock.symbol}</span>
-                              <div className="text-xs text-white/70">{stock.name}</div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-white">{stock.price}</div>
-                            <div className={`text-sm font-medium ${
-                              stock.change.startsWith("+") ? "text-green-200" : "text-red-200"
-                            }`}>
-                              {stock.change}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
+          {/* 실시간 주식 배너 */}
+          <section>
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl">
+                📈
+              </div>
+              <h2 className="text-xl font-bold text-white">실시간 주식</h2>
+              <span className="animate-bounce">⚡</span>
             </div>
             
-            <div className="flex justify-center space-x-3 mt-4">
-              {stockBanners.map((_, index) => (
-                <button
-                  key={index}
-                  className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                    index === currentBannerIndex 
-                      ? "bg-gradient-to-r from-cyan-400 to-purple-400 scale-125 shadow-lg shadow-purple-500/50" 
-                      : "bg-white/30 hover:bg-white/50"
-                  }`}
-                  onClick={() => setCurrentBannerIndex(index)}
-                />
+            <div className="relative overflow-hidden rounded-3xl">
+              <div
+                className="flex transition-transform duration-700 ease-in-out"
+                style={{ transform: `translateX(-${currentBannerIndex * 100}%)` }}
+              >
+                {stockBanners.map((banner, index) => (
+                  <div
+                    key={index}
+                    className={`w-full flex-shrink-0 bg-gradient-to-br ${banner.gradient} p-6 rounded-3xl relative overflow-hidden`}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-50"></div>
+                    
+                    <div className="relative z-10">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="p-2 bg-black/20 rounded-xl backdrop-blur-sm">
+                          📊
+                        </div>
+                        <h3 className="font-bold text-lg text-white">{banner.title}</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {banner.stocks.slice(0, 3).map((stock, idx) => (
+                          <div key={idx} className="flex justify-between items-center p-3 bg-black/20 backdrop-blur-sm rounded-2xl border border-white/20">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-2xl">{stock.logo}</span>
+                              <div>
+                                <span className="font-bold text-white">{stock.symbol}</span>
+                                <div className="text-xs text-white/70">{stock.name}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold text-white">{stock.price}</div>
+                              <div className={`text-sm font-medium ${
+                                stock.change.startsWith("+") ? "text-green-200" : "text-red-200"
+                              }`}>
+                                {stock.change}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex justify-center space-x-3 mt-4">
+                {stockBanners.map((_, index) => (
+                  <button
+                    key={index}
+                    className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                      index === currentBannerIndex 
+                        ? "bg-gradient-to-r from-cyan-400 to-purple-400 scale-125 shadow-lg shadow-purple-500/50" 
+                        : "bg-white/30 hover:bg-white/50"
+                    }`}
+                    onClick={() => setCurrentBannerIndex(index)}
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* 소셜 피드 */}
+          <section>
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl">
+                🗣️
+              </div>
+              <h2 className="text-xl font-bold text-white">시장 영향력 피드</h2>
+              <div className="px-3 py-1 bg-red-500/20 rounded-full border border-red-500/30">
+                <span className="text-xs text-red-300 font-bold">LIVE</span>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              {socialFeeds.map((feed) => (
+                <div key={feed.id} className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-600 to-purple-600 rounded-3xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
+                  
+                  <div className="relative backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-5 hover:bg-white/15 transition-all duration-300">
+                    <div className="flex items-start space-x-4">
+                      <div className="relative">
+                        <div className="text-3xl">{feed.avatar}</div>
+                        {feed.verified && (
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                            <span className="text-white text-xs">✓</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <span className="font-bold text-white">{feed.displayName}</span>
+                          <span className="text-sm text-white/60">@{feed.username}</span>
+                          <span className={`text-xs px-2 py-1 rounded-full font-bold ${
+                            feed.platform === "Truth Social" 
+                              ? "bg-orange-500/20 text-orange-300 border border-orange-500/30" 
+                              : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                          }`}>
+                            {feed.platform}
+                          </span>
+                        </div>
+                        <p className="text-white/90 mb-3 leading-relaxed">{feed.content}</p>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <span className="text-sm text-white/60">{feed.time}</span>
+                            <div className="flex items-center space-x-1">
+                              <span className="text-sm text-white/60">{feed.engagement}</span>
+                              <span className="text-red-400">❤️</span>
+                            </div>
+                          </div>
+                          <button className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all duration-300 hover:scale-110 group">
+                            🔗
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* 소셜 피드 */}
-        <section>
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="p-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-xl">
-              🗣️
+          {/* 실시간 뉴스 */}
+          <section>
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-xl">
+                📰
+              </div>
+              <h2 className="text-xl font-bold text-white">실시간 뉴스</h2>
+              <div className="px-3 py-1 bg-green-500/20 rounded-full border border-green-500/30 animate-pulse">
+                <span className="text-xs text-green-300 font-bold">HOT</span>
+              </div>
             </div>
-            <h2 className="text-xl font-bold text-white">시장 영향력 피드</h2>
-            <div className="px-3 py-1 bg-red-500/20 rounded-full border border-red-500/30">
-              <span className="text-xs text-red-300 font-bold">LIVE</span>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            {socialFeeds.map((feed) => (
-              <div key={feed.id} className="relative group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-600 to-purple-600 rounded-3xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
-                
-                <div className="relative backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-5 hover:bg-white/15 transition-all duration-300">
-                  <div className="flex items-start space-x-4">
-                    <div className="relative">
-                      <div className="text-3xl">{feed.avatar}</div>
-                      {feed.verified && (
-                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                          <span className="text-white text-xs">✓</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <span className="font-bold text-white">{feed.displayName}</span>
-                        <span className="text-sm text-white/60">@{feed.username}</span>
-                        <span className={`text-xs px-2 py-1 rounded-full font-bold ${
-                          feed.platform === "Truth Social" 
-                            ? "bg-orange-500/20 text-orange-300 border border-orange-500/30" 
-                            : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                        }`}>
-                          {feed.platform}
-                        </span>
+            
+            <div className="space-y-4">
+              {liveNews.map((news) => (
+                <div key={news.id} className="relative group cursor-pointer">
+                  {news.trending && (
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-3xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
+                  )}
+                  
+                  <div className="relative backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-5 hover:bg-white/15 transition-all duration-300 hover:scale-105">
+                    <div className="flex items-start space-x-4">
+                      <div className="relative">
+                        <div className="text-3xl">{news.thumbnail}</div>
+                        {news.trending && (
+                          <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full animate-ping"></div>
+                        )}
                       </div>
-                      <p className="text-white/90 mb-3 leading-relaxed">{feed.content}</p>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <span className="text-sm text-white/60">{feed.time}</span>
-                          <div className="flex items-center space-x-1">
-                            <span className="text-sm text-white/60">{feed.engagement}</span>
-                            <span className="text-red-400">❤️</span>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-white mb-2 line-clamp-2 group-hover:text-cyan-400 transition-colors">
+                          {news.title}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-sm text-white/60">{news.source}</span>
+                            <span className="text-white/40">•</span>
+                            <span className="text-sm text-white/60">{news.time}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className={`text-xs px-3 py-1 rounded-full font-bold border ${
+                              news.category === "economy" ? "bg-blue-500/20 text-blue-300 border-blue-500/30" :
+                              news.category === "tech" ? "bg-purple-500/20 text-purple-300 border-purple-500/30" :
+                              news.category === "earnings" ? "bg-green-500/20 text-green-300 border-green-500/30" :
+                              "bg-orange-500/20 text-orange-300 border-orange-500/30"
+                            }`}>
+                              {news.category === "economy" ? "경제" :
+                               news.category === "tech" ? "기술" :
+                               news.category === "earnings" ? "실적" : 
+                               news.category === "crypto" ? "크립토" : "원자재"}
+                            </span>
+                            <span className="text-white/60 group-hover:text-cyan-400 transition-colors">↗</span>
                           </div>
                         </div>
-                        <button className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all duration-300 hover:scale-110 group">
-                          🔗
-                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 실시간 뉴스 */}
-        <section>
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="p-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-xl">
-              📰
+              ))}
             </div>
-            <h2 className="text-xl font-bold text-white">실시간 뉴스</h2>
-            <div className="px-3 py-1 bg-green-500/20 rounded-full border border-green-500/30 animate-pulse">
-              <span className="text-xs text-green-300 font-bold">HOT</span>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            {liveNews.map((news) => (
-              <div key={news.id} className="relative group cursor-pointer">
-                {news.trending && (
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-yellow-600 to-orange-600 rounded-3xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
-                )}
-                
-                <div className="relative backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl p-5 hover:bg-white/15 transition-all duration-300 hover:scale-105">
-                  <div className="flex items-start space-x-4">
-                    <div className="relative">
-                      <div className="text-3xl">{news.thumbnail}</div>
-                      {news.trending && (
-                        <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full animate-ping"></div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-white mb-2 line-clamp-2 group-hover:text-cyan-400 transition-colors">
-                        {news.title}
-                      </h3>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <span className="text-sm text-white/60">{news.source}</span>
-                          <span className="text-white/40">•</span>
-                          <span className="text-sm text-white/60">{news.time}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs px-3 py-1 rounded-full font-bold border ${
-                            news.category === "economy" ? "bg-blue-500/20 text-blue-300 border-blue-500/30" :
-                            news.category === "tech" ? "bg-purple-500/20 text-purple-300 border-purple-500/30" :
-                            news.category === "earnings" ? "bg-green-500/20 text-green-300 border-green-500/30" :
-                            "bg-orange-500/20 text-orange-300 border-orange-500/30"
-                          }`}>
-                            {news.category === "economy" ? "경제" :
-                             news.category === "tech" ? "기술" :
-                             news.category === "earnings" ? "실적" : 
-                             news.category === "crypto" ? "크립토" : "원자재"}
-                          </span>
-                          <span className="text-white/60 group-hover:text-cyan-400 transition-colors">↗</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+          </section>
 
-        <div className="text-center py-6">
-          <button className="px-8 py-4 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 text-white rounded-2xl font-bold hover:scale-105 transition-all duration-300 shadow-2xl shadow-purple-500/30 hover:shadow-purple-500/50">
-            <span className="flex items-center space-x-2">
-              <span>더 많은 뉴스 보기</span>
-              <span>↗</span>
-            </span>
-          </button>
+          <div className="text-center py-6">
+            <button className="px-8 py-4 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 text-white rounded-2xl font-bold hover:scale-105 transition-all duration-300 shadow-2xl shadow-purple-500/30 hover:shadow-purple-500/50">
+              <span className="flex items-center space-x-2">
+                <span>더 많은 뉴스 보기</span>
+                <span>↗</span>
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
