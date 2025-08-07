@@ -12,7 +12,7 @@ import {
   ChevronRight,
   LogOut
 } from 'lucide-react';
-import { Button } from '../ui/button';
+import Button from '../ui/button';
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from '../../utils/helpers';
 
@@ -208,8 +208,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         
         {/* 닫기 버튼 (모바일만) */}
         <Button
-          variant="ghost"
-          size="icon"
+          variant="glass"
+          size="sm"
           onClick={onClose}
           className="text-white/70 hover:text-white hover:bg-white/10 lg:hidden"
         >

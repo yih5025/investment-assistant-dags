@@ -1,46 +1,30 @@
-import { Suspense, useEffect } from 'react';
-import { RouterProvider } from 'react-router-dom';
-import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { LoadingScreen } from './components/common/LoadingSpinner';
-import { useAuth } from './hooks/useAuth';
+// src/App.tsx
+import React from 'react';
+import { BrowserRouter, RouterProvider } from 'react-router-dom';
+import Layout from './components/layout/Layout';
 import { router } from './router';
+import { ErrorBoundary }   from './components/common/ErrorBoundary';
+import './styles/globals.css';
+import './App.css';
 
 function App() {
-  const { checkAuth } = useAuth();
-
-  useEffect(() => {
-    // 앱 시작 시 인증 상태 확인
-    checkAuth();
-  }, [checkAuth]);
-
   return (
-    <ErrorBoundary
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="text-center p-8">
-            <h1 className="text-2xl font-bold text-destructive mb-4">앱 오류</h1>
-            <p className="text-muted-foreground mb-4">
-              예상치 못한 오류가 발생했습니다.
-            </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              새로고침
-            </button>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <div className="app">
+          {/* 배경 효과 레이어 */}
+          <div className="app-background">
+            <div className="gradient-orb orb-1"></div>
+            <div className="gradient-orb orb-2"></div>
+            <div className="gradient-orb orb-3"></div>
           </div>
+          
+          {/* 메인 콘텐츠 */}
+          <Layout>
+            <RouterProvider router={router} />
+          </Layout>
         </div>
-      }
-    >
-      <Suspense 
-        fallback={
-          <div className="min-h-screen flex items-center justify-center bg-background">
-            <LoadingScreen message="Investment Assistant 로딩 중..." />
-          </div>
-        }
-      >
-        <RouterProvider router={router} />
-      </Suspense>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }

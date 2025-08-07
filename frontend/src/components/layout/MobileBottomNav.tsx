@@ -1,110 +1,89 @@
+// src/components/layout/MobileBottomNav.tsx
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { 
-  Home,
-  TrendingUp,
-  Bitcoin,
-  Newspaper,
-  BarChart3
-} from 'lucide-react';
-import { cn } from '../../utils/helpers';
+import { useNavigate, useLocation } from 'react-router-dom';
+import './MobileBottomNav.css';
 
-interface NavItem {
-  title: string;
-  href: string;
-  icon: React.ElementType;
-  badge?: string;
-}
-
-const navItems: NavItem[] = [
-  {
-    title: '홈',
-    href: '/',
-    icon: Home,
-  },
-  {
-    title: '주식',
-    href: '/stocks',
-    icon: TrendingUp,
-  },
-  {
-    title: '암호화폐',
-    href: '/crypto',
-    icon: Bitcoin,
-  },
-  {
-    title: '뉴스',
-    href: '/news',
-    icon: Newspaper,
-    badge: 'HOT',
-  },
-  {
-    title: '경제지표',
-    href: '/economic',
-    icon: BarChart3,
-  },
-];
-
-export const MobileBottomNav: React.FC = () => {
+const MobileBottomNav: React.FC = () => {
+  const navigate = useNavigate();
   const location = useLocation();
 
-  const isActive = (href: string) => {
-    if (href === '/') {
-      return location.pathname === '/';
+  const navItems = [
+    {
+      path: '/',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M3 9L12 2L21 9V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V9Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <polyline points="9,22 9,12 15,12 15,22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      label: '홈'
+    },
+    {
+      path: '/stocks',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      label: '주식'
+    },
+    {
+      path: '/crypto',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+          <path d="M8 12L10 14L16 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      label: '코인'
+    },
+    {
+      path: '/news',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M4 22H20C20.5523 22 21 21.5523 21 21V3C21 2.44772 20.5523 2 20 2H8C7.44772 2 7 2.44772 7 3V6H4C3.44772 6 3 6.44772 3 7V21C3 21.5523 3.44772 22 4 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <polyline points="16,6 16,20 20,20 20,6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          <polyline points="7,9 7,18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      label: '뉴스'
+    },
+    {
+      path: '/economic',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <line x1="12" y1="20" x2="12" y2="10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <line x1="18" y1="20" x2="18" y2="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          <line x1="6" y1="20" x2="6" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      ),
+      label: '경제'
     }
-    return location.pathname.startsWith(href);
-  };
+  ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-black/95 backdrop-blur-xl border-t border-white/10">
-      <div className="flex items-center justify-around py-2">
+    <nav className="mobile-bottom-nav glass">
+      <div className="nav-container">
         {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          
+          const isActive = location.pathname === item.path;
           return (
-            <Link
-              key={item.href}
-              to={item.href}
-              className={cn(
-                'flex flex-col items-center justify-center py-2 px-3 rounded-xl transition-all duration-300 relative',
-                'hover:bg-white/10',
-                active 
-                  ? 'text-cyan-400 bg-white/10 scale-110' 
-                  : 'text-white/70 hover:text-white'
-              )}
+            <button
+              key={item.path}
+              className={`nav-item ${isActive ? 'active' : ''}`}
+              onClick={() => navigate(item.path)}
+              aria-label={item.label}
             >
-              <div className="relative">
-                <Icon className={cn(
-                  'h-5 w-5 mb-1',
-                  active && 'drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]'
-                )} />
-                {item.badge && (
-                  <div className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold animate-pulse">
-                    {item.badge}
-                  </div>
-                )}
+              <div className="nav-icon">
+                {item.icon}
               </div>
-              <span className={cn(
-                'text-xs font-medium',
-                active && 'font-bold'
-              )}>
-                {item.title}
-              </span>
-              
-              {/* 활성 상태 인디케이터 */}
-              {active && (
-                <div className="absolute -top-0.5 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-gradient-to-r from-cyan-400 to-purple-400 rounded-full animate-pulse" />
-              )}
-            </Link>
+              <span className="nav-label">{item.label}</span>
+              {isActive && <div className="nav-indicator" />}
+            </button>
           );
         })}
-      </div>
-      
-      {/* 홈 인디케이터 (iPhone 스타일) */}
-      <div className="flex justify-center pb-1">
-        <div className="w-32 h-1 bg-white/20 rounded-full" />
       </div>
     </nav>
   );
 };
+
+export default MobileBottomNav;

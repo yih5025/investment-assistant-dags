@@ -1,0 +1,69 @@
+/* src/components/layout/Header.css */
+.header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 44px;
+    max-width: 430px;
+    margin: 0 auto;
+  }
+  
+  .header-left,
+  .header-right {
+    width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .header-center {
+    flex: 1;
+    text-align: center;
+  }
+  
+  .page-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    color: #333;
+  }
+  
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .logo-icon {
+    font-size: 24px;
+  }
+  
+  .back-button,
+  .search-toggle,
+  .menu-button {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    border: none;
+    cursor: pointer;
+  }
+  
+  .search-container {
+    padding: 8px 0 12px;
+    max-width: 430px;
+    margin: 0 auto;
+  }

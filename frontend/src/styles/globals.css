@@ -1,72 +1,224 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* src/styles/globals.css - Liquid Glass 테마 */
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+/* 기본 변수 정의 */
+:root {
+  /* 주요 색상 */
+  --color-background: #ffffff;
+  --color-glass-bg: rgba(255, 255, 255, 0.15);
+  --color-glass-border: rgba(255, 255, 255, 0.2);
+  --color-glass-shadow: rgba(0, 0, 0, 0.1);
+  
+  /* 상승/하락 색상 */
+  --color-up: #00d084;
+  --color-down: #ff4757;
+  --color-neutral: #6c757d;
+  
+  /* 설명 색상 */
+  --color-info: #d7fefe;
+  --color-info-text: #0891b2;
+  
+  /* 그라데이션 배경 */
+  --gradient-primary: linear-gradient(135deg, 
+    rgba(135, 206, 255, 0.1) 0%, 
+    rgba(215, 254, 254, 0.1) 50%,
+    rgba(255, 255, 255, 0.1) 100%);
+  
+  --gradient-card: linear-gradient(145deg,
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(255, 255, 255, 0.1) 100%);
+  
+  /* 블러 효과 */
+  --blur-light: blur(20px);
+  --blur-medium: blur(40px);
+  --blur-heavy: blur(60px);
+  
+  /* 그림자 */
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-button: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* 전체 배경 설정 */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--gradient-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  position: relative;
+}
+
+/* 배경 그라데이션 애니메이션 */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(45deg, 
+    rgba(135, 206, 255, 0.05) 0%,
+    rgba(215, 254, 254, 0.08) 25%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(135, 206, 255, 0.05) 75%,
+    rgba(215, 254, 254, 0.08) 100%);
+  animation: gradientShift 8s ease-in-out infinite;
+  z-index: -1;
+}
+
+@keyframes gradientShift {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Glass 효과 기본 클래스 */
+.glass {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: var(--blur-light);
+  -webkit-backdrop-filter: var(--blur-light);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: var(--shadow-glass);
+  border-radius: 16px;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: var(--blur-medium);
+  -webkit-backdrop-filter: var(--blur-medium);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: var(--shadow-card);
+  border-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+/* 상승/하락 Glass 효과 */
+.glass-up {
+  background: rgba(0, 208, 132, 0.1);
+  border-color: rgba(0, 208, 132, 0.2);
+}
+
+.glass-down {
+  background: rgba(255, 71, 87, 0.1);
+  border-color: rgba(255, 71, 87, 0.2);
+}
+
+.glass-info {
+  background: rgba(215, 254, 254, 0.2);
+  border-color: rgba(8, 145, 178, 0.2);
+}
+
+/* 텍스트 스타일 */
+.text-up { color: var(--color-up); font-weight: 600; }
+.text-down { color: var(--color-down); font-weight: 600; }
+.text-neutral { color: var(--color-neutral); }
+.text-info { color: var(--color-info-text); }
+
+/* 버튼 스타일 */
+.btn-glass {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: var(--blur-light);
+  -webkit-backdrop-filter: var(--blur-light);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 12px 20px;
+  color: #333;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-button);
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-glass:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-button);
+}
+
+/* 입력 필드 스타일 */
+.input-glass {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: var(--blur-light);
+  -webkit-backdrop-filter: var(--blur-light);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: #333;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.input-glass::placeholder {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.input-glass:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(135, 206, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(135, 206, 255, 0.1);
+}
+
+/* 스크롤바 커스터마이징 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* 모바일 최적화 */
+@media (max-width: 768px) {
+  .glass-card {
+    border-radius: 16px;
+    margin: 8px;
   }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+  
+  .btn-glass {
+    padding: 10px 16px;
+    border-radius: 10px;
+  }
+  
+  .input-glass {
+    padding: 10px 14px;
+    border-radius: 10px;
   }
 }
 
-@layer base {
-  * {
-    @apply border-border;
+/* 터치 피드백 */
+@media (hover: none) and (pointer: coarse) {
+  .glass-card:active {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(0.98);
   }
-  body {
-    @apply bg-background text-foreground;
+  
+  .btn-glass:active {
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(0.95);
   }
-}
-
-/* 투자 관련 커스텀 스타일 */
-.price-up {
-  @apply text-green-600 dark:text-green-400;
-}
-
-.price-down {
-  @apply text-red-600 dark:text-red-400;
-}
-
-.price-neutral {
-  @apply text-gray-600 dark:text-gray-400;
 }

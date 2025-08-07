@@ -1,6 +1,6 @@
 import React from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { AuthenticatedLayout, PublicLayout } from './components/layout/Layout';
+import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
+import Layout from './components/layout/Layout';
 import { useAuth } from './hooks/useAuth';
 
 // 페이지 컴포넌트들 (Lazy Loading)
@@ -57,7 +57,7 @@ export const router = createBrowserRouter([
   // 메인 레이아웃 - 공개 접근 가능 (로그인 선택적)
   {
     path: '/',
-    element: <AuthenticatedLayout />,
+    element: <Layout><Outlet /></Layout>,
     children: [
       {
         index: true,
@@ -78,7 +78,7 @@ export const router = createBrowserRouter([
   // 주식 관련 라우트 - 공개 접근 가능
   {
     path: '/stocks',
-    element: <AuthenticatedLayout />,
+    element: <Layout><Outlet /></Layout>,
     children: [
       {
         index: true,
@@ -102,7 +102,7 @@ export const router = createBrowserRouter([
   // 암호화폐 관련 라우트 - 공개 접근 가능
   {
     path: '/crypto',
-    element: <AuthenticatedLayout />,
+    element: <Layout><Outlet /></Layout>,
     children: [
       {
         index: true,
@@ -126,7 +126,7 @@ export const router = createBrowserRouter([
   // 뉴스 관련 라우트 - 공개 접근 가능
   {
     path: '/news',
-    element: <AuthenticatedLayout />,
+    element: <Layout><Outlet /></Layout>,
     children: [
       {
         index: true,
@@ -150,7 +150,7 @@ export const router = createBrowserRouter([
   // 경제지표 라우트 - 공개 접근 가능
   {
     path: '/economic',
-    element: <AuthenticatedLayout />,
+    element: <Layout><Outlet /></Layout>,
     children: [
       {
         index: true,
@@ -168,7 +168,7 @@ export const router = createBrowserRouter([
     path: '/portfolio',
     element: (
       <ProtectedRoute>
-        <AuthenticatedLayout />
+        <Layout><Outlet /></Layout>
       </ProtectedRoute>
     ),
     children: [
@@ -195,7 +195,7 @@ export const router = createBrowserRouter([
     path: '/watchlist',
     element: (
       <ProtectedRoute>
-        <AuthenticatedLayout />
+        <Layout><Outlet /></Layout>
       </ProtectedRoute>
     ),
     children: [
@@ -222,7 +222,7 @@ export const router = createBrowserRouter([
     path: '/settings',
     element: (
       <ProtectedRoute>
-        <AuthenticatedLayout />
+        <Layout><Outlet /></Layout>
       </ProtectedRoute>
     ),
     children: [
@@ -249,7 +249,7 @@ export const router = createBrowserRouter([
     path: '/notifications',
     element: (
       <ProtectedRoute>
-        <AuthenticatedLayout />
+        <Layout><Outlet /></Layout>
       </ProtectedRoute>
     ),
     children: [
@@ -276,25 +276,25 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: (
-      <PublicLayout>
+      <Layout>
         <PublicRoute>
           <React.Suspense fallback={<LoadingFallback />}>
             <Login />
           </React.Suspense>
         </PublicRoute>
-      </PublicLayout>
+      </Layout>
     ),
   },
   {
     path: '/register',
     element: (
-      <PublicLayout>
+      <Layout>
         <PublicRoute>
           <React.Suspense fallback={<LoadingFallback />}>
             <Register />
           </React.Suspense>
         </PublicRoute>
-      </PublicLayout>
+          </Layout>
     ),
   },
 
@@ -302,7 +302,7 @@ export const router = createBrowserRouter([
   {
     path: '*',
     element: (
-      <PublicLayout>
+      <Layout>
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-muted-foreground mb-4">404</h1>
@@ -315,7 +315,7 @@ export const router = createBrowserRouter([
             </a>
           </div>
         </div>
-      </PublicLayout>
+      </Layout>
     ),
   },
 ]);

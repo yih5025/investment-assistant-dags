@@ -1,0 +1,13 @@
+.layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    position: relative;
+  }
+  
+  .main-content {
+    flex: 1;
+    padding-top: 80px; /* 헤더 높이만큼 */
+    padding-bottom: 90px; /* 하단 네비게이션 높이만큼 */
+    position: relative;
+  }
