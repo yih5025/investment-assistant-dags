@@ -1,281 +1,411 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Building, Calendar, TrendingUp, DollarSign } from "lucide-react";
+import { Calendar, Building, TrendingUp, Clock, ChevronRight, ChevronLeft, Grid } from "lucide-react";
 
-interface Event {
+interface CalendarEvent {
   id: string;
-  date: string;
-  symbol: string;
   title: string;
-  description: string;
-  type: "earnings" | "economic" | "event" | "meeting";
+  company: string;
+  symbol: string;
+  date: string;
+  time: string;
+  type: "earnings" | "economic" | "event";
   importance: "high" | "medium" | "low";
-  time?: string;
+  description: string;
+  dayOfMonth?: number;
 }
 
 export function EventCalendar() {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [selectedView, setSelectedView] = useState<"week" | "month" | "calendar">("week");
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const events: Event[] = [
+  const events: CalendarEvent[] = [
     {
       id: "1",
-      date: "2025-01-15",
+      title: "실적 발표",
+      company: "Apple Inc.",
       symbol: "AAPL",
-      title: "Apple Inc. Q1 2025 실적 발표",
-      description: "애플의 2025년 1분기 실적을 발표합니다. 아이폰 15 시리즈 판매량과 서비스 부문 성장률이 주목됩니다.",
+      date: "오늘",
+      time: "16:30",
       type: "earnings",
       importance: "high",
-      time: "16:30"
+      description: "Q4 2024 실적 발표 및 컨퍼런스 콜",
+      dayOfMonth: 15
     },
     {
       id: "2",
-      date: "2025-01-16",
-      symbol: "CPI",
-      title: "미국 소비자물가지수 발표",
-      description: "12월 CPI 데이터 발표. 연준의 다음 금리 결정에 중요한 영향을 미칠 예정입니다.",
+      title: "연준 FOMC 회의",
+      company: "연방준비제도",
+      symbol: "FED",
+      date: "오늘",
+      time: "20:00",
       type: "economic",
       importance: "high",
-      time: "22:30"
+      description: "기준금리 발표 및 정책 방향 제시",
+      dayOfMonth: 15
     },
     {
       id: "3",
-      date: "2025-01-17",
+      title: "실적 발표",
+      company: "Tesla Inc.",
       symbol: "TSLA",
-      title: "Tesla 배터리 데이 이벤트",
-      description: "테슬라의 새로운 배터리 기술과 에너지 저장 솔루션을 발표하는 행사입니다.",
-      type: "event",
+      date: "내일",
+      time: "17:00",
+      type: "earnings",
       importance: "high",
-      time: "11:00"
+      description: "Q4 2024 실적 발표",
+      dayOfMonth: 16
     },
     {
       id: "4",
-      date: "2025-01-18",
-      symbol: "FOMC",
-      title: "연준 FOMC 회의록 공개",
-      description: "12월 FOMC 회의의 상세 논의 내용이 공개됩니다. 향후 통화정책 방향성을 파악할 수 있습니다.",
-      type: "economic",
-      importance: "high",
-      time: "04:00"
+      title: "신제품 발표",
+      company: "NVIDIA Corp.",
+      symbol: "NVDA",
+      date: "이번 주",
+      time: "11:00",
+      type: "event",
+      importance: "medium",
+      description: "새로운 AI 칩 아키텍처 공개",
+      dayOfMonth: 18
     },
     {
       id: "5",
-      date: "2025-01-20",
-      symbol: "MSFT",
-      title: "Microsoft 주주총회",
-      description: "마이크로소프트의 연례 주주총회가 개최됩니다. AI 전략과 클라우드 사업 계획을 발표할 예정입니다.",
-      type: "meeting",
-      importance: "medium",
-      time: "02:00"
+      title: "고용통계 발표",
+      company: "미국 노동부",
+      symbol: "JOBS",
+      date: "이번 주",
+      time: "22:30",
+      type: "economic",
+      importance: "high",
+      description: "12월 비농업 고용 변화 발표",
+      dayOfMonth: 19
     },
     {
       id: "6",
-      date: "2025-01-22",
-      symbol: "NVDA",
-      title: "NVIDIA AI 컨퍼런스 키노트",
-      description: "젠슨 황 CEO가 차세대 AI 칩과 데이터센터 솔루션을 공개하는 기조연설을 진행합니다.",
-      type: "event",
+      title: "실적 발표",
+      company: "Microsoft Corp.",
+      symbol: "MSFT",
+      date: "이번 달",
+      time: "16:00",
+      type: "earnings",
       importance: "high",
-      time: "03:00"
+      description: "Q4 2024 실적 발표",
+      dayOfMonth: 25
     },
     {
       id: "7",
-      date: "2025-01-23",
-      symbol: "GDP",
-      title: "미국 GDP 예비치 발표",
-      description: "4분기 GDP 성장률 예비치가 발표됩니다. 경기 둔화 우려 속에서 주목받고 있습니다.",
-      type: "economic",
-      importance: "medium",
-      time: "22:30"
-    },
-    {
-      id: "8",
-      date: "2025-01-24",
+      title: "제품 발표회",
+      company: "Meta Platforms",
       symbol: "META",
-      title: "Meta 실적 발표",
-      description: "메타의 4분기 실적과 메타버스 부문의 진전 상황이 공개됩니다.",
-      type: "earnings",
-      importance: "high",
-      time: "17:00"
-    },
-  ];
-
-  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
-
-  const nextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
-  };
-
-  const prevMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
-  };
-
-  const getEventForDate = (day: number) => {
-    const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return events.filter(event => event.date === dateStr);
-  };
-
-  const getImportanceColor = (importance: string) => {
-    switch (importance) {
-      case "high": return "bg-red-500";
-      case "medium": return "bg-yellow-500";
-      case "low": return "bg-green-500";
-      default: return "bg-gray-500";
+      date: "이번 달",
+      time: "14:00",
+      type: "event",
+      importance: "medium",
+      description: "새로운 VR 헤드셋 공개",
+      dayOfMonth: 28
     }
-  };
+  ];
 
   const getTypeIcon = (type: string) => {
     switch (type) {
       case "earnings":
         return <TrendingUp size={14} className="text-green-400" />;
       case "economic":
-        return <DollarSign size={14} className="text-blue-400" />;
+        return <Building size={14} className="text-blue-400" />;
       case "event":
-        return <Building size={14} className="text-purple-400" />;
-      case "meeting":
-        return <Calendar size={14} className="text-orange-400" />;
+        return <Calendar size={14} className="text-purple-400" />;
       default:
-        return <Calendar size={14} className="text-gray-400" />;
+        return <Clock size={14} className="text-gray-400" />;
     }
   };
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case "earnings": return "실적발표";
-      case "economic": return "경제지표";
-      case "event": return "기업행사";
-      case "meeting": return "주주총회";
-      default: return "일정";
+      case "earnings":
+        return "실적";
+      case "economic":
+        return "경제";
+      case "event":
+        return "이벤트";
+      default:
+        return "";
     }
   };
+
+  const getImportanceColor = (importance: string) => {
+    switch (importance) {
+      case "high":
+        return "border-l-red-400";
+      case "medium":
+        return "border-l-yellow-400";
+      case "low":
+        return "border-l-green-400";
+      default:
+        return "border-l-gray-400";
+    }
+  };
+
+  const getImportanceLabel = (importance: string) => {
+    switch (importance) {
+      case "high":
+        return "🔥 중요";
+      case "medium":
+        return "⚠️ 보통";
+      case "low":
+        return "📝 참고";
+      default:
+        return "";
+    }
+  };
+
+  const getFilteredEvents = () => {
+    switch (selectedView) {
+      case "week":
+        return events.filter(event => event.date === "오늘" || event.date === "내일" || event.date === "이번 주");
+      case "month":
+        return events.filter(event => event.date === "이번 달" || event.date === "오늘" || event.date === "내일" || event.date === "이번 주");
+      case "calendar":
+        return events;
+      default:
+        return events;
+    }
+  };
+
+  const generateCalendarDays = () => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+
+    const days = [];
+    
+    // 이전 달의 빈 날들
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    
+    // 이번 달의 날들
+    for (let day = 1; day <= daysInMonth; day++) {
+      const hasEvent = events.some(event => event.dayOfMonth === day);
+      days.push({ day, hasEvent });
+    }
+
+    return days;
+  };
+
+  const monthNames = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+  const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    setCurrentMonth(prev => {
+      const newDate = new Date(prev);
+      if (direction === 'prev') {
+        newDate.setMonth(prev.getMonth() - 1);
+      } else {
+        newDate.setMonth(prev.getMonth() + 1);
+      }
+      return newDate;
+    });
+  };
+
+  if (selectedEvent) {
+    return (
+      <div className="glass-card rounded-2xl p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <button
+            onClick={() => setSelectedEvent(null)}
+            className="p-2 rounded-lg glass hover:glass-strong transition-all"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="m15 18-6-6 6-6"/>
+            </svg>
+          </button>
+          <h3 className="font-semibold">이벤트 상세</h3>
+        </div>
+
+        <div className={`glass rounded-xl p-4 border-l-4 ${getImportanceColor(selectedEvent.importance)}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2">
+              {getTypeIcon(selectedEvent.type)}
+              <span className="text-sm font-medium">{getTypeLabel(selectedEvent.type)}</span>
+              <span className="text-xs px-2 py-1 glass rounded-md">{selectedEvent.symbol}</span>
+            </div>
+            <span className="text-xs">{getImportanceLabel(selectedEvent.importance)}</span>
+          </div>
+
+          <h4 className="font-semibold mb-1">{selectedEvent.title}</h4>
+          <p className="text-sm text-foreground/80 mb-2">{selectedEvent.company}</p>
+          
+          <div className="flex items-center space-x-4 text-sm text-foreground/70 mb-3">
+            <div className="flex items-center space-x-1">
+              <Calendar size={12} />
+              <span>{selectedEvent.date}</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <Clock size={12} />
+              <span>{selectedEvent.time}</span>
+            </div>
+          </div>
+
+          <div className="glass-subtle rounded-lg p-3">
+            <p className="text-sm text-foreground/80 leading-relaxed">
+              {selectedEvent.description}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold flex items-center">
-          <Calendar className="mr-2" size={20} />
-          시장 이벤트 캘린더
-        </h2>
-        <div className="flex items-center space-x-2">
-          <button onClick={prevMonth} className="p-1 rounded-lg hover:bg-white/10">
-            <ChevronLeft size={20} />
+        <h3 className="font-semibold flex items-center">
+          <Calendar className="mr-2" size={18} />
+          📅 시장 이벤트
+        </h3>
+        <div className="flex space-x-1">
+          <button
+            onClick={() => setSelectedView("week")}
+            className={`px-3 py-1 text-xs rounded-lg transition-all ${
+              selectedView === "week"
+                ? "glass text-primary"
+                : "text-foreground/60 hover:glass-subtle"
+            }`}
+          >
+            이번 주
           </button>
-          <span className="text-sm font-medium min-w-24 text-center">
-            {currentDate.getFullYear()}.{String(currentDate.getMonth() + 1).padStart(2, '0')}
-          </span>
-          <button onClick={nextMonth} className="p-1 rounded-lg hover:bg-white/10">
-            <ChevronRight size={20} />
+          <button
+            onClick={() => setSelectedView("month")}
+            className={`px-3 py-1 text-xs rounded-lg transition-all ${
+              selectedView === "month"
+                ? "glass text-primary"
+                : "text-foreground/60 hover:glass-subtle"
+            }`}
+          >
+            이번 달
+          </button>
+          <button
+            onClick={() => setSelectedView("calendar")}
+            className={`px-3 py-1 text-xs rounded-lg transition-all flex items-center space-x-1 ${
+              selectedView === "calendar"
+                ? "glass text-primary"
+                : "text-foreground/60 hover:glass-subtle"
+            }`}
+          >
+            <Grid size={12} />
+            <span>캘린더</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 mb-2">
-        {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
-          <div key={day} className="text-center text-xs text-foreground/60 py-2">
-            {day}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {Array.from({ length: firstDayOfMonth }, (_, i) => (
-          <div key={`empty-${i}`} className="h-16" />
-        ))}
-        
-        {Array.from({ length: daysInMonth }, (_, i) => {
-          const day = i + 1;
-          const dayEvents = getEventForDate(day);
-          
-          return (
+      {selectedView === "calendar" ? (
+        <div className="space-y-4">
+          {/* 캘린더 헤더 */}
+          <div className="flex items-center justify-between">
             <button
-              key={day}
-              className="h-16 flex flex-col items-center justify-start rounded-lg hover:bg-white/10 relative p-1 transition-colors"
-              onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
+              onClick={() => navigateMonth('prev')}
+              className="p-2 rounded-lg glass hover:glass-strong transition-all"
             >
-              <span className="text-sm mb-1">{day}</span>
-              {dayEvents.length > 0 && (
-                <div className="w-full space-y-0.5">
-                  {dayEvents.slice(0, 2).map((event) => (
-                    <div
-                      key={event.id}
-                      className={`text-xs px-1 py-0.5 rounded text-center truncate ${
-                        event.type === 'earnings' ? 'bg-green-500/20 text-green-300' :
-                        event.type === 'economic' ? 'bg-blue-500/20 text-blue-300' :
-                        event.type === 'event' ? 'bg-purple-500/20 text-purple-300' :
-                        'bg-orange-500/20 text-orange-300'
-                      }`}
-                      title={event.title}
-                    >
+              <ChevronLeft size={16} />
+            </button>
+            <h4 className="font-semibold">
+              {currentMonth.getFullYear()}년 {monthNames[currentMonth.getMonth()]}
+            </h4>
+            <button
+              onClick={() => navigateMonth('next')}
+              className="p-2 rounded-lg glass hover:glass-strong transition-all"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {/* 요일 헤더 */}
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {dayNames.map(day => (
+              <div key={day} className="text-center text-xs font-medium text-foreground/70 py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* 캘린더 그리드 */}
+          <div className="calendar-grid">
+            {generateCalendarDays().map((dayInfo, index) => (
+              <div
+                key={index}
+                className={`calendar-day ${dayInfo?.hasEvent ? 'has-event' : ''} ${!dayInfo ? 'opacity-0' : ''}`}
+                onClick={() => {
+                  if (dayInfo?.hasEvent) {
+                    const dayEvent = events.find(event => event.dayOfMonth === dayInfo.day);
+                    if (dayEvent) setSelectedEvent(dayEvent);
+                  }
+                }}
+              >
+                {dayInfo && (
+                  <span className="text-sm font-medium">{dayInfo.day}</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="glass-subtle rounded-lg p-3">
+            <p className="text-xs text-foreground/70 text-center">
+              💡 파란색 점이 있는 날짜를 클릭하면 이벤트 상세를 볼 수 있어요
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {getFilteredEvents().map((event) => (
+            <button
+              key={event.id}
+              onClick={() => setSelectedEvent(event)}
+              className={`w-full glass rounded-xl p-3 border-l-4 ${getImportanceColor(event.importance)} hover:glass-strong transition-all text-left`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-1">
+                    {getTypeIcon(event.type)}
+                    <span className="text-xs text-foreground/60 glass-subtle px-2 py-0.5 rounded-md">
+                      {getTypeLabel(event.type)}
+                    </span>
+                    <span className="text-xs font-medium px-2 py-0.5 bg-primary/20 text-primary rounded-md">
                       {event.symbol}
+                    </span>
+                  </div>
+                  
+                  <h4 className="font-medium text-sm mb-1">{event.title}</h4>
+                  <p className="text-xs text-foreground/70">{event.company}</p>
+                  
+                  <div className="flex items-center space-x-3 mt-2 text-xs text-foreground/60">
+                    <div className="flex items-center space-x-1">
+                      <Calendar size={10} />
+                      <span>{event.date}</span>
                     </div>
-                  ))}
-                  {dayEvents.length > 2 && (
-                    <div className="text-xs text-center text-foreground/60">
-                      +{dayEvents.length - 2}
+                    <div className="flex items-center space-x-1">
+                      <Clock size={10} />
+                      <span>{event.time}</span>
                     </div>
-                  )}
+                    <span>{getImportanceLabel(event.importance)}</span>
+                  </div>
                 </div>
-              )}
+                
+                <ChevronRight size={16} className="text-foreground/40" />
+              </div>
             </button>
-          );
-        })}
-      </div>
-
-      {selectedEvent && (
-        <div className="mt-4 p-4 glass rounded-xl">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center space-x-2 mb-2">
-              {getTypeIcon(selectedEvent.type)}
-              <span className="text-sm font-medium text-primary">{selectedEvent.symbol}</span>
-              <div className={`w-2 h-2 rounded-full ${getImportanceColor(selectedEvent.importance)}`} />
-              <span className="text-xs text-foreground/60">{getTypeLabel(selectedEvent.type)}</span>
-            </div>
-            <button 
-              onClick={() => setSelectedEvent(null)}
-              className="text-foreground/50 hover:text-foreground"
-            >
-              ✕
-            </button>
-          </div>
-
-          <h3 className="font-medium mb-2">{selectedEvent.title}</h3>
-          <p className="text-sm text-foreground/70 mb-3 leading-relaxed">
-            {selectedEvent.description}
-          </p>
-          
-          <div className="flex items-center justify-between text-xs text-foreground/60">
-            <span>{selectedEvent.date}</span>
-            {selectedEvent.time && (
-              <span className="bg-white/10 px-2 py-1 rounded">
-                {selectedEvent.time} (KST)
-              </span>
-            )}
-          </div>
+          ))}
         </div>
       )}
 
-      {/* 범례 */}
-      <div className="mt-4 p-3 glass rounded-xl">
-        <h4 className="text-sm font-medium mb-2">이벤트 유형</h4>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="flex items-center space-x-2">
-            <TrendingUp size={12} className="text-green-400" />
-            <span>실적발표</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <DollarSign size={12} className="text-blue-400" />
-            <span>경제지표</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Building size={12} className="text-purple-400" />
-            <span>기업행사</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Calendar size={12} className="text-orange-400" />
-            <span>주주총회</span>
-          </div>
+      {getFilteredEvents().length === 0 && selectedView !== "calendar" && (
+        <div className="text-center py-8 text-foreground/60">
+          <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+          <p>선택한 기간에 예정된 이벤트가 없습니다</p>
         </div>
-      </div>
+      )}
     </div>
   );
 }

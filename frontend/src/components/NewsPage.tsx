@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Clock, TrendingUp, AlertCircle, ExternalLink, Building, DollarSign, Users, Filter, Lock, Bell } from "lucide-react";
+import { Clock, TrendingUp, AlertCircle, ExternalLink, Building, DollarSign, Users, Filter } from "lucide-react";
 
 interface NewsPageProps {
   isLoggedIn: boolean;
@@ -17,7 +17,6 @@ interface NewsItem {
   importance: "high" | "medium" | "low";
   url: string;
   imageUrl?: string;
-  premium?: boolean;
 }
 
 export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
@@ -49,15 +48,14 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
     },
     {
       id: "3",
-      title: "[프리미엄] AI 반도체 시장 전망 분석 리포트",
+      title: "AI 반도체 시장 전망 분석 리포트",
       summary: "2025년 AI 칩 시장의 성장 전망과 주요 기업들의 경쟁 구도를 심층 분석합니다.",
       content: "전문가들은 AI 칩 시장이 향후 5년간 연평균 35% 성장할 것으로 예측한다고 밝혔습니다. NVIDIA, AMD, Intel 등 주요 기업들의 전략과 시장 점유율 변화를 자세히 살펴봅니다.",
       source: "W.E.I 분석팀",
       timestamp: "2시간 전",
       category: "tech",
       importance: "medium",
-      url: "https://example.com/news3",
-      premium: true
+      url: "https://example.com/news3"
     },
     {
       id: "4",
@@ -83,15 +81,14 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
     },
     {
       id: "6",
-      title: "[프리미엄] 글로벌 경제 리스크 전망 2025",
+      title: "글로벌 경제 리스크 전망 2025",
       summary: "2025년 주요 경제 리스크 요인들과 투자 전략을 전문가가 분석합니다.",
       content: "지정학적 리스크, 인플레이션 재상승 가능성, 중앙은행들의 정책 변화 등 2025년 투자자들이 주목해야 할 주요 리스크들을 종합 분석했습니다.",
       source: "W.E.I 이코노미스트",
       timestamp: "5시간 전",
       category: "economy",
       importance: "high",
-      url: "https://example.com/news6",
-      premium: true
+      url: "https://example.com/news6"
     }
   ];
 
@@ -130,10 +127,6 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
   };
 
   const handleNewsClick = (newsItem: NewsItem) => {
-    if (newsItem.premium && !isLoggedIn) {
-      onLoginPrompt();
-      return;
-    }
     setSelectedNews(newsItem);
   };
 
@@ -144,7 +137,7 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setSelectedNews(null)}
-            className="p-2 rounded-lg glass hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg glass hover:glass-strong transition-all"
           >
             <Clock size={20} />
           </button>
@@ -158,17 +151,11 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
         <div className="glass-card rounded-2xl p-6">
           <div className="flex items-center space-x-2 mb-4">
             {getCategoryIcon(selectedNews.category)}
-            <span className="text-xs text-foreground/60 bg-white/10 px-2 py-1 rounded-md">
+            <span className="text-xs text-foreground/60 glass-subtle px-2 py-1 rounded-md">
               {getCategoryLabel(selectedNews.category)}
             </span>
             <span className="text-xs text-foreground/50">·</span>
             <span className="text-xs text-foreground/50">{selectedNews.timestamp}</span>
-            {selectedNews.premium && (
-              <>
-                <span className="text-xs text-foreground/50">·</span>
-                <span className="text-xs text-yellow-400 bg-yellow-400/20 px-2 py-1 rounded-md">프리미엄</span>
-              </>
-            )}
           </div>
 
           <h1 className="text-xl font-bold mb-4 leading-relaxed">{selectedNews.title}</h1>
@@ -185,7 +172,7 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
             <span className="text-sm text-foreground/50">출처: {selectedNews.source}</span>
             <button 
               onClick={() => window.open(selectedNews.url, '_blank')}
-              className="flex items-center space-x-1 text-sm text-primary hover:text-primary/80 bg-primary/10 px-3 py-1.5 rounded-lg transition-colors"
+              className="flex items-center space-x-1 text-sm text-primary hover:text-primary/80 glass px-3 py-1.5 rounded-lg transition-all"
             >
               <span>원문 보기</span>
               <ExternalLink size={14} />
@@ -198,27 +185,6 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
 
   return (
     <div className="space-y-6">
-      {/* 프리미엄 뉴스 알림 (게스트용) */}
-      {!isLoggedIn && (
-        <div className="glass-card rounded-2xl p-4 border border-primary/30">
-          <div className="flex items-center space-x-3">
-            <Bell className="text-primary" size={20} />
-            <div className="flex-1">
-              <h3 className="font-medium mb-1">📈 프리미엄 분석 레포트</h3>
-              <p className="text-sm text-foreground/70">
-                전문가의 심층 분석과 독점 리포트를 로그인하고 확인하세요.
-              </p>
-            </div>
-            <button
-              onClick={onLoginPrompt}
-              className="px-3 py-1.5 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30 transition-colors"
-            >
-              로그인
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 카테고리 필터 */}
       <div className="glass-card rounded-2xl p-4">
         <h3 className="font-semibold mb-3">카테고리</h3>
@@ -233,8 +199,8 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
                 onClick={() => setSelectedCategory(category.key as any)}
                 className={`flex flex-col items-center space-y-1 p-3 rounded-xl transition-all ${
                   isSelected 
-                    ? "bg-primary/20 text-primary border border-primary/30" 
-                    : "glass hover:bg-white/10"
+                    ? "glass text-primary border border-primary/30" 
+                    : "glass-subtle hover:glass"
                 }`}
               >
                 <Icon size={20} className={isSelected ? "text-primary" : category.color} />
@@ -250,23 +216,13 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
         {filteredNews.map((item) => (
           <div 
             key={item.id} 
-            className={`glass-card rounded-xl p-4 border-l-4 ${getImportanceColor(item.importance)} cursor-pointer hover:bg-white/5 transition-all relative`}
+            className={`glass-card rounded-xl p-4 border-l-4 ${getImportanceColor(item.importance)} cursor-pointer hover:glass-strong transition-all`}
             onClick={() => handleNewsClick(item)}
           >
-            {/* 프리미엄 오버레이 */}
-            {item.premium && !isLoggedIn && (
-              <div className="absolute top-2 right-2">
-                <div className="flex items-center space-x-1 bg-yellow-400/20 text-yellow-400 px-2 py-1 rounded-md text-xs">
-                  <Lock size={10} />
-                  <span>프리미엄</span>
-                </div>
-              </div>
-            )}
-
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center space-x-2">
                 {getCategoryIcon(item.category)}
-                <span className="text-xs text-foreground/60 bg-white/10 px-2 py-1 rounded-md">
+                <span className="text-xs text-foreground/60 glass-subtle px-2 py-1 rounded-md">
                   {getCategoryLabel(item.category)}
                 </span>
                 <span className="text-xs text-foreground/50">·</span>
@@ -276,9 +232,7 @@ export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
             </div>
 
             <h3 className="font-medium mb-2 line-clamp-2 leading-relaxed">{item.title}</h3>
-            <p className={`text-sm text-foreground/70 line-clamp-2 leading-relaxed mb-3 ${
-              item.premium && !isLoggedIn ? 'blur-sm' : ''
-            }`}>
+            <p className="text-sm text-foreground/70 line-clamp-2 leading-relaxed mb-3">
               {item.summary}
             </p>
             

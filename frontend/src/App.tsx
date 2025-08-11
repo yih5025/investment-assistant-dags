@@ -87,22 +87,26 @@ export default function App() {
   if (viewState === "auth") {
     if (authState === "login") {
       return (
-        <LoginPage
-          onBack={handleBackToMain}
-          onLogin={handleLogin}
-          onNavigateToSignup={() => setAuthState("signup")}
-          onForgotPassword={() => console.log("비밀번호 찾기")}
-        />
+        <div className="min-h-screen relative z-10">
+          <LoginPage
+            onBack={handleBackToMain}
+            onLogin={handleLogin}
+            onNavigateToSignup={() => setAuthState("signup")}
+            onForgotPassword={() => console.log("비밀번호 찾기")}
+          />
+        </div>
       );
     }
 
     if (authState === "signup") {
       return (
-        <SignupPage
-          onBack={() => setAuthState("login")}
-          onSignup={handleSignup}
-          onNavigateToLogin={() => setAuthState("login")}
-        />
+        <div className="min-h-screen relative z-10">
+          <SignupPage
+            onBack={() => setAuthState("login")}
+            onSignup={handleSignup}
+            onNavigateToLogin={() => setAuthState("login")}
+          />
+        </div>
       );
     }
   }
@@ -110,12 +114,12 @@ export default function App() {
   // 사용자 프로필 페이지
   if (viewState === "profile" && isLoggedIn) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen relative z-10">
         <div className="max-w-md mx-auto">
           <div className="flex items-center justify-between p-4">
             <button
               onClick={handleBackToMain}
-              className="p-2 rounded-lg glass hover:bg-white/10 transition-colors"
+              className="p-2 rounded-lg glass hover:glass-strong transition-all"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="m15 18-6-6 6-6"/>
@@ -141,10 +145,12 @@ export default function App() {
     if (activeTab !== "home") return null;
 
     return (
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold">W.E.I</h1>
-          <p className="text-sm text-foreground/70">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+            W.E.I
+          </h1>
+          <p className="text-sm text-foreground/80">
             {isLoggedIn ? `안녕하세요, ${user.name}님!` : "Wise & Easy Investment"}
           </p>
         </div>
@@ -154,15 +160,15 @@ export default function App() {
             <>
               <button
                 onClick={handleNotificationClick}
-                className="relative w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/30 transition-colors"
+                className="relative w-10 h-10 rounded-full glass flex items-center justify-center hover:glass-strong transition-all"
               >
                 <Bell size={20} />
                 {/* 알림 배지 */}
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full shadow-lg"></div>
               </button>
               <button
                 onClick={handleUserIconClick}
-                className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/30 transition-colors"
+                className="w-10 h-10 rounded-full glass flex items-center justify-center hover:glass-strong transition-all"
               >
                 <User size={20} />
               </button>
@@ -171,7 +177,7 @@ export default function App() {
             // 게스트용 헤더
             <button
               onClick={handleLoginClick}
-              className="flex items-center space-x-2 px-4 py-2 glass-strong rounded-xl hover:bg-primary/20 transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 glass-strong rounded-xl hover:bg-white/10 transition-all"
             >
               <LogIn size={18} />
               <span className="text-sm font-medium">로그인</span>
@@ -186,31 +192,13 @@ export default function App() {
     switch (activeTab) {
       case "home":
         return (
-          <div className="space-y-6">
+          <div className="space-y-4 relative z-10">
             {renderHeader()}
 
-            {/* 로그인 유도 배너 (게스트용) */}
-            {!isLoggedIn && (
-              <div className="glass-card rounded-2xl p-4 border border-primary/30">
-                <div className="text-center">
-                  <h3 className="font-semibold mb-2">🚀 더 많은 기능을 경험해보세요!</h3>
-                  <p className="text-sm text-foreground/70 mb-3">
-                    로그인하면 맞춤형 투자 분석, 관심 종목 추적, 실시간 알림 등 더 많은 기능을 이용할 수 있어요.
-                  </p>
-                  <button
-                    onClick={handleLoginClick}
-                    className="px-4 py-2 bg-primary/20 text-primary rounded-xl text-sm font-medium hover:bg-primary/30 transition-colors"
-                  >
-                    로그인하고 시작하기
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 주식 배너 */}
+            {/* 실시간 급변동 배너 - WEI 타이틀 바로 밑 */}
             <StockBanner />
 
-            {/* 시장 이벤트 캘린더 */}
+            {/* 시장 이벤트 캘린더 - 스톡 배너 바로 밑 */}
             <EventCalendar />
 
             {/* 소셜 피드 */}
@@ -223,20 +211,14 @@ export default function App() {
 
       case "markets":
         return (
-          <div className="space-y-6">
+          <div className="space-y-6 relative z-10">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <TrendingUp size={24} className="text-primary" />
+                <div className="p-2 rounded-xl glass">
+                  <TrendingUp size={24} className="text-primary" />
+                </div>
                 <h1 className="text-2xl font-bold">시장 & 재무</h1>
               </div>
-              {!isLoggedIn && (
-                <button
-                  onClick={handleLoginClick}
-                  className="px-3 py-1 glass rounded-lg text-sm hover:bg-primary/20 transition-colors"
-                >
-                  로그인
-                </button>
-              )}
             </div>
             
             <IntegratedMarket isLoggedIn={isLoggedIn} onLoginPrompt={handleLoginClick} />
@@ -245,20 +227,14 @@ export default function App() {
 
       case "news":
         return (
-          <div className="space-y-6">
+          <div className="space-y-6 relative z-10">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <Newspaper size={24} className="text-primary" />
+                <div className="p-2 rounded-xl glass">
+                  <Newspaper size={24} className="text-primary" />
+                </div>
                 <h1 className="text-2xl font-bold">뉴스</h1>
               </div>
-              {!isLoggedIn && (
-                <button
-                  onClick={handleLoginClick}
-                  className="px-3 py-1 glass rounded-lg text-sm hover:bg-primary/20 transition-colors"
-                >
-                  로그인
-                </button>
-              )}
             </div>
             
             <NewsPage isLoggedIn={isLoggedIn} onLoginPrompt={handleLoginClick} />
@@ -267,16 +243,18 @@ export default function App() {
 
       case "ai":
         return (
-          <div className="space-y-6">
+          <div className="space-y-6 relative z-10">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <Bot size={24} className="text-primary" />
+                <div className="p-2 rounded-xl glass">
+                  <Bot size={24} className="text-primary" />
+                </div>
                 <h1 className="text-2xl font-bold">AI 분석</h1>
               </div>
               {!isLoggedIn && (
                 <button
                   onClick={handleLoginClick}
-                  className="px-3 py-1 glass rounded-lg text-sm hover:bg-primary/20 transition-colors"
+                  className="px-3 py-1 glass rounded-lg text-sm hover:glass-strong transition-all"
                 >
                   로그인
                 </button>
@@ -289,23 +267,17 @@ export default function App() {
 
       case "economy":
         return (
-          <div className="space-y-6">
+          <div className="space-y-6 relative z-10">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <BarChart3 size={24} className="text-primary" />
+                <div className="p-2 rounded-xl glass">
+                  <BarChart3 size={24} className="text-primary" />
+                </div>
                 <h1 className="text-2xl font-bold">경제 지표</h1>
               </div>
-              {!isLoggedIn && (
-                <button
-                  onClick={handleLoginClick}
-                  className="px-3 py-1 glass rounded-lg text-sm hover:bg-primary/20 transition-colors"
-                >
-                  로그인
-                </button>
-              )}
             </div>
             
-            <EconomicDashboard isLoggedIn={isLoggedIn} onLoginPrompt={handleLoginClick} />
+            <EconomicDashboard isLoggedIn={true} onLoginPrompt={handleLoginClick} />
           </div>
         );
 
@@ -315,10 +287,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-md mx-auto relative">
+    <div className="min-h-screen relative">
+      <div className="max-w-md mx-auto relative z-10">
         {/* 메인 콘텐츠 */}
-        <div className="px-4 pt-8 pb-20">
+        <div className="px-4 pt-6 pb-20">
           {renderContent()}
         </div>
 

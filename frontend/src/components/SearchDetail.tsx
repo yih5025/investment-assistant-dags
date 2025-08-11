@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, TrendingUp, TrendingDown, Star, Bell, Heart, Eye, Share, Lock, Building, DollarSign, PieChart, Calculator, Info } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Star, Bell, Building, DollarSign, PieChart, Calculator, Info } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 
 interface SearchDetailProps {
@@ -97,14 +97,6 @@ export function SearchDetail({
     setAlertEnabled(!alertEnabled);
   };
 
-  const handleShare = () => {
-    if (!isLoggedIn) {
-      onLoginPrompt?.();
-      return;
-    }
-    console.log("공유하기:", symbol);
-  };
-
   return (
     <div className="space-y-6">
       {/* 헤더 */}
@@ -112,7 +104,7 @@ export function SearchDetail({
         <div className="flex items-center space-x-3">
           <button
             onClick={onBack}
-            className="p-2 rounded-lg glass hover:bg-white/10 transition-colors"
+            className="p-2 rounded-lg glass hover:glass-strong transition-all"
           >
             <ArrowLeft size={20} />
           </button>
@@ -123,36 +115,29 @@ export function SearchDetail({
         </div>
 
         <div className="flex items-center space-x-2">
-          {isLoggedIn ? (
+          {isLoggedIn && (
             <>
               <button
                 onClick={handleAlertToggle}
-                className={`p-2 rounded-lg transition-colors ${
+                className={`p-2 rounded-lg transition-all ${
                   alertEnabled 
-                    ? "bg-blue-500/20 text-blue-400" 
-                    : "glass hover:bg-white/10"
+                    ? "glass text-blue-400" 
+                    : "glass hover:glass-strong"
                 }`}
               >
                 <Bell size={20} />
               </button>
               <button
                 onClick={handleWatchlistToggle}
-                className={`p-2 rounded-lg transition-colors ${
+                className={`p-2 rounded-lg transition-all ${
                   isInWatchlist 
-                    ? "bg-yellow-400/20 text-yellow-400" 
-                    : "glass hover:bg-white/10"
+                    ? "glass text-yellow-400" 
+                    : "glass hover:glass-strong"
                 }`}
               >
                 <Star size={20} className={isInWatchlist ? "fill-current" : ""} />
               </button>
             </>
-          ) : (
-            <button
-              onClick={onLoginPrompt}
-              className="px-3 py-1.5 glass-strong rounded-lg text-sm hover:bg-primary/20 transition-colors"
-            >
-              로그인
-            </button>
           )}
         </div>
       </div>
@@ -178,33 +163,8 @@ export function SearchDetail({
           </div>
           <div className="text-right">
             <div className="text-sm text-foreground/60">{stock.sector}</div>
-            {!isLoggedIn && (
-              <div className="flex items-center space-x-1 mt-1 text-xs text-foreground/50">
-                <Eye size={12} />
-                <span>기본 정보</span>
-              </div>
-            )}
           </div>
         </div>
-
-        {!isLoggedIn && (
-          <div className="glass rounded-xl p-3 border border-primary/30">
-            <div className="flex items-center space-x-2">
-              <Lock className="text-primary" size={16} />
-              <div className="flex-1">
-                <p className="text-sm">
-                  <span className="font-medium">로그인하면</span> 실시간 차트, 상세 분석, 가격 알림 등을 이용할 수 있어요.
-                </p>
-              </div>
-              <button
-                onClick={onLoginPrompt}
-                className="px-3 py-1 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30 transition-colors"
-              >
-                로그인
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 차트 */}
@@ -216,19 +176,13 @@ export function SearchDetail({
               <button
                 key={period}
                 onClick={() => setTimeframe(period)}
-                disabled={!isLoggedIn && period !== "1D"}
-                className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                className={`px-3 py-1 text-sm rounded-lg transition-all ${
                   timeframe === period
-                    ? "bg-primary/20 text-primary"
-                    : !isLoggedIn && period !== "1D"
-                    ? "text-foreground/30 cursor-not-allowed"
-                    : "hover:bg-white/10"
+                    ? "glass text-primary"
+                    : "hover:glass-subtle"
                 }`}
               >
                 {period}
-                {!isLoggedIn && period !== "1D" && (
-                  <Lock size={10} className="inline ml-1" />
-                )}
               </button>
             ))}
           </div>
@@ -298,25 +252,7 @@ export function SearchDetail({
       </div>
 
       {/* 상세 분석 */}
-      <div className={`glass-card rounded-2xl p-6 ${!isLoggedIn ? "relative" : ""}`}>
-        {!isLoggedIn && (
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-2xl z-10 flex items-center justify-center">
-            <div className="text-center">
-              <Lock className="mx-auto mb-2 text-primary" size={32} />
-              <p className="font-medium mb-1">상세 분석</p>
-              <p className="text-sm text-foreground/70 mb-3">
-                기술적 지표, 재무 데이터 등<br/>상세 분석은 로그인 후 이용 가능
-              </p>
-              <button
-                onClick={onLoginPrompt}
-                className="px-4 py-2 bg-primary/20 text-primary rounded-xl text-sm hover:bg-primary/30 transition-colors"
-              >
-                로그인하고 보기
-              </button>
-            </div>
-          </div>
-        )}
-        
+      <div className="glass-card rounded-2xl p-6">
         <h3 className="font-semibold mb-4 flex items-center">
           <PieChart className="mr-2" size={18} />
           상세 분석
@@ -343,26 +279,7 @@ export function SearchDetail({
 
       {/* 재무제표 정보 (재무제표가 있는 회사만) */}
       {hasFinancials ? (
-        <div className={`space-y-6 ${!isLoggedIn ? "relative" : ""}`}>
-          {!isLoggedIn && (
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-2xl z-10 flex items-center justify-center">
-              <div className="text-center p-6">
-                <Calculator className="mx-auto mb-3 text-primary" size={48} />
-                <h3 className="font-semibold mb-2">📊 상세 재무 분석</h3>
-                <p className="text-sm text-foreground/70 mb-4">
-                  재무제표와 친절한 설명으로<br/>
-                  기업의 재무 건전성을 쉽게 이해하세요.
-                </p>
-                <button
-                  onClick={onLoginPrompt}
-                  className="px-4 py-2 bg-primary/20 text-primary rounded-xl font-medium hover:bg-primary/30 transition-colors"
-                >
-                  재무 분석 보기
-                </button>
-              </div>
-            </div>
-          )}
-
+        <div className="space-y-6">
           {/* 재무 헤더 */}
           <div className="glass-card rounded-2xl p-6">
             <h3 className="font-semibold mb-4 flex items-center">

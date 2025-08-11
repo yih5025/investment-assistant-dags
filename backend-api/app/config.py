@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # === CORS 설정 ===
     allowed_origins: list = Field(
         [
-            "http://localhost:3000",  # React 개발 서버
+            "*",  # k3s NodePort(프론트 30333) 등 다양한 오리진 허용 (운영 시 환경변수로 제한 권장)
         ],
         description="CORS 허용 오리진"
     )

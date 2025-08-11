@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Heart, MessageCircle, Share, TrendingUp, ExternalLink, Eye, Lock } from "lucide-react";
+import { Heart, MessageCircle, Share, TrendingUp, ExternalLink, Eye } from "lucide-react";
 
 interface SocialFeedProps {
   isLoggedIn: boolean;
@@ -18,7 +18,6 @@ interface Post {
   liked: boolean;
   stocks: string[];
   type: "tweet" | "analysis" | "news";
-  premium?: boolean;
 }
 
 export function SocialFeed({ isLoggedIn }: SocialFeedProps) {
@@ -60,8 +59,7 @@ export function SocialFeed({ isLoggedIn }: SocialFeedProps) {
       shares: 234,
       liked: false,
       stocks: ["NVDA"],
-      type: "analysis",
-      premium: true
+      type: "analysis"
     },
     {
       id: "4",
@@ -75,12 +73,36 @@ export function SocialFeed({ isLoggedIn }: SocialFeedProps) {
       liked: false,
       stocks: ["SPY", "QQQ"],
       type: "tweet"
+    },
+    {
+      id: "5",
+      author: "제롬 파월",
+      avatar: "🏦",
+      time: "12시간 전",
+      content: "연준은 인플레이션 목표 달성을 위해 신중한 통화정책을 지속할 것입니다. 경제 데이터를 면밀히 모니터링하고 있습니다.",
+      likes: 5634,
+      comments: 876,
+      shares: 432,
+      liked: false,
+      stocks: ["SPY", "TLT"],
+      type: "analysis"
+    },
+    {
+      id: "6",
+      author: "팀 쿡",
+      avatar: "🍎",
+      time: "1일 전",
+      content: "Apple Vision Pro의 혁신적인 기술이 새로운 컴퓨팅 시대를 열어가고 있습니다. 미래가 여기에 있습니다.",
+      likes: 7842,
+      comments: 1432,
+      shares: 654,
+      liked: false,
+      stocks: ["AAPL"],
+      type: "tweet"
     }
   ]);
 
   const toggleLike = (postId: string) => {
-    if (!isLoggedIn) return;
-    
     setPosts(prev => prev.map(post => 
       post.id === postId 
         ? { 
@@ -120,27 +142,12 @@ export function SocialFeed({ isLoggedIn }: SocialFeedProps) {
     <div className="glass-card rounded-2xl p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">📱 영향력 있는 인물들</h2>
-        {!isLoggedIn && (
-          <div className="text-xs text-foreground/60">로그인하면 더 많은 피드를 볼 수 있어요</div>
-        )}
+        <div className="text-xs text-foreground/60">실시간 업데이트</div>
       </div>
 
       <div className="space-y-4">
-        {posts.slice(0, isLoggedIn ? 4 : 2).map((post) => (
-          <div key={post.id} className="glass rounded-xl p-4 hover:bg-white/5 transition-colors">
-            {/* 프리미엄 콘텐츠 오버레이 */}
-            {post.premium && !isLoggedIn && (
-              <div className="relative">
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
-                  <div className="text-center">
-                    <Lock className="mx-auto mb-2 text-yellow-400" size={24} />
-                    <p className="text-sm font-medium">프리미엄 분석</p>
-                    <p className="text-xs text-foreground/70">로그인하고 전체 내용을 확인하세요</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
+        {posts.map((post) => (
+          <div key={post.id} className="glass rounded-xl p-4 hover:glass-strong transition-all">
             {/* 헤더 */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-3">
@@ -171,7 +178,7 @@ export function SocialFeed({ isLoggedIn }: SocialFeedProps) {
             </div>
 
             {/* 콘텐츠 */}
-            <p className={`text-sm mb-4 leading-relaxed ${post.premium && !isLoggedIn ? 'blur-sm' : ''}`}>
+            <p className="text-sm mb-4 leading-relaxed">
               {post.content}
             </p>
 
@@ -180,71 +187,54 @@ export function SocialFeed({ isLoggedIn }: SocialFeedProps) {
               <div className="flex items-center space-x-4">
                 <button
                   onClick={() => toggleLike(post.id)}
-                  disabled={!isLoggedIn}
                   className={`flex items-center space-x-1 text-sm transition-colors ${
-                    isLoggedIn 
-                      ? post.liked 
-                        ? "text-red-400 hover:text-red-300" 
-                        : "text-foreground/60 hover:text-red-400"
-                      : "text-foreground/40 cursor-not-allowed"
+                    post.liked 
+                      ? "text-red-400 hover:text-red-300" 
+                      : "text-foreground/60 hover:text-red-400"
                   }`}
                 >
                   <Heart 
                     size={16} 
-                    className={post.liked && isLoggedIn ? "fill-current" : ""} 
+                    className={post.liked ? "fill-current" : ""} 
                   />
                   <span>{post.likes.toLocaleString()}</span>
                 </button>
 
-                <button
-                  disabled={!isLoggedIn}
-                  className={`flex items-center space-x-1 text-sm transition-colors ${
-                    isLoggedIn
-                      ? "text-foreground/60 hover:text-blue-400"
-                      : "text-foreground/40 cursor-not-allowed"
-                  }`}
-                >
+                <button className="flex items-center space-x-1 text-sm text-foreground/60 hover:text-blue-400 transition-colors">
                   <MessageCircle size={16} />
                   <span>{post.comments.toLocaleString()}</span>
                 </button>
 
-                <button
-                  disabled={!isLoggedIn}
-                  className={`flex items-center space-x-1 text-sm transition-colors ${
-                    isLoggedIn
-                      ? "text-foreground/60 hover:text-green-400"
-                      : "text-foreground/40 cursor-not-allowed"
-                  }`}
-                >
+                <button className="flex items-center space-x-1 text-sm text-foreground/60 hover:text-green-400 transition-colors">
                   <Share size={16} />
                   <span>{post.shares.toLocaleString()}</span>
                 </button>
               </div>
 
-              {!isLoggedIn && (
-                <div className="flex items-center space-x-1 text-xs text-foreground/50">
-                  <Eye size={12} />
-                  <span>미리보기</span>
-                </div>
-              )}
+              <div className="flex items-center space-x-1 text-xs text-foreground/50">
+                <Eye size={12} />
+                <span>실시간</span>
+              </div>
             </div>
           </div>
         ))}
 
-        {/* 더보기 (게스트용) */}
-        {!isLoggedIn && (
-          <div className="glass rounded-xl p-6 text-center">
-            <Lock className="mx-auto mb-3 text-primary" size={32} />
-            <h3 className="font-medium mb-2">더 많은 투자 인사이트</h3>
-            <p className="text-sm text-foreground/70 mb-4">
-              로그인하면 워렌 버핏, 일론 머스크 등 투자 구루들의<br/>
-              실시간 피드와 분석을 모두 볼 수 있어요.
-            </p>
+        {/* 더보기 섹션 */}
+        <div className="glass-subtle rounded-xl p-4 text-center">
+          <h3 className="font-medium mb-2">💡 투자 인사이트</h3>
+          <p className="text-sm text-foreground/70 mb-3">
+            전 세계 투자 구루들의 실시간 의견과 분석을 한 곳에서 만나보세요.
+          </p>
+          {isLoggedIn ? (
             <div className="text-xs text-foreground/60">
-              🎯 맞춤형 피드 • 📊 심화 분석 • 🔔 실시간 알림
+              🎯 맞춤형 피드 • 📊 심화 분석 • 🔔 실시간 알림 활성화됨
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-xs text-foreground/60">
+              🌟 모든 투자 인사이트를 무료로 이용하세요
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
