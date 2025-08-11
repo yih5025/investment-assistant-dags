@@ -4,9 +4,7 @@ import { safeLocalStorage, normalizeError } from '../utils/helpers';
 
 // API 클라이언트 설정
 const createApiClient = (): AxiosInstance => {
-  // k3s(NodePort) 환경 기본값: 현재 호스트 기준 백엔드 30888 포트 + /api/v1
-  const defaultBaseUrl = `${window.location.protocol}//${window.location.hostname}:30888/api/v1`;
-  const baseURL = import.meta.env.VITE_API_BASE_URL || defaultBaseUrl;
+  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:30888';
   
   const client = axios.create({
     baseURL,

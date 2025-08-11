@@ -42,9 +42,7 @@ export function useWebSocket(
   const eventListenersRef = useRef<Map<string, ((...args: any[]) => void)[]>>(new Map());
 
   // WebSocket URL 설정
-  // k3s(NodePort) 환경 기본값: 현재 호스트 기준 백엔드 30888 포트의 ws 엔드포인트
-  const defaultWs = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:30888/api/v1/ws`;
-  const wsUrl = url || import.meta.env.VITE_WS_BASE_URL || defaultWs;
+  const wsUrl = url || import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000';
 
   // 연결 함수
   const connect = useCallback(() => {
