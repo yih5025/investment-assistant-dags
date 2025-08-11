@@ -1,7 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { io, type Socket, type SocketOptions } from 'socket.io-client';
-import { WS_EVENTS } from '../utils/constants';
-import { normalizeError } from '../utils/helpers';
+import { useState, useEffect, useCallback } from 'react';
 
 export interface WebSocketState {
   connected: boolean;
@@ -11,24 +8,15 @@ export interface WebSocketState {
   reconnectCount: number;
 }
 
-export interface UseWebSocketOptions extends SocketOptions {
+export interface UseWebSocketOptions {
   autoConnect?: boolean;
   reconnectAttempts?: number;
   reconnectDelay?: number;
 }
 
-// useWebSocket 훅
-export function useWebSocket(
-  url?: string,
-  options: UseWebSocketOptions = {}
-) {
-  const {
-    autoConnect = true,
-    reconnectAttempts = 5,
-    reconnectDelay = 1000,
-    ...socketOptions
-  } = options;
-
+// Socket.IO 비활성화: 기존 API와 호환되는 빈 구현을 제공합니다.
+export function useWebSocket(_url?: string, options: UseWebSocketOptions = {}) {
+  const { autoConnect = false } = options;
   const [state, setState] = useState<WebSocketState>({
     connected: false,
     connecting: false,
@@ -37,231 +25,32 @@ export function useWebSocket(
     reconnectCount: 0,
   });
 
-  const socketRef = useRef<Socket | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const eventListenersRef = useRef<Map<string, ((...args: any[]) => void)[]>>(new Map());
-
-  // WebSocket URL 설정
-  // k3s(NodePort) 환경 기본값: 현재 호스트 기준 백엔드 30888 포트의 ws 엔드포인트
-  const defaultWs = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:30888/api/v1/ws`;
-  const wsUrl = url || import.meta.env.VITE_WS_BASE_URL || defaultWs;
-
-  // 연결 함수
   const connect = useCallback(() => {
-    if (socketRef.current?.connected) return;
-
-    setState(prev => ({ ...prev, connecting: true, error: null }));
-
-    try {
-      const socket = io(wsUrl, {
-        autoConnect: false,
-        ...socketOptions,
-      });
-
-      socket.on(WS_EVENTS.CONNECT, () => {
-        setState(prev => ({
-          ...prev,
-          connected: true,
-          connecting: false,
-          error: null,
-          reconnectCount: 0,
-        }));
-      });
-
-      socket.on(WS_EVENTS.DISCONNECT, (reason) => {
-        setState(prev => ({
-          ...prev,
-          connected: false,
-          connecting: false,
-          error: `연결이 끊어졌습니다: ${reason}`,
-        }));
-
-        // 자동 재연결
-        if (reason === 'io server disconnect') {
-          // 서버에서 연결을 끊은 경우 수동으로 재연결
-          handleReconnect();
-        }
-      });
-
-      socket.on('connect_error', (error) => {
-        setState(prev => ({
-          ...prev,
-          connected: false,
-          connecting: false,
-          error: normalizeError(error),
-        }));
-
-        handleReconnect();
-      });
-
-      // 등록된 이벤트 리스너들 재등록
-      eventListenersRef.current.forEach((listeners, event) => {
-        listeners.forEach(listener => {
-          socket.on(event, listener);
-        });
-      });
-
-      socket.connect();
-      socketRef.current = socket;
-    } catch (error) {
-      setState(prev => ({
-        ...prev,
-        connecting: false,
-        error: normalizeError(error),
-      }));
-    }
-  }, [wsUrl, socketOptions]);
-
-  // 재연결 처리
-  const handleReconnect = useCallback(() => {
-    if (state.reconnectCount >= reconnectAttempts) {
-      setState(prev => ({
-        ...prev,
-        error: '최대 재연결 시도 횟수를 초과했습니다.',
-      }));
-      return;
-    }
-
-    setState(prev => ({ ...prev, reconnectCount: prev.reconnectCount + 1 }));
-
-    reconnectTimeoutRef.current = setTimeout(() => {
-      connect();
-    }, reconnectDelay * Math.pow(2, state.reconnectCount)); // 지수 백오프
-  }, [state.reconnectCount, reconnectAttempts, reconnectDelay, connect]);
-
-  // 연결 해제 함수
+    setState((s) => ({ ...s, connecting: false, connected: false }));
+  }, []);
   const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-
-    setState({
-      connected: false,
-      connecting: false,
-      error: null,
-      lastMessage: null,
-      reconnectCount: 0,
-    });
+    setState((s) => ({ ...s, connecting: false, connected: false }));
   }, []);
-
-  // 메시지 전송 함수
-  const emit = useCallback((event: string, data?: any) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit(event, data);
-      return true;
-    }
-    return false;
+  const emit = useCallback((_event: string, _data?: any) => false, []);
+  const on = useCallback((_event: string, _listener: (...args: any[]) => void) => {
+    return () => {};
   }, []);
+  const off = useCallback((_event: string, _listener?: (...args: any[]) => void) => {}, []);
 
-  // 이벤트 리스너 등록
-  const on = useCallback((event: string, listener: (...args: any[]) => void) => {
-    // 리스너 목록에 추가
-    const listeners = eventListenersRef.current.get(event) || [];
-    listeners.push(listener);
-    eventListenersRef.current.set(event, listeners);
-
-    // 소켓이 연결되어 있으면 즉시 등록
-    if (socketRef.current) {
-      socketRef.current.on(event, listener);
-    }
-
-    // cleanup 함수 반환
-    return () => {
-      const updatedListeners = eventListenersRef.current.get(event) || [];
-      const index = updatedListeners.indexOf(listener);
-      if (index > -1) {
-        updatedListeners.splice(index, 1);
-        eventListenersRef.current.set(event, updatedListeners);
-      }
-
-      if (socketRef.current) {
-        socketRef.current.off(event, listener);
-      }
-    };
-  }, []);
-
-  // 이벤트 리스너 제거
-  const off = useCallback((event: string, listener?: (...args: any[]) => void) => {
-    if (listener) {
-      const listeners = eventListenersRef.current.get(event) || [];
-      const index = listeners.indexOf(listener);
-      if (index > -1) {
-        listeners.splice(index, 1);
-        eventListenersRef.current.set(event, listeners);
-      }
-
-      if (socketRef.current) {
-        socketRef.current.off(event, listener);
-      }
-    } else {
-      eventListenersRef.current.delete(event);
-      if (socketRef.current) {
-        socketRef.current.off(event);
-      }
-    }
-  }, []);
-
-  // 컴포넌트 마운트/언마운트 처리
   useEffect(() => {
-    if (autoConnect) {
-      connect();
-    }
-
-    return () => {
-      disconnect();
-    };
+    if (autoConnect) connect();
+    return () => disconnect();
   }, [autoConnect, connect, disconnect]);
 
-  return {
-    ...state,
-    connect,
-    disconnect,
-    emit,
-    on,
-    off,
-  };
+  return { ...state, connect, disconnect, emit, on, off };
 }
 
-// 특정 이벤트에 대한 간단한 훅
-export function useWebSocketEvent<T>(
-  event: string,
-  handler: (data: T) => void,
-  dependencies: any[] = []
-) {
-  const { on } = useWebSocket();
-
-  useEffect(() => {
-    const cleanup = on(event, handler);
-    return cleanup;
-  }, [event, on, ...dependencies]);
+export function useWebSocketEvent<T>(_event: string, _handler: (data: T) => void, _dependencies: any[] = []) {
+  // no-op
 }
 
-// 실시간 데이터 구독 훅
-export function useWebSocketSubscription<T>(
-  event: string,
-  initialValue: T | null = null
-) {
-  const [data, setData] = useState<T | null>(initialValue);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const { on } = useWebSocket();
-
-  useEffect(() => {
-    const cleanup = on(event, (newData: T) => {
-      setData(newData);
-      setLastUpdated(new Date());
-    });
-
-    return cleanup;
-  }, [event, on]);
-
-  return {
-    data,
-    lastUpdated,
-  };
+export function useWebSocketSubscription<T>(_event: string, initialValue: T | null = null) {
+  const [data] = useState<T | null>(initialValue);
+  const [lastUpdated] = useState<Date | null>(null);
+  return { data, lastUpdated };
 }
