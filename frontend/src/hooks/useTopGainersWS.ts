@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useWebSocket } from './useWebSocket';
+import { useNativeWebSocket } from './useNativeWebSocket';
 
 export interface TopGainer {
   symbol: string;
@@ -9,15 +9,12 @@ export interface TopGainer {
 }
 
 export function useTopGainersWS() {
-  const { on, connected, connect } = useWebSocket(`${import.meta.env.VITE_WS_BASE_URL || ''}/stocks/topgainers`);
+  // 상대 경로로 접속: 프론트 Nginx 프록시(/ws → /api/v1/ws) 경유
+  const { onMessage, connected } = useNativeWebSocket('/ws/stocks/topgainers');
   const [data, setData] = useState<TopGainer[]>([]);
 
   useEffect(() => {
-    connect();
-  }, [connect]);
-
-  useEffect(() => {
-    const cleanup = on('message', (payload: any) => {
+    const cleanup = onMessage((payload: any) => {
       try {
         const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
         const items = Array.isArray(msg?.data) ? msg.data : [];
@@ -31,7 +28,7 @@ export function useTopGainersWS() {
       } catch {}
     });
     return cleanup;
-  }, [on]);
+  }, [onMessage]);
 
   return { data, connected };
 }
