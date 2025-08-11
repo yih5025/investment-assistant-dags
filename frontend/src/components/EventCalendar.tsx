@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Calendar, Building, TrendingUp, Clock, ChevronRight, ChevronLeft, Grid } from "lucide-react";
+import { useEarningsCalendar } from "../hooks/useEarningsCalendar";
 
 interface CalendarEvent {
   id: string;
@@ -18,93 +19,34 @@ export function EventCalendar() {
   const [selectedView, setSelectedView] = useState<"week" | "month" | "calendar">("week");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-
-  const events: CalendarEvent[] = [
-    {
-      id: "1",
-      title: "실적 발표",
-      company: "Apple Inc.",
-      symbol: "AAPL",
-      date: "오늘",
-      time: "16:30",
-      type: "earnings",
-      importance: "high",
-      description: "Q4 2024 실적 발표 및 컨퍼런스 콜",
-      dayOfMonth: 15
-    },
-    {
-      id: "2",
-      title: "연준 FOMC 회의",
-      company: "연방준비제도",
-      symbol: "FED",
-      date: "오늘",
-      time: "20:00",
-      type: "economic",
-      importance: "high",
-      description: "기준금리 발표 및 정책 방향 제시",
-      dayOfMonth: 15
-    },
-    {
-      id: "3",
-      title: "실적 발표",
-      company: "Tesla Inc.",
-      symbol: "TSLA",
-      date: "내일",
-      time: "17:00",
-      type: "earnings",
-      importance: "high",
-      description: "Q4 2024 실적 발표",
-      dayOfMonth: 16
-    },
-    {
-      id: "4",
-      title: "신제품 발표",
-      company: "NVIDIA Corp.",
-      symbol: "NVDA",
-      date: "이번 주",
-      time: "11:00",
-      type: "event",
-      importance: "medium",
-      description: "새로운 AI 칩 아키텍처 공개",
-      dayOfMonth: 18
-    },
-    {
-      id: "5",
-      title: "고용통계 발표",
-      company: "미국 노동부",
-      symbol: "JOBS",
-      date: "이번 주",
-      time: "22:30",
-      type: "economic",
-      importance: "high",
-      description: "12월 비농업 고용 변화 발표",
-      dayOfMonth: 19
-    },
-    {
-      id: "6",
-      title: "실적 발표",
-      company: "Microsoft Corp.",
-      symbol: "MSFT",
-      date: "이번 달",
-      time: "16:00",
-      type: "earnings",
-      importance: "high",
-      description: "Q4 2024 실적 발표",
-      dayOfMonth: 25
-    },
-    {
-      id: "7",
-      title: "제품 발표회",
-      company: "Meta Platforms",
-      symbol: "META",
-      date: "이번 달",
-      time: "14:00",
-      type: "event",
-      importance: "medium",
-      description: "새로운 VR 헤드셋 공개",
-      dayOfMonth: 28
+  const { data, loading, error } = useEarningsCalendar();
+  const events: CalendarEvent[] = data.map((row, idx) => {
+    const d = row.reportDate ? new Date(row.reportDate) : new Date();
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    const isTomorrow = d.toDateString() === tomorrow.toDateString();
+    let dateLabel = "이번 달";
+    if (sameDay) dateLabel = "오늘";
+    else if (isTomorrow) dateLabel = "내일";
+    else {
+      const diff = (d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+      if (Math.abs(diff) <= 7) dateLabel = "이번 주";
     }
-  ];
+    return {
+      id: `${row.symbol}-${row.reportDate}-${idx}`,
+      title: "실적 발표",
+      company: row.companyName || "",
+      symbol: row.symbol,
+      date: dateLabel,
+      time: "",
+      type: "earnings" as const,
+      importance: "high" as const,
+      description: "실적 발표",
+      dayOfMonth: d.getDate(),
+    };
+  });
 
   const getTypeIcon = (type: string) => {
     switch (type) {
