@@ -1,8 +1,0 @@
-{
-  "request_url": "http://localhost:30888/api/v1/truth-social/analytics/daily-posts",
-  "error": {
-    "status": 500,
-    "reason": "Internal Server Error",
-    "body": "{\"detail\":\"데이터베이스 연결 중 오류가 발생했습니다: 1 validation error for APIResponse\\nsuccess\\n  Field required [type=missing, input_value={'data': {'daily_counts':... 통계 조회 완료'}, input_type=dict]\\n    For further information visit https://errors.pydantic.dev/2.5/v/missing\"}"
-  }
-}

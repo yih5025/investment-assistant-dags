@@ -1,8 +1,0 @@
-{
-  "request_url": "http://localhost:30888/api/v1/truth-social/posts/with-media",
-  "error": {
-    "status": 500,
-    "reason": "Internal Server Error",
-    "body": "{\"detail\":\"데이터베이스 연결 중 오류가 발생했습니다: 3 validation errors for TruthSocialPostsResponse\\nitems.9.mentions.0\\n  Input should be a valid string [type=string_type, input_value={'id': '10778025762612849...ame': 'realDonaldTrump'}, input_type=dict]\\n    For further information visit https://errors.pydantic.dev/2.5/v/string_type\\nitems.20.mentions.0\\n  Input should be a valid string [type=string_type, input_value={'id': '10778025762612849...ame': 'realDonaldTrump'}, input_type=dict]\\n    For further information visit https://errors.pydantic.dev/2.5/v/string_type\\nitems.42.mentions.0\\n  Input should be a valid string [type=string_type, input_value={'id': '10778025762612849...ame': 'realDonaldTrump'}, input_type=dict]\\n    For further information visit https://errors.pydantic.dev/2.5/v/string_type\"}"
-  }
-}
