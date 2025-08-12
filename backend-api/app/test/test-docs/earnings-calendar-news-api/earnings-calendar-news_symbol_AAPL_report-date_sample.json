@@ -1,8 +1,0 @@
-{
-  "request_url": "http://localhost:30888/api/v1/earnings-calendar-news/symbol/AAPL/report-date/sample",
-  "error": {
-    "status": 500,
-    "reason": "Internal Server Error",
-    "body": "{\"detail\":\"데이터베이스 연결 중 오류가 발생했습니다: [{'type': 'date_from_datetime_parsing', 'loc': ('path', 'report_date'), 'msg': 'Input should be a valid date or datetime, input is too short', 'input': 'sample', 'ctx': {'error': 'input is too short'}, 'url': 'https://errors.pydantic.dev/2.5/v/date_from_datetime_parsing'}]\"}"
-  }
-}

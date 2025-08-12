@@ -12,7 +12,7 @@ from app.schemas.earnings_calendar_news_schema import (
     EarningsCalendarNewsSearchResponse
 )
 
-router = APIRouter(prefix="/earnings-calendar-news", tags=["earnings-calendar-news"])
+router = APIRouter()
 
 @router.get("/{symbol}/{report_date}", response_model=EarningsCalendarNewsListResponse)
 async def get_earnings_news_by_symbol_and_date(
