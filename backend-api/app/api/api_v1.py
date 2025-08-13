@@ -30,28 +30,28 @@ ROUTER_CONFIGS = [
         "prefix": "/market-news",
         "tag": "Market News",
         "category": "뉴스",
-        "description": "시장 뉴스 API"
+        "description": "NEWS API - 경제, 비즈니스, 기술, 공개상장, 인플레이션, 관세, 무역 전쟁, 제재, 전쟁, 정치, 선거, 정부 정책, 의회, 외교, 핵, 군사 관련 광범위한 뉴스 데이터 전달을 위한 엔드포인트"
     },
     {
         "router": financial_news_endpoint.router,
         "prefix": "/financial-news",
         "tag": "Financial News",
         "category": "뉴스",
-        "description": "금융 뉴스 API"
+        "description": "finnhub - crypto, forex, merger, general 카테고리별 뉴스 데이터 전달을 위한 엔드포인트"
     },
     {
         "router": company_news_endpoint.router,
         "prefix": "/company-news",
         "tag": "Company News",
         "category": "뉴스",
-        "description": "기업 뉴스 API"
+        "description": "finnhub - topgianers 급상승 20개, 급하락 10개, 활발한 거래량 20개 주식 종목에 맞는 뉴스 데이터 전달을 위한 엔드포인트"
     },
     {
         "router": market_news_sentiment_endpoint.router,
         "prefix": "/market-news-sentiment",
         "tag": "Market News Sentiment",
         "category": "뉴스",
-        "description": "시장 뉴스 감성 분석 API"
+        "description": "Alpha Vantage -  월: 에너지·제조(예: topics=energy_transportation, manufacturing / XOM, CVX, EOG, CAT, GE 등), 화: 기술·IPO(technology, ipo / AAPL, MSFT, NVDA, AMZN, TSLA 등), 수: 블록체인·금융(blockchain, finance / JPM, BAC, V, MA, COIN 등), 목: 실적·헬스케어(earnings, life_sciences / AAPL, MSFT, NVDA, JNJ, PFE 등), 금: 리테일·M&A(retail_wholesale, mergers_and_acquisitions / WMT, TGT, COST, DIS, NFLX 등), 토: 부동산·거시(real_estate, economy_macro / HD, LOW, CAT, GE, F, GM 등), 일: 금융시장·정책(technology, finance, earnings, ipo, blockchain, mergers_and_acquisitions, retail_wholesale, life_sciences + 주요 빅테크/금융 티커) 뉴스 감성 분석 API"
     },
 
     # 소셜 미디어 API
@@ -60,14 +60,14 @@ ROUTER_CONFIGS = [
         "prefix": "/truth-social",
         "tag": "Truth Social",
         "category": "소셜미디어",
-        "description": "Truth Social API"
+        "description": "realDonaldTrump, WhiteHouse, DonaldJTrumpJr, Truth Social 트렌딩 포스트 데이터 전달을 위한 엔드포인트"
     },
     {
         "router": x_posts_endpoint.router,
         "prefix": "/x-posts",
         "tag": "X Posts",
         "category": "소셜미디어",
-        "description": "X Posts API"
+        "description": "elonmusk, RayDalio, jimcramer, tim_cook, satyanadella, sundarpichai, SecYellen, VitalikButerin crypto: saylor, brian_armstrong, CoinbaseAssets, tech_ceo: jeffbezos, sundarpichai, IBM, institutional: CathieDWood, mcuban, chamath, media: CNBC, business(Bloomberg), WSJ, corporate: Tesla, nvidia x 데이터 전달을 위한 엔드포인트"
     },
 
     # 실적 관련 API

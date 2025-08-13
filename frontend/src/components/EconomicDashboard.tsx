@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown, Info, BarChart3, GitCompare, Lock } from "lucide-react";
+import { useEconomicIndicators, type EconomicIndicatorYearlyRow } from "../hooks/useEconomicIndicators";
 
 interface EconomicDashboardProps {
   isLoggedIn: boolean;
@@ -23,20 +24,17 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     second: "treasuryRate"
   });
 
-  // 10년간 경제 지표 모의 데이터
-  const economicData: EconomicIndicator[] = [
-    { year: 2014, treasuryRate: 2.54, fedRate: 0.25, cpi: 236.7, inflation: 0.1 },
-    { year: 2015, treasuryRate: 2.14, fedRate: 0.25, cpi: 237.0, inflation: 0.1 },
-    { year: 2016, treasuryRate: 2.45, fedRate: 0.50, cpi: 240.0, inflation: 1.3 },
-    { year: 2017, treasuryRate: 2.33, fedRate: 1.50, cpi: 245.1, inflation: 2.1 },
-    { year: 2018, treasuryRate: 2.91, fedRate: 2.25, cpi: 251.1, inflation: 2.4 },
-    { year: 2019, treasuryRate: 2.14, fedRate: 1.75, cpi: 255.7, inflation: 1.8 },
-    { year: 2020, treasuryRate: 0.89, fedRate: 0.25, cpi: 258.8, inflation: 1.2 },
-    { year: 2021, treasuryRate: 1.44, fedRate: 0.25, cpi: 270.9, inflation: 4.7 },
-    { year: 2022, treasuryRate: 3.01, fedRate: 4.25, cpi: 292.7, inflation: 8.0 },
-    { year: 2023, treasuryRate: 4.05, fedRate: 5.25, cpi: 307.0, inflation: 4.9 },
-    { year: 2024, treasuryRate: 4.25, fedRate: 5.25, cpi: 310.3, inflation: 3.2 },
-  ];
+  // 실제 API 데이터로 대체
+  const { rows, loading, error } = useEconomicIndicators({ startYear: 2014, endYear: 2024 });
+
+  // 선택 지표의 최신/이전 값 추출 유틸
+  const getLatestPair = (key: keyof EconomicIndicator): { value?: number; prev?: number } => {
+    const filtered = rows.filter((r) => (r as any)[key] != null);
+    if (filtered.length === 0) return { value: undefined, prev: undefined };
+    const last = filtered[filtered.length - 1] as any;
+    const prev = filtered.length > 1 ? (filtered[filtered.length - 2] as any) : undefined;
+    return { value: last[key] as number | undefined, prev: prev ? (prev[key] as number | undefined) : undefined };
+  };
 
   const indicators = [
     {
@@ -83,10 +81,17 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
   ];
 
   const currentIndicator = indicators.find(ind => ind.key === selectedIndicator);
-  const currentValue = economicData[economicData.length - 1][selectedIndicator as keyof EconomicIndicator];
-  const previousValue = economicData[economicData.length - 2][selectedIndicator as keyof EconomicIndicator];
-  const change = currentValue - previousValue;
-  const changePercent = ((change / previousValue) * 100);
+  const latestPair = getLatestPair(selectedIndicator as keyof EconomicIndicator);
+  const currentValue = latestPair.value ?? 0;
+  const previousValue = latestPair.prev ?? 0;
+  const hasPrev = latestPair.prev != null;
+  const change = hasPrev ? currentValue - (previousValue as number) : 0;
+  const changePercent = hasPrev && previousValue !== 0 ? ((change / (previousValue as number)) * 100) : 0;
+
+  // 차트 데이터: 선택 지표가 있는 연도만
+  const chartData = useMemo(() => {
+    return (rows as EconomicIndicatorYearlyRow[]).filter((r) => (r as any)[selectedIndicator] != null);
+  }, [rows, selectedIndicator]);
 
   const formatTooltipValue = (value: any, name: string) => {
     const indicator = indicators.find(ind => ind.key === name);
@@ -178,11 +183,12 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
         <>
           {/* 지표 선택 */}
           <div className="grid grid-cols-2 gap-3">
-            {indicators.map((indicator) => {
+              {indicators.map((indicator) => {
               const isSelected = selectedIndicator === indicator.key;
-              const value = economicData[economicData.length - 1][indicator.key as keyof EconomicIndicator];
-              const prevValue = economicData[economicData.length - 2][indicator.key as keyof EconomicIndicator];
-              const indicatorChange = value - prevValue;
+                const pair = getLatestPair(indicator.key as keyof EconomicIndicator);
+                const value = pair.value;
+                const prevValue = pair.prev;
+                const indicatorChange = value != null && prevValue != null ? value - prevValue : 0;
               
               return (
                 <button
@@ -207,14 +213,13 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                     </div>
                   </div>
                   <div className="text-lg font-semibold" style={{ color: indicator.color }}>
-                    {indicator.premium ? "••••" : `${value}${indicator.unit}`}
+                    {indicator.premium ? "••••" : (value != null ? `${value}${indicator.unit}` : "--")}
                   </div>
                   <div className={`text-xs ${
-                    indicator.premium ? "text-foreground/40" : 
-                    indicatorChange >= 0 ? "text-green-400" : "text-red-400"
+                    indicator.premium ? "text-foreground/40" : value != null && prevValue != null ? (indicatorChange >= 0 ? "text-green-400" : "text-red-400") : "text-foreground/40"
                   }`}>
-                    {indicator.premium ? "로그인 필요" : 
-                     `${indicatorChange >= 0 ? "+" : ""}${indicatorChange.toFixed(2)}${indicator.unit}`}
+                    {indicator.premium ? "로그인 필요" : value != null && prevValue != null ?
+                      `${indicatorChange >= 0 ? "+" : ""}${indicatorChange.toFixed(2)}${indicator.unit}` : "데이터 없음"}
                   </div>
                 </button>
               );
@@ -230,15 +235,14 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                 </h3>
                 <div className="text-right">
                   <div className="text-2xl font-bold">
-                    {currentValue}{currentIndicator.unit}
+                    {loading ? "…" : `${currentValue}${currentIndicator.unit}`}
                   </div>
                   <div className={`text-sm flex items-center justify-end ${
-                    change >= 0 ? "text-green-400" : "text-red-400"
+                    hasPrev ? (change >= 0 ? "text-green-400" : "text-red-400") : "text-foreground/60"
                   }`}>
-                    {change >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                    {hasPrev ? (change >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />) : null}
                     <span className="ml-1">
-                      {change >= 0 ? "+" : ""}{change.toFixed(2)}{currentIndicator.unit} 
-                      ({changePercent >= 0 ? "+" : ""}{changePercent.toFixed(1)}%)
+                      {hasPrev ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}${currentIndicator.unit} (${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(1)}%)` : "이전 데이터 없음"}
                     </span>
                   </div>
                 </div>
@@ -260,7 +264,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
           )}
 
           {/* 개별 지표 차트 */}
-          <div className={`glass-card rounded-2xl p-6 ${!currentIndicator || currentIndicator.premium ? 'relative' : ''}`}>
+          <div className={`glass-card rounded-2xl p-6 ${(!currentIndicator || currentIndicator.premium || loading) ? 'relative' : ''}`}>
             {(!currentIndicator || currentIndicator.premium) && (
               <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-2xl z-10 flex items-center justify-center">
                 <div className="text-center">
@@ -278,11 +282,16 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                 </div>
               </div>
             )}
+            {loading && currentIndicator && !currentIndicator.premium && (
+              <div className="absolute inset-0 bg-black/30 backdrop-blur-sm rounded-2xl z-10 flex items-center justify-center">
+                <div className="text-sm text-foreground/80">불러오는 중…</div>
+              </div>
+            )}
 
             <h3 className="font-semibold mb-4">10년간 추이</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={economicData}>
+                <LineChart data={chartData as any}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                   <XAxis 
                     dataKey="year" 
