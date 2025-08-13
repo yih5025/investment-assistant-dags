@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 export interface EconomicIndicatorYearlyRow {
-  year: number;
+  year: number;          // 파생: period에서 추출한 연도
+  period?: string;       // 'YYYY-MM' 형태의 월 키
   treasuryRate?: number; // 10Y yield (%)
   fedRate?: number;      // federal funds rate (%)
   cpi?: number;          // CPI index (pt)
-  inflation?: number;    // yearly inflation (%)
+  inflation?: number;    // yearly inflation (%), 월별 행에도 연도값을 반복 매핑
 }
 
 interface UseEconomicIndicatorsOptions {
@@ -89,47 +90,42 @@ export function useEconomicIndicators(options: UseEconomicIndicatorsOptions = {}
 
     async function fetchAll() {
       try {
-        // 1) Treasury: 연도별 범위 요청(연말 값 확보 목적)
-        const treasuryYearPromises: Promise<Response>[] = [];
-        for (let y = startYear; y <= endYear; y += 1) {
-          const url = `/api/v1/treasury-yield?maturity=10year&start_date=${y}-01-01&end_date=${y}-12-31&size=1000`;
-          treasuryYearPromises.push(fetch(url));
-        }
+    // 1) Treasury: 전체 기간 한 번에(monthly 저장 스키마 가정)
+    const treasuryResPromise = fetch(`/api/v1/treasury-yield?maturity=10year&start_date=${startYear}-01-01&end_date=${endYear}-12-31&size=1000`);
 
-        // 2) Fed/CPI: 전체목록 asc 정렬로 받아서 연말 값 선택
-        const fedResPromise = fetch(`/api/v1/federal-funds-rate?order_by=asc`);
-        const cpiResPromise = fetch(`/api/v1/cpi?order_by=asc`);
+    // 2) Fed/CPI: 전체 목록(정렬 파라미터 불필요)
+    const fedResPromise = fetch(`/api/v1/federal-funds-rate`);
+    const cpiResPromise = fetch(`/api/v1/cpi`);
 
-        // 3) Inflation: 연도 범위 조회
-        const inflationResPromise = fetch(`/api/v1/inflation/range?start_year=${startYear}&end_year=${endYear}`);
+    // 3) Inflation: 연도 범위 조회(연도별)
+    const inflationResPromise = fetch(`/api/v1/inflation/range?start_year=${startYear}&end_year=${endYear}`);
 
-        const [treasuryResponses, fedRes, cpiRes, inflationRes] = await Promise.all([
-          Promise.all(treasuryYearPromises),
-          fedResPromise,
-          cpiResPromise,
-          inflationResPromise,
-        ]);
+    const [treasuryRes, fedRes, cpiRes, inflationRes] = await Promise.all([
+      treasuryResPromise,
+      fedResPromise,
+      cpiResPromise,
+      inflationResPromise,
+    ]);
 
-        // Validate
-        for (const [idx, r] of treasuryResponses.entries()) {
-          if (!r.ok) throw new Error(`treasury[${startYear + idx}] ${r.status}`);
-        }
-        if (!fedRes.ok) throw new Error(`federal ${fedRes.status}`);
-        if (!cpiRes.ok) throw new Error(`cpi ${cpiRes.status}`);
-        if (!inflationRes.ok) throw new Error(`inflation ${inflationRes.status}`);
+    // Validate
+    if (!treasuryRes.ok) throw new Error(`treasury ${treasuryRes.status}`);
+    if (!fedRes.ok) throw new Error(`federal ${fedRes.status}`);
+    if (!cpiRes.ok) throw new Error(`cpi ${cpiRes.status}`);
+    if (!inflationRes.ok) throw new Error(`inflation ${inflationRes.status}`);
 
-        const [treasuryJsonList, fedJson, cpiJson, inflationJson] = await Promise.all([
-          Promise.all(treasuryResponses.map(r => r.json())),
-          fedRes.json(),
-          cpiRes.json(),
-          inflationRes.json(),
-        ]);
+    const [treasuryJson, fedJson, cpiJson, inflationJson] = await Promise.all([
+      treasuryRes.json(),
+      fedRes.json(),
+      cpiRes.json(),
+      inflationRes.json(),
+    ]);
 
         // Normalize arrays from possible shapes
-        // 연도별 응답을 하나의 배열로 평탄화
-        const treasuryItems: AnyRecord[] = treasuryJsonList.flatMap((tj: any) =>
-          Array.isArray(tj?.items) ? tj.items : Array.isArray(tj) ? tj : []
-        );
+        const treasuryItems: AnyRecord[] = Array.isArray(treasuryJson?.items)
+          ? treasuryJson.items
+          : Array.isArray(treasuryJson)
+            ? treasuryJson
+            : [];
         const fedItems: AnyRecord[] = Array.isArray(fedJson?.items)
           ? fedJson.items
           : Array.isArray(fedJson)
@@ -146,45 +142,78 @@ export function useEconomicIndicators(options: UseEconomicIndicatorsOptions = {}
             ? inflationJson
             : [];
 
-        // Group by year with robust field selection
-        const treasuryByYear = groupLastValuePerYear(
-          treasuryItems,
-          ["date", "as_of_date", "recorded_at"],
-          ["yield", "yield_value", "rate", "value"]
-        );
+        // Build monthly map keyed by 'YYYY-MM'
+        const byMonth = new Map<string, EconomicIndicatorYearlyRow>();
 
-        const fedByYear = groupLastValuePerYear(
-          fedItems,
-          ["date", "month", "as_of_date", "recorded_at"],
-          ["rate", "federal_funds_rate", "value"]
-        );
+        function monthKeyOf(d: Date) {
+          const y = d.getUTCFullYear();
+          const m = d.getUTCMonth() + 1;
+          const mm = m < 10 ? `0${m}` : `${m}`;
+          return `${y}-${mm}`;
+        }
 
-        const cpiByYear = groupLastValuePerYear(
-          cpiItems,
-          ["date", "month", "as_of_date", "recorded_at"],
-          ["cpi_value", "value", "cpi"]
-        );
+        // Treasury monthly
+        for (const it of treasuryItems) {
+          const dt = parseDate(it["date"] ?? it["as_of_date"] ?? it["recorded_at"]);
+          if (!dt) continue;
+          const key = monthKeyOf(dt);
+          const year = dt.getUTCFullYear();
+          const row = byMonth.get(key) ?? { year, period: key };
+          row.treasuryRate = pickNumber(it, ["yield", "yield_value", "rate", "value"]);
+          row.year = year;
+          row.period = key;
+          byMonth.set(key, row);
+        }
 
-        // Inflation expected yearly already; accept year/value varieties
-        const inflationByYear = new Map<number, number>();
+        // Fed monthly
+        for (const it of fedItems) {
+          const dt = parseDate(it["date"] ?? it["month"] ?? it["as_of_date"] ?? it["recorded_at"]);
+          if (!dt) continue;
+          const key = monthKeyOf(dt);
+          const year = dt.getUTCFullYear();
+          const row = byMonth.get(key) ?? { year, period: key };
+          row.fedRate = pickNumber(it, ["rate", "federal_funds_rate", "value"]);
+          row.year = year;
+          row.period = key;
+          byMonth.set(key, row);
+        }
+
+        // CPI monthly
+        for (const it of cpiItems) {
+          const dt = parseDate(it["date"] ?? it["month"] ?? it["as_of_date"] ?? it["recorded_at"]);
+          if (!dt) continue;
+          const key = monthKeyOf(dt);
+          const year = dt.getUTCFullYear();
+          const row = byMonth.get(key) ?? { year, period: key };
+          row.cpi = pickNumber(it, ["cpi_value", "value", "cpi"]);
+          row.year = year;
+          row.period = key;
+          byMonth.set(key, row);
+        }
+
+        // Inflation yearly -> spread to months
+        const inflationYearMap = new Map<number, number>();
         for (const it of inflationItems) {
-          const year = pickNumber(it, ["year"])?.valueOf();
+          const y = pickNumber(it, ["year"]);
           const val = pickNumber(it, ["inflation", "inflation_rate", "value", "rate"]);
-          if (typeof year === "number" && typeof val === "number") {
-            inflationByYear.set(year, val);
+          if (typeof y === "number" && typeof val === "number") inflationYearMap.set(y, val);
+        }
+
+        for (const [key, row] of byMonth) {
+          if (row.year != null && inflationYearMap.has(row.year)) {
+            row.inflation = inflationYearMap.get(row.year);
           }
         }
 
-        // Compose final rows for full year range
-        const composed: EconomicIndicatorYearlyRow[] = [];
-        for (let y = startYear; y <= endYear; y += 1) {
-          composed.push({
-            year: y,
-            treasuryRate: treasuryByYear.get(y),
-            fedRate: fedByYear.get(y),
-            cpi: cpiByYear.get(y),
-            inflation: inflationByYear.get(y),
-          });
+        // Compose rows in ascending month order within range
+        const composed: EconomicIndicatorYearlyRow[] = Array.from(byMonth.values())
+          .filter(r => r.year >= startYear && r.year <= endYear)
+          .sort((a, b) => (a.period! < b.period! ? -1 : a.period! > b.period! ? 1 : 0));
+
+        // If empty, keep previous behavior
+        if (isMounted) {
+          setRows(composed);
+          setLoading(false);
         }
 
         if (isMounted) {

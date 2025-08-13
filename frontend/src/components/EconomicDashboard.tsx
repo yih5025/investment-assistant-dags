@@ -90,7 +90,16 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
 
   // 차트 데이터: 선택 지표가 있는 연도만
   const chartData = useMemo(() => {
-    return (rows as EconomicIndicatorYearlyRow[]).filter((r) => (r as any)[selectedIndicator] != null);
+    return (rows as EconomicIndicatorYearlyRow[])
+      .filter((r) => (r as any)[selectedIndicator] != null)
+      .map((r) => ({
+        year: r.year,
+        period: r.period, // YYYY-MM
+        treasuryRate: r.treasuryRate,
+        fedRate: r.fedRate,
+        cpi: r.cpi,
+        inflation: r.inflation,
+      }));
   }, [rows, selectedIndicator]);
 
   const formatTooltipValue = (value: any, name: string) => {
@@ -294,7 +303,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                 <LineChart data={chartData as any}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                   <XAxis 
-                    dataKey="year" 
+                    dataKey="period" 
                     stroke="rgba(255,255,255,0.6)"
                     fontSize={12}
                   />
