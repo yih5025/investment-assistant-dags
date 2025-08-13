@@ -1,262 +1,549 @@
 import { useState } from "react";
-import { Clock, TrendingUp, AlertCircle, ExternalLink, Building, DollarSign, Users, Filter } from "lucide-react";
+import { Search, Filter, TrendingUp, TrendingDown, Clock, Target, ExternalLink, BarChart } from "lucide-react";
+import { Input } from "./ui/input";
+import { Badge } from "./ui/badge";
+
+// 뉴스 타입 정의
+interface GeneralNewsItem {
+  type: "general";
+  source: string;
+  url: string;
+  author: string;
+  title: string;
+  description: string;
+  content: string;
+  published_at: string;
+}
+
+interface CategoryNewsItem {
+  type: "category";
+  category: "crypto" | "forex" | "merger" | "general";
+  news_id: number;
+  datetime: string;
+  headline: string;
+  image: string;
+  related: string;
+  source: string;
+  summary: string;
+  url: string;
+}
+
+interface SentimentNewsItem {
+  type: "sentiment";
+  title: string;
+  url: string;
+  time_published: string;
+  authors: string;
+  summary: string;
+  source: string;
+  overall_sentiment_score: number;
+  overall_sentiment_label: string;
+  ticker_sentiment: Array<{
+    ticker: string;
+    relevance_score: string;
+    ticker_sentiment_label: string;
+    ticker_sentiment_score: string;
+  }>;
+  topics: Array<{
+    topic: string;
+    relevance_score: string;
+  }>;
+  query_type: string;
+  query_params: string;
+}
+
+interface CompanyNewsItem {
+  type: "company";
+  symbol: string;
+  report_date: string;
+  category: string;
+  article_id: number;
+  headline: string;
+  image: string;
+  related: string;
+  source: string;
+  summary: string;
+  url: string;
+  published_at: string;
+}
+
+interface StockNewsItem {
+  type: "stock";
+  symbol: string;
+  source: string;
+  url: string;
+  title: string;
+  description: string;
+  content: string;
+  published_at: string;
+  fetched_at: string;
+}
+
+type NewsItem = GeneralNewsItem | CategoryNewsItem | SentimentNewsItem | CompanyNewsItem | StockNewsItem;
 
 interface NewsPageProps {
   isLoggedIn: boolean;
   onLoginPrompt: () => void;
 }
 
-interface NewsItem {
-  id: string;
-  title: string;
-  summary: string;
-  content: string;
-  source: string;
-  timestamp: string;
-  category: "corporate" | "economy" | "politics" | "tech" | "crypto";
-  importance: "high" | "medium" | "low";
-  url: string;
-  imageUrl?: string;
-}
+// 확장된 모의 뉴스 데이터
+const mockAllNewsData: NewsItem[] = [
+  {
+    type: "category",
+    category: "crypto",
+    news_id: 7498776,
+    datetime: "2025-01-28 13:53:48",
+    headline: "Bitcoin whale's $9.6B transfer sparks market correction concerns",
+    image: "https://images.unsplash.com/photo-1518475155542-3baed9d5c875?w=200&h=120&fit=crop",
+    related: "BTC",
+    source: "Cointelegraph",
+    summary: "An OG Bitcoin whale's $9.6 billion transfer and new regulatory requirements are sparking correction concerns among industry watchers.",
+    url: "https://cointelegraph.com/news/bitcoin-whale-9-6b-correction-concerns"
+  },
+  {
+    type: "category",
+    category: "forex",
+    news_id: 7498777,
+    datetime: "2025-01-28 12:30:15",
+    headline: "USD strengthens as Fed hints at prolonged rate stability",
+    image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=200&h=120&fit=crop",
+    related: "USD",
+    source: "ForexLive",
+    summary: "The US Dollar gained against major currencies following Federal Reserve officials' comments suggesting rates may remain elevated longer than expected.",
+    url: "https://forexlive.com/usd-strengthens-fed-rate-stability"
+  },
+  {
+    type: "sentiment",
+    title: "Tesla's Revolutionary Battery Technology Drives Stock Surge",
+    url: "https://example.com/tesla-battery-tech",
+    time_published: "2025-01-28 14:30:15",
+    authors: "Tech Analysis Team",
+    summary: "Tesla's announcement of breakthrough solid-state battery technology has sent shares soaring, with analysts upgrading price targets across the board.",
+    source: "TechFinance",
+    overall_sentiment_score: 0.8456,
+    overall_sentiment_label: "Very Bullish",
+    ticker_sentiment: [
+      {
+        ticker: "TSLA",
+        relevance_score: "0.956",
+        ticker_sentiment_label: "Very Bullish",
+        ticker_sentiment_score: "0.8234"
+      },
+      {
+        ticker: "PANW",
+        relevance_score: "0.234",
+        ticker_sentiment_label: "Neutral",
+        ticker_sentiment_score: "0.0123"
+      }
+    ],
+    topics: [
+      {
+        topic: "Electric Vehicles",
+        relevance_score: "0.95"
+      },
+      {
+        topic: "Technology",
+        relevance_score: "0.88"
+      }
+    ],
+    query_type: "automotive_tech",
+    query_params: "topics=automotive&sort=SENTIMENT"
+  },
+  {
+    type: "company",
+    symbol: "AAPL",
+    report_date: "2025-01-29",
+    category: "earnings",
+    article_id: 136067578,
+    headline: "Apple Q1 Earnings Preview: iPhone Sales Drive Optimistic Outlook",
+    image: "https://images.unsplash.com/photo-1592179900824-cb2cb6ff2c80?w=200&h=120&fit=crop",
+    related: "AAPL",
+    source: "Reuters",
+    summary: "Analysts expect Apple's Q1 earnings to show strong iPhone 15 sales and continued growth in the services segment, with revenue potentially exceeding $120B.",
+    url: "https://reuters.com/apple-q1-earnings-preview",
+    published_at: "2025-01-28 10:15:30"
+  },
+  {
+    type: "stock",
+    symbol: "NVDA",
+    source: "MarketWatch",
+    url: "https://marketwatch.com/nvidia-ai-breakthrough",
+    title: "NVIDIA Stock Jumps on AI Chip Manufacturing Partnership",
+    description: "NVIDIA announces strategic partnership with Samsung for next-gen AI chip production, boosting investor confidence in the semiconductor giant.",
+    content: "NVIDIA Corporation today announced a groundbreaking partnership with Samsung Semiconductors to manufacture its next-generation AI chips, marking a significant expansion in production capacity.",
+    published_at: "2025-01-28 11:45:20",
+    fetched_at: "2025-01-28 11:50:30"
+  },
+  {
+    type: "general",
+    source: "Financial Times",
+    url: "https://ft.com/global-markets-outlook",
+    author: "Global Markets Team",
+    title: "Global Markets Show Resilience Amid Geopolitical Tensions",
+    description: "Despite ongoing geopolitical uncertainties, global equity markets demonstrate remarkable resilience with emerging markets leading gains.",
+    content: "Global financial markets have shown remarkable resilience in the face of ongoing geopolitical tensions, with emerging market equities leading gains across major indices.",
+    published_at: "2025-01-28 09:20:45"
+  },
+  {
+    type: "category", 
+    category: "merger",
+    news_id: 7498778,
+    datetime: "2025-01-28 08:15:30",
+    headline: "Microsoft-Activision Deal Completion Boosts Gaming Sector",
+    image: "https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?w=200&h=120&fit=crop",
+    related: "MSFT,ATVI",
+    source: "GamesBeat",
+    summary: "The successful completion of Microsoft's acquisition of Activision Blizzard has energized the gaming sector, with competitors seeing valuation increases.",
+    url: "https://gamesbeat.com/microsoft-activision-completion-gaming-boost"
+  }
+];
 
 export function NewsPage({ isLoggedIn, onLoginPrompt }: NewsPageProps) {
-  const [selectedCategory, setSelectedCategory] = useState<"all" | "corporate" | "economy" | "politics" | "tech" | "crypto">("all");
-  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState<"all" | NewsItem["type"]>("all");
+  const [selectedCategory, setSelectedCategory] = useState<"all" | "crypto" | "forex" | "merger" | "general">("all");
+  const [sortBy, setSortBy] = useState<"recent" | "sentiment" | "relevance">("recent");
 
-  const news: NewsItem[] = [
-    {
-      id: "1",
-      title: "연준, 기준금리 0.25%p 인하 결정... 경기 부양 신호",
-      summary: "미국 연방준비제도(Fed)가 기준금리를 0.25%포인트 인하하며 완화적 통화정책을 유지하기로 했습니다.",
-      content: "제롬 파월 연준 의장은 기자회견에서 '인플레이션이 목표치인 2%에 근접하고 있으며, 고용시장도 안정적'이라고 밝혔습니다. 이번 결정으로 연방기금금리는 4.75-5.00%에서 4.50-4.75%로 조정되었습니다.",
-      source: "Reuters",
-      timestamp: "30분 전",
-      category: "economy",
-      importance: "high",
-      url: "https://example.com/news1"
-    },
-    {
-      id: "2",
-      title: "테슬라, Q4 실적 기대치 상회... 전기차 판매량 사상 최고",
-      summary: "테슬라가 4분기 실적에서 시장 기대치를 상회하는 성과를 기록했다고 발표했습니다.",
-      content: "일론 머스크 CEO는 '2024년 전기차 판매량이 사상 최고치를 기록했으며, 자율주행 기술 개발도 순조롭게 진행되고 있다'고 밝혔습니다. 특히 모델 Y의 강세가 두드러졌습니다.",
-      source: "Bloomberg",
-      timestamp: "1시간 전",
-      category: "corporate",
-      importance: "high",
-      url: "https://example.com/news2"
-    },
-    {
-      id: "3",
-      title: "AI 반도체 시장 전망 분석 리포트",
-      summary: "2025년 AI 칩 시장의 성장 전망과 주요 기업들의 경쟁 구도를 심층 분석합니다.",
-      content: "전문가들은 AI 칩 시장이 향후 5년간 연평균 35% 성장할 것으로 예측한다고 밝혔습니다. NVIDIA, AMD, Intel 등 주요 기업들의 전략과 시장 점유율 변화를 자세히 살펴봅니다.",
-      source: "W.E.I 분석팀",
-      timestamp: "2시간 전",
-      category: "tech",
-      importance: "medium",
-      url: "https://example.com/news3"
-    },
-    {
-      id: "4",
-      title: "비트코인, 10만 달러 돌파 임박... 기관투자자 유입 급증",
-      summary: "비트코인이 사상 최고치를 경신하며 10만 달러 돌파가 임박한 것으로 보입니다.",
-      content: "블랙록, 피델리티 등 대형 자산운용사들의 비트코인 ETF 자금 유입이 지속되고 있으며, 기관투자자들의 관심이 크게 증가하고 있습니다.",
-      source: "CoinDesk",
-      timestamp: "3시간 전",
-      category: "crypto",
-      importance: "medium",
-      url: "https://example.com/news4"
-    },
-    {
-      id: "5",
-      title: "바이든 정부, 반도체 지원법 추가 예산 승인",
-      summary: "미국 정부가 국내 반도체 제조업 지원을 위한 추가 예산을 승인했습니다.",
-      content: "CHIPS 법에 따른 추가 지원으로 미국 내 반도체 생산 능력을 확대하고, 중국에 대한 기술 의존도를 줄이는 것이 목표입니다. 인텔, AMD, 엔비디아 등이 주요 수혜 기업으로 예상됩니다.",
-      source: "The Wall Street Journal",
-      timestamp: "4시간 전",
-      category: "politics",
-      importance: "medium",
-      url: "https://example.com/news5"
-    },
-    {
-      id: "6",
-      title: "글로벌 경제 리스크 전망 2025",
-      summary: "2025년 주요 경제 리스크 요인들과 투자 전략을 전문가가 분석합니다.",
-      content: "지정학적 리스크, 인플레이션 재상승 가능성, 중앙은행들의 정책 변화 등 2025년 투자자들이 주목해야 할 주요 리스크들을 종합 분석했습니다.",
-      source: "W.E.I 이코노미스트",
-      timestamp: "5시간 전",
-      category: "economy",
-      importance: "high",
-      url: "https://example.com/news6"
+  const filteredNews = mockAllNewsData.filter(item => {
+    const matchesSearch = (() => {
+      const query = searchQuery.toLowerCase();
+      switch (item.type) {
+        case "general":
+          return item.title.toLowerCase().includes(query) || 
+                 item.description.toLowerCase().includes(query) ||
+                 item.source.toLowerCase().includes(query);
+        case "category":
+          return item.headline.toLowerCase().includes(query) || 
+                 item.summary.toLowerCase().includes(query) ||
+                 item.source.toLowerCase().includes(query);
+        case "sentiment":
+          return item.title.toLowerCase().includes(query) || 
+                 item.summary.toLowerCase().includes(query) ||
+                 item.source.toLowerCase().includes(query);
+        case "company":
+          return item.headline.toLowerCase().includes(query) || 
+                 item.summary.toLowerCase().includes(query) ||
+                 item.symbol.toLowerCase().includes(query);
+        case "stock":
+          return item.title.toLowerCase().includes(query) || 
+                 item.description.toLowerCase().includes(query) ||
+                 item.symbol.toLowerCase().includes(query);
+        default:
+          return false;
+      }
+    })();
+
+    const matchesType = selectedType === "all" || item.type === selectedType;
+    
+    const matchesCategory = selectedCategory === "all" || 
+      (item.type === "category" && item.category === selectedCategory);
+
+    return matchesSearch && matchesType && matchesCategory;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case "sentiment":
+        const aSentiment = a.type === "sentiment" ? a.overall_sentiment_score : 0;
+        const bSentiment = b.type === "sentiment" ? b.overall_sentiment_score : 0;
+        return Math.abs(bSentiment) - Math.abs(aSentiment);
+      case "relevance":
+        // 티커가 있는 뉴스를 우선순위로
+        const aHasTicker = (a.type === "company" || a.type === "stock") ? 1 : 0;
+        const bHasTicker = (b.type === "company" || b.type === "stock") ? 1 : 0;
+        return bHasTicker - aHasTicker;
+      default:
+        const aTime = new Date((() => {
+          switch (a.type) {
+            case "general": return a.published_at;
+            case "category": return a.datetime;
+            case "sentiment": return a.time_published;
+            case "company": return a.published_at;
+            case "stock": return a.published_at;
+          }
+        })()).getTime();
+        
+        const bTime = new Date((() => {
+          switch (b.type) {
+            case "general": return b.published_at;
+            case "category": return b.datetime;
+            case "sentiment": return b.time_published;
+            case "company": return b.published_at;
+            case "stock": return b.published_at;
+          }
+        })()).getTime();
+        
+        return bTime - aTime;
     }
-  ];
+  });
 
-  const categories = [
-    { key: "all", label: "전체", icon: Filter, color: "text-gray-400" },
-    { key: "corporate", label: "기업", icon: Building, color: "text-blue-400" },
-    { key: "economy", label: "경제", icon: DollarSign, color: "text-green-400" },
-    { key: "politics", label: "정치", icon: Users, color: "text-purple-400" },
-    { key: "tech", label: "기술", icon: TrendingUp, color: "text-orange-400" },
-    { key: "crypto", label: "암호화폐", icon: AlertCircle, color: "text-yellow-400" }
-  ];
-
-  const filteredNews = selectedCategory === "all" 
-    ? news 
-    : news.filter(item => item.category === selectedCategory);
-
-  const getCategoryIcon = (category: string) => {
-    const cat = categories.find(c => c.key === category);
-    if (!cat) return null;
-    const Icon = cat.icon;
-    return <Icon size={16} className={cat.color} />;
-  };
-
-  const getCategoryLabel = (category: string) => {
-    const cat = categories.find(c => c.key === category);
-    return cat?.label || category;
-  };
-
-  const getImportanceColor = (importance: string) => {
-    switch (importance) {
-      case "high": return "border-l-red-400";
-      case "medium": return "border-l-yellow-400";
-      case "low": return "border-l-green-400";
-      default: return "border-l-gray-400";
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / 3600000);
+    
+    if (diffHours < 1) {
+      return "방금 전";
+    } else if (diffHours < 24) {
+      return `${diffHours}시간 전`;
+    } else {
+      return date.toLocaleDateString("ko-KR", { 
+        month: "short", 
+        day: "numeric"
+      });
     }
   };
 
-  const handleNewsClick = (newsItem: NewsItem) => {
-    setSelectedNews(newsItem);
+  const getSentimentColor = (score: number) => {
+    if (score > 0.3) return "text-green-400";
+    if (score < -0.3) return "text-red-400";
+    return "text-yellow-400";
   };
 
-  if (selectedNews) {
+  const getSentimentIcon = (score: number) => {
+    if (score > 0.3) return <TrendingUp size={16} />;
+    if (score < -0.3) return <TrendingDown size={16} />;
+    return <Target size={16} />;
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "crypto": return "bg-orange-500/20 text-orange-400";
+      case "forex": return "bg-green-500/20 text-green-400";
+      case "merger": return "bg-purple-500/20 text-purple-400";
+      case "earnings": return "bg-blue-500/20 text-blue-400";
+      default: return "bg-gray-500/20 text-gray-400";
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case "sentiment": return "bg-blue-500/20 text-blue-400";
+      case "company": return "bg-green-500/20 text-green-400";
+      case "stock": return "bg-purple-500/20 text-purple-400";
+      case "category": return "bg-orange-500/20 text-orange-400";
+      default: return "bg-gray-500/20 text-gray-400";
+    }
+  };
+
+  const renderNewsItem = (item: NewsItem) => {
+    const getTitle = () => {
+      switch (item.type) {
+        case "general": return item.title;
+        case "category": return item.headline;
+        case "sentiment": return item.title;
+        case "company": return item.headline;
+        case "stock": return item.title;
+      }
+    };
+
+    const getSummary = () => {
+      switch (item.type) {
+        case "general": return item.description;
+        case "category": return item.summary;
+        case "sentiment": return item.summary;
+        case "company": return item.summary;
+        case "stock": return item.description;
+      }
+    };
+
+    const getTimestamp = () => {
+      switch (item.type) {
+        case "general": return item.published_at;
+        case "category": return item.datetime;
+        case "sentiment": return item.time_published;
+        case "company": return item.published_at;
+        case "stock": return item.published_at;
+      }
+    };
+
+    const getImage = () => {
+      switch (item.type) {
+        case "category": return item.image;
+        case "company": return item.image;
+        default: return null;
+      }
+    };
+
     return (
-      <div className="space-y-6">
-        {/* 뉴스 상세 헤더 */}
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setSelectedNews(null)}
-            className="p-2 rounded-lg glass hover:glass-strong transition-all"
-          >
-            <Clock size={20} />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold">뉴스 상세</h1>
-            <p className="text-sm text-foreground/70">{selectedNews.source}</p>
+      <article
+        key={`${item.type}-${item.url}`}
+        className="glass-card p-4 rounded-xl cursor-pointer hover:glass transition-all group"
+        onClick={() => window.open(item.url, '_blank')}
+      >
+        <div className="flex gap-3">
+          {/* 이미지 */}
+          {getImage() && (
+            <div className="flex-shrink-0">
+              <img
+                src={getImage()!}
+                alt=""
+                className="w-16 h-16 object-cover rounded-lg"
+                loading="lazy"
+              />
+            </div>
+          )}
+
+          {/* 콘텐츠 */}
+          <div className="flex-1 min-w-0">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-foreground/90">{item.source}</span>
+                
+                {/* 타입 배지 */}
+                <Badge className={`text-xs ${getTypeColor(item.type)}`}>{item.type}</Badge>
+                
+                {/* 카테고리 배지 */}
+                {item.type === "category" && (
+                  <Badge className={`text-xs ${getCategoryColor(item.category)}`}>{item.category}</Badge>
+                )}
+                
+                {/* 심볼 배지 */}
+                {(item.type === "company" || item.type === "stock") && (
+                  <Badge variant="outline" className="text-xs">{item.symbol}</Badge>
+                )}
+              </div>
+              
+              <span className="text-xs text-foreground/50 flex-shrink-0">
+                {formatTimestamp(getTimestamp())}
+              </span>
+            </div>
+
+            {/* 제목 */}
+            <h3 className="font-medium mb-2 line-clamp-2 group-hover:text-primary transition-colors leading-tight">
+              {getTitle()}
+            </h3>
+
+            {/* 요약 */}
+            <p className="text-sm text-foreground/70 line-clamp-2 mb-3 leading-snug">
+              {getSummary()}
+            </p>
+
+            {/* 하단 정보 */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* 감성 점수 */}
+                {item.type === "sentiment" && (
+                  <div className={`flex items-center gap-1 text-xs ${getSentimentColor(item.overall_sentiment_score)}`}>
+                    {getSentimentIcon(item.overall_sentiment_score)}
+                    <span className="font-medium">
+                      {(item.overall_sentiment_score * 100).toFixed(0)}%
+                    </span>
+                    <span className="hidden sm:inline">({item.overall_sentiment_label})</span>
+                  </div>
+                )}
+
+                {/* 티커 감성 */}
+                {item.type === "sentiment" && item.ticker_sentiment.length > 0 && (
+                  <div className="flex gap-1">
+                    {item.ticker_sentiment.slice(0, 2).map((ticker, index) => (
+                      <Badge 
+                        key={index} 
+                        className={`text-xs ${getSentimentColor(parseFloat(ticker.ticker_sentiment_score))}`}
+                      >
+                        {ticker.ticker}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* 관련 토픽 */}
+                {item.type === "sentiment" && item.topics.length > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    {item.topics[0].topic}
+                  </Badge>
+                )}
+              </div>
+
+              <ExternalLink size={14} className="text-foreground/40 group-hover:text-primary transition-colors flex-shrink-0" />
+            </div>
           </div>
         </div>
-
-        {/* 뉴스 상세 내용 */}
-        <div className="glass-card rounded-2xl p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            {getCategoryIcon(selectedNews.category)}
-            <span className="text-xs text-foreground/60 glass-subtle px-2 py-1 rounded-md">
-              {getCategoryLabel(selectedNews.category)}
-            </span>
-            <span className="text-xs text-foreground/50">·</span>
-            <span className="text-xs text-foreground/50">{selectedNews.timestamp}</span>
-          </div>
-
-          <h1 className="text-xl font-bold mb-4 leading-relaxed">{selectedNews.title}</h1>
-          
-          <div className="glass rounded-xl p-4 mb-4 bg-primary/5">
-            <p className="text-sm text-foreground/80 leading-relaxed">{selectedNews.summary}</p>
-          </div>
-
-          <div className="prose prose-sm max-w-none text-foreground/80 leading-relaxed mb-6">
-            <p>{selectedNews.content}</p>
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t border-white/10">
-            <span className="text-sm text-foreground/50">출처: {selectedNews.source}</span>
-            <button 
-              onClick={() => window.open(selectedNews.url, '_blank')}
-              className="flex items-center space-x-1 text-sm text-primary hover:text-primary/80 glass px-3 py-1.5 rounded-lg transition-all"
-            >
-              <span>원문 보기</span>
-              <ExternalLink size={14} />
-            </button>
-          </div>
-        </div>
-      </div>
+      </article>
     );
-  }
+  };
 
   return (
-    <div className="space-y-6">
-      {/* 카테고리 필터 */}
-      <div className="glass-card rounded-2xl p-4">
-        <h3 className="font-semibold mb-3">카테고리</h3>
-        <div className="grid grid-cols-3 gap-2">
-          {categories.map((category) => {
-            const Icon = category.icon;
-            const isSelected = selectedCategory === category.key;
-            
-            return (
-              <button
-                key={category.key}
-                onClick={() => setSelectedCategory(category.key as any)}
-                className={`flex flex-col items-center space-y-1 p-3 rounded-xl transition-all ${
-                  isSelected 
-                    ? "glass text-primary border border-primary/30" 
-                    : "glass-subtle hover:glass"
-                }`}
-              >
-                <Icon size={20} className={isSelected ? "text-primary" : category.color} />
-                <span className="text-xs font-medium">{category.label}</span>
-              </button>
-            );
-          })}
+    <div className="space-y-4">
+      {/* 검색 및 필터 */}
+      <div className="space-y-3">
+        {/* 검색바 */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-foreground/50" size={18} />
+          <Input
+            placeholder="뉴스 검색..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 glass-card border-white/20 placeholder:text-foreground/50"
+          />
+        </div>
+
+        {/* 필터 */}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          <select
+            value={selectedType}
+            onChange={(e) => setSelectedType(e.target.value as typeof selectedType)}
+            className="px-3 py-2 rounded-lg glass-card text-sm bg-transparent border-white/20 min-w-[100px]"
+          >
+            <option value="all">전체</option>
+            <option value="general">일반</option>
+            <option value="category">카테고리</option>
+            <option value="sentiment">감성분석</option>
+            <option value="company">기업</option>
+            <option value="stock">주식</option>
+          </select>
+
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value as typeof selectedCategory)}
+            className="px-3 py-2 rounded-lg glass-card text-sm bg-transparent border-white/20 min-w-[100px]"
+          >
+            <option value="all">전체</option>
+            <option value="crypto">크립토</option>
+            <option value="forex">외환</option>
+            <option value="merger">M&A</option>
+            <option value="general">일반</option>
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="px-3 py-2 rounded-lg glass-card text-sm bg-transparent border-white/20 min-w-[100px]"
+          >
+            <option value="recent">최신순</option>
+            <option value="sentiment">감성순</option>
+            <option value="relevance">연관성순</option>
+          </select>
+        </div>
+
+        {/* 통계 */}
+        <div className="flex items-center justify-between text-sm text-foreground/60">
+          <span>{filteredNews.length}개 뉴스</span>
+          <div className="flex gap-4 text-xs">
+            <span>감성: {filteredNews.filter(n => n.type === "sentiment").length}</span>
+            <span>기업: {filteredNews.filter(n => n.type === "company" || n.type === "stock").length}</span>
+          </div>
         </div>
       </div>
 
-      {/* 뉴스 리스트 */}
+      {/* 뉴스 목록 */}
       <div className="space-y-3">
-        {filteredNews.map((item) => (
-          <div 
-            key={item.id} 
-            className={`glass-card rounded-xl p-4 border-l-4 ${getImportanceColor(item.importance)} cursor-pointer hover:glass-strong transition-all`}
-            onClick={() => handleNewsClick(item)}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center space-x-2">
-                {getCategoryIcon(item.category)}
-                <span className="text-xs text-foreground/60 glass-subtle px-2 py-1 rounded-md">
-                  {getCategoryLabel(item.category)}
-                </span>
-                <span className="text-xs text-foreground/50">·</span>
-                <span className="text-xs text-foreground/50">{item.timestamp}</span>
-              </div>
-              <ExternalLink size={14} className="text-foreground/40" />
-            </div>
-
-            <h3 className="font-medium mb-2 line-clamp-2 leading-relaxed">{item.title}</h3>
-            <p className="text-sm text-foreground/70 line-clamp-2 leading-relaxed mb-3">
-              {item.summary}
-            </p>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-foreground/50">{item.source}</span>
-              <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  item.importance === "high" ? "bg-red-400" : 
-                  item.importance === "medium" ? "bg-yellow-400" : "bg-green-400"
-                }`} />
-                <span className="text-xs text-foreground/50">
-                  {item.importance === "high" ? "중요" : 
-                   item.importance === "medium" ? "보통" : "일반"}
-                </span>
-              </div>
-            </div>
+        {filteredNews.length === 0 ? (
+          <div className="glass-card p-8 text-center rounded-xl">
+            <BarChart size={48} className="mx-auto mb-4 text-foreground/30" />
+            <p className="text-foreground/70">검색 결과가 없습니다</p>
           </div>
-        ))}
+        ) : (
+          filteredNews.map((item) => renderNewsItem(item))
+        )}
       </div>
 
-      {filteredNews.length === 0 && (
-        <div className="text-center py-8 text-foreground/60">
-          <Clock size={48} className="mx-auto mb-4 opacity-50" />
-          <p>해당 카테고리의 뉴스가 없습니다</p>
+      {/* 더보기 */}
+      {filteredNews.length > 0 && (
+        <div className="flex justify-center pt-4">
+          <button className="px-6 py-3 glass-card rounded-xl hover:glass transition-all">
+            더 많은 뉴스 불러오기
+          </button>
         </div>
       )}
     </div>

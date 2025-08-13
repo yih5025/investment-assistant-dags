@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { BottomNavigation } from "./components/BottomNavigation";
 import { StockBanner } from "./components/StockBanner";
 import { EventCalendar } from "./components/EventCalendar";
@@ -6,53 +6,22 @@ import { SocialFeed } from "./components/SocialFeed";
 import { NewsList } from "./components/NewsList";
 import { IntegratedMarket } from "./components/IntegratedMarket";
 import { NewsPage } from "./components/NewsPage";
-import { SNSPage } from "./components/SNSPage";
-import { SNSDetailPage } from "./components/SNSDetailPage";
 import { AIAnalysis } from "./components/AIAnalysis";
 import { EconomicDashboard } from "./components/EconomicDashboard";
 import { LoginPage } from "./components/auth/LoginPage";
 import { SignupPage } from "./components/auth/SignupPage";
 import { UserProfile } from "./components/user/UserProfile";
 import { NotificationSystem } from "./components/notifications/NotificationSystem";
-import { TrendingUp, MessageSquare, Newspaper, Bot, BarChart3, Bell, User, LogIn, ArrowLeft } from "lucide-react";
+import { TrendingUp, Newspaper, Bot, BarChart3, Bell, User, LogIn } from "lucide-react";
 
 type AuthState = "guest" | "login" | "signup" | "authenticated";
-type ViewState = "main" | "auth" | "profile" | "sns-detail" | "stock-news";
-
-interface SNSPost {
-  id: string;
-  content: string;
-  author: string;
-  platform: "X" | "Truth Social";
-  category?: string;
-  timestamp: string;
-  likes?: number;
-  retweets?: number;
-  replies?: number;
-  verified: boolean;
-  profileImage: string;
-  hasMarketImpact: boolean;
-  impactScore?: number;
-}
-
-interface StockNewsItem {
-  symbol: string;
-  source: string;
-  url: string;
-  title: string;
-  description: string;
-  content: string;
-  published_at: string;
-  fetched_at?: string;
-}
+type ViewState = "main" | "auth" | "profile";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("home");
   const [authState, setAuthState] = useState<AuthState>("guest"); // 게스트 모드로 시작
   const [viewState, setViewState] = useState<ViewState>("main");
   const [showNotifications, setShowNotifications] = useState(false);
-  const [selectedSNSPost, setSelectedSNSPost] = useState<SNSPost | null>(null);
-  const [selectedStockNews, setSelectedStockNews] = useState<{ news: StockNewsItem[], symbol: string } | null>(null);
   
   // 모의 사용자 데이터
   const [user] = useState({
@@ -66,25 +35,6 @@ export default function App() {
   });
 
   const isLoggedIn = authState === "authenticated";
-
-  // 네비게이션 이벤트 리스너들
-  useEffect(() => {
-    const handleNavigateToSNS = () => {
-      setActiveTab("sns");
-    };
-
-    const handleNavigateToNews = () => {
-      setActiveTab("news");
-    };
-
-    window.addEventListener('navigateToSNS', handleNavigateToSNS);
-    window.addEventListener('navigateToNews', handleNavigateToNews);
-    
-    return () => {
-      window.removeEventListener('navigateToSNS', handleNavigateToSNS);
-      window.removeEventListener('navigateToNews', handleNavigateToNews);
-    };
-  }, []);
 
   const handleLogin = (email: string, password: string) => {
     console.log("로그인:", email, password);
@@ -128,40 +78,8 @@ export default function App() {
 
   const handleBackToMain = () => {
     setViewState("main");
-    setSelectedSNSPost(null);
-    setSelectedStockNews(null);
     if (!isLoggedIn) {
       setAuthState("guest");
-    }
-  };
-
-  const handleSNSPostClick = (post: SNSPost) => {
-    if (post.hasMarketImpact) {
-      setSelectedSNSPost(post);
-      setViewState("sns-detail");
-    }
-  };
-
-  const handleStockNewsClick = (stockNews: StockNewsItem[], symbol: string) => {
-    setSelectedStockNews({ news: stockNews, symbol });
-    setViewState("stock-news");
-  };
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = Math.floor(diffMs / 3600000);
-    
-    if (diffHours < 1) {
-      return "방금 전";
-    } else if (diffHours < 24) {
-      return `${diffHours}시간 전`;
-    } else {
-      return date.toLocaleDateString("ko-KR", { 
-        month: "short", 
-        day: "numeric"
-      });
     }
   };
 
@@ -193,102 +111,21 @@ export default function App() {
     }
   }
 
-  // SNS 상세 페이지
-  if (viewState === "sns-detail" && selectedSNSPost) {
-    return (
-      <div className="min-h-screen relative z-10">
-        <div className="max-w-md mx-auto px-4 pt-4 pb-20">
-          <SNSDetailPage
-            post={selectedSNSPost}
-            onBack={() => {
-              setViewState("main");
-              setSelectedSNSPost(null);
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // 주식 뉴스 상세 페이지
-  if (viewState === "stock-news" && selectedStockNews) {
-    return (
-      <div className="min-h-screen relative z-10">
-        <div className="max-w-md mx-auto px-4 pt-4 pb-20">
-          <div className="space-y-4">
-            {/* 뒤로가기 헤더 */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={handleBackToMain}
-                className="flex items-center space-x-2 px-3 py-1.5 glass-subtle rounded-lg hover:glass transition-all"
-              >
-                <ArrowLeft size={16} />
-                <span className="text-sm">홈으로 돌아가기</span>
-              </button>
-              
-              <div className="text-sm text-foreground/70">
-                {selectedStockNews.news.length}개 뉴스
-              </div>
-            </div>
-
-            {/* 주식 정보 */}
-            <div className="glass-card rounded-xl p-4">
-              <h2 className="text-lg font-bold text-center">{selectedStockNews.symbol} 관련 뉴스</h2>
-            </div>
-
-            {/* 뉴스 리스트 */}
-            <div className="space-y-3">
-              {selectedStockNews.news.map((news, index) => (
-                <article
-                  key={index}
-                  className="glass-card p-4 rounded-xl cursor-pointer hover:glass transition-all group"
-                  onClick={() => window.open(news.url, '_blank')}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-foreground/90">{news.source}</span>
-                      <span className="text-xs text-foreground/50">
-                        {formatTimestamp(news.published_at)}
-                      </span>
-                    </div>
-                    
-                    <h3 className="font-medium line-clamp-2 group-hover:text-primary transition-colors leading-tight">
-                      {news.title}
-                    </h3>
-                    
-                    <p className="text-sm text-foreground/70 line-clamp-3 leading-snug">
-                      {news.description}
-                    </p>
-                    
-                    <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                      <span className="text-xs text-primary font-medium">{news.symbol}</span>
-                      <span className="text-xs text-foreground/50">자세히 보기 →</span>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // 사용자 프로필 페이지
   if (viewState === "profile" && isLoggedIn) {
     return (
       <div className="min-h-screen relative z-10">
         <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-between p-3">
+          <div className="flex items-center justify-between p-4">
             <button
               onClick={handleBackToMain}
               className="p-2 rounded-lg glass hover:glass-strong transition-all"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="m15 18-6-6 6-6"/>
               </svg>
             </button>
-            <h1 className="text-lg font-bold">프로필</h1>
+            <h1 className="text-xl font-bold">프로필</h1>
             <div className="w-10" />
           </div>
           
@@ -308,13 +145,13 @@ export default function App() {
     if (activeTab !== "home") return null;
 
     return (
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
             W.E.I
           </h1>
-          <p className="text-xs text-foreground/70">
-            {isLoggedIn ? `${user.name}님, 안녕하세요` : "Wise & Easy Investment"}
+          <p className="text-sm text-foreground/80">
+            {isLoggedIn ? `안녕하세요, ${user.name}님!` : "Wise & Easy Investment"}
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -323,27 +160,27 @@ export default function App() {
             <>
               <button
                 onClick={handleNotificationClick}
-                className="relative w-8 h-8 rounded-full glass flex items-center justify-center hover:glass-strong transition-all"
+                className="relative w-10 h-10 rounded-full glass flex items-center justify-center hover:glass-strong transition-all"
               >
-                <Bell size={16} />
+                <Bell size={20} />
                 {/* 알림 배지 */}
-                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full shadow-lg"></div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full shadow-lg"></div>
               </button>
               <button
                 onClick={handleUserIconClick}
-                className="w-8 h-8 rounded-full glass flex items-center justify-center hover:glass-strong transition-all"
+                className="w-10 h-10 rounded-full glass flex items-center justify-center hover:glass-strong transition-all"
               >
-                <User size={16} />
+                <User size={20} />
               </button>
             </>
           ) : (
             // 게스트용 헤더
             <button
               onClick={handleLoginClick}
-              className="flex items-center space-x-2 px-3 py-1.5 glass-strong rounded-lg hover:bg-white/10 transition-all"
+              className="flex items-center space-x-2 px-4 py-2 glass-strong rounded-xl hover:bg-white/10 transition-all"
             >
-              <LogIn size={16} />
-              <span className="text-xs font-medium">로그인</span>
+              <LogIn size={18} />
+              <span className="text-sm font-medium">로그인</span>
             </button>
           )}
         </div>
@@ -359,16 +196,16 @@ export default function App() {
             {renderHeader()}
 
             {/* 실시간 급변동 배너 - WEI 타이틀 바로 밑 */}
-            <StockBanner onStockNewsClick={handleStockNewsClick} />
+            <StockBanner />
 
             {/* 시장 이벤트 캘린더 - 스톡 배너 바로 밑 */}
             <EventCalendar />
 
-            {/* SNS 피드 */}
-            <SocialFeed isLoggedIn={isLoggedIn} onPostClick={handleSNSPostClick} />
+            {/* 소셜 피드 */}
+            <SocialFeed isLoggedIn={isLoggedIn} />
 
             {/* 뉴스 리스트 */}
-            <NewsList onViewAll={() => setActiveTab("news")} />
+            <NewsList />
           </div>
         );
 
@@ -385,26 +222,6 @@ export default function App() {
             </div>
             
             <IntegratedMarket isLoggedIn={isLoggedIn} onLoginPrompt={handleLoginClick} />
-          </div>
-        );
-
-      case "sns":
-        return (
-          <div className="space-y-6 relative z-10">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 rounded-xl glass">
-                  <MessageSquare size={24} className="text-primary" />
-                </div>
-                <h1 className="text-2xl font-bold">SNS 피드</h1>
-              </div>
-            </div>
-            
-            <SNSPage 
-              isLoggedIn={isLoggedIn} 
-              onLoginPrompt={handleLoginClick}
-              onPostClick={handleSNSPostClick}
-            />
           </div>
         );
 
@@ -472,8 +289,8 @@ export default function App() {
   return (
     <div className="min-h-screen relative">
       <div className="max-w-md mx-auto relative z-10">
-        {/* 메인 콘텐츠 - 상단 패딩 줄임 */}
-        <div className="px-4 pt-4 pb-20">
+        {/* 메인 콘텐츠 */}
+        <div className="px-4 pt-6 pb-20">
           {renderContent()}
         </div>
 

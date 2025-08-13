@@ -1,240 +1,226 @@
 import { useState } from "react";
-import { Heart, MessageCircle, Share, TrendingUp, ExternalLink, Eye } from "lucide-react";
+import { MessageSquare, TrendingUp, ExternalLink } from "lucide-react";
+import { Badge } from "./ui/badge";
+
+interface SNSPost {
+  id: string;
+  content: string;
+  author: string;
+  platform: "X" | "Truth Social";
+  category?: string;
+  timestamp: string;
+  likes?: number;
+  retweets?: number;
+  replies?: number;
+  verified: boolean;
+  profileImage: string;
+  hasMarketImpact: boolean;
+  impactScore?: number;
+}
 
 interface SocialFeedProps {
   isLoggedIn: boolean;
+  onPostClick?: (post: SNSPost) => void;
 }
 
-interface Post {
-  id: string;
-  author: string;
-  avatar: string;
-  time: string;
-  content: string;
-  image?: string;
-  likes: number;
-  comments: number;
-  shares: number;
-  liked: boolean;
-  stocks: string[];
-  type: "tweet" | "analysis" | "news";
-}
+const mockSNSPosts: SNSPost[] = [
+  {
+    id: "1951082319277859202",
+    content: "The future of cryptocurrency is looking incredibly promising. Major institutional adoption is accelerating faster than ever before. 🚀 #Crypto #Bitcoin",
+    author: "elonmusk",
+    platform: "X",
+    category: "tech_ceo",
+    timestamp: "2025-01-28T09:47:28.000Z",
+    likes: 45672,
+    retweets: 12843,
+    replies: 3421,
+    verified: true,
+    profileImage: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face",
+    hasMarketImpact: true,
+    impactScore: 87.3
+  },
+  {
+    id: "1951083421277859203",
+    content: "Despite the fake news media's constant attacks, America's economy is stronger than ever! Our policies are working and the American people are winning! 🇺🇸",
+    author: "Donald J. Trump",
+    platform: "Truth Social",
+    timestamp: "2025-01-28T08:32:15.000Z",
+    verified: true,
+    profileImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face",
+    hasMarketImpact: true,
+    impactScore: 73.2
+  },
+  {
+    id: "1951084522277859204",
+    content: "Tesla's Q4 delivery numbers exceeded all expectations. The sustainable energy revolution is unstoppable! 🔋⚡",
+    author: "elonmusk",
+    platform: "X", 
+    category: "tech_ceo",
+    timestamp: "2025-01-28T06:44:18.000Z",
+    likes: 67421,
+    retweets: 19832,
+    replies: 4567,
+    verified: true,
+    profileImage: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face",
+    hasMarketImpact: true,
+    impactScore: 91.5
+  }
+];
 
-export function SocialFeed({ isLoggedIn }: SocialFeedProps) {
-  const [posts, setPosts] = useState<Post[]>([
-    {
-      id: "1",
-      author: "일론 머스크",
-      avatar: "🚀",
-      time: "2시간 전",
-      content: "Tesla의 자율주행 기술이 새로운 단계에 진입했습니다. Full Self-Driving v12가 곧 출시됩니다!",
-      likes: 15420,
-      comments: 2341,
-      shares: 892,
-      liked: false,
-      stocks: ["TSLA"],
-      type: "tweet"
-    },
-    {
-      id: "2",
-      author: "워렌 버핏",
-      avatar: "👴",
-      time: "4시간 전",
-      content: "장기 투자의 힘을 믿어야 합니다. 시장의 단기 변동에 휘둘리지 말고, 좋은 기업을 찾아 꾸준히 투자하세요.",
-      likes: 8932,
-      comments: 1205,
-      shares: 543,
-      liked: isLoggedIn,
-      stocks: ["BRK.A", "AAPL"],
-      type: "analysis"
-    },
-    {
-      id: "3",
-      author: "AI 투자 분석가",
-      avatar: "🤖",
-      time: "6시간 전",
-      content: "NVIDIA의 Q4 실적 분석: AI 칩 수요 급증으로 매출 예상치 상회. 주가 상승 모멘텀 지속 전망.",
-      likes: 3421,
-      comments: 567,
-      shares: 234,
-      liked: false,
-      stocks: ["NVDA"],
-      type: "analysis"
-    },
-    {
-      id: "4",
-      author: "도널드 트럼프",
-      avatar: "🇺🇸",
-      time: "8시간 전",
-      content: "미국의 경제가 다시 한 번 세계 최강임을 보여주고 있습니다. 주식시장 신고점 경신!",
-      likes: 12789,
-      comments: 4532,
-      shares: 1876,
-      liked: false,
-      stocks: ["SPY", "QQQ"],
-      type: "tweet"
-    },
-    {
-      id: "5",
-      author: "제롬 파월",
-      avatar: "🏦",
-      time: "12시간 전",
-      content: "연준은 인플레이션 목표 달성을 위해 신중한 통화정책을 지속할 것입니다. 경제 데이터를 면밀히 모니터링하고 있습니다.",
-      likes: 5634,
-      comments: 876,
-      shares: 432,
-      liked: false,
-      stocks: ["SPY", "TLT"],
-      type: "analysis"
-    },
-    {
-      id: "6",
-      author: "팀 쿡",
-      avatar: "🍎",
-      time: "1일 전",
-      content: "Apple Vision Pro의 혁신적인 기술이 새로운 컴퓨팅 시대를 열어가고 있습니다. 미래가 여기에 있습니다.",
-      likes: 7842,
-      comments: 1432,
-      shares: 654,
-      liked: false,
-      stocks: ["AAPL"],
-      type: "tweet"
-    }
-  ]);
+export function SocialFeed({ isLoggedIn, onPostClick }: SocialFeedProps) {
+  const [selectedPlatform, setSelectedPlatform] = useState<"all" | "X" | "Truth Social">("all");
 
-  const toggleLike = (postId: string) => {
-    setPosts(prev => prev.map(post => 
-      post.id === postId 
-        ? { 
-            ...post, 
-            liked: !post.liked,
-            likes: post.liked ? post.likes - 1 : post.likes + 1
-          }
-        : post
-    ));
-  };
+  const filteredPosts = mockSNSPosts.filter(post => 
+    selectedPlatform === "all" || post.platform === selectedPlatform
+  );
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case "analysis":
-        return <TrendingUp size={14} className="text-blue-400" />;
-      case "news":
-        return <ExternalLink size={14} className="text-green-400" />;
-      default:
-        return null;
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    
+    if (diffMins < 60) {
+      return `${diffMins}분 전`;
+    } else if (diffHours < 24) {
+      return `${diffHours}시간 전`;
+    } else {
+      return date.toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
     }
   };
 
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case "analysis":
-        return "분석";
-      case "news":
-        return "뉴스";
-      case "tweet":
-        return "트윗";
-      default:
-        return "";
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + "M";
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + "K";
     }
+    return num.toString();
+  };
+
+  const handlePostClick = (post: SNSPost) => {
+    if (onPostClick) {
+      onPostClick(post);
+    }
+  };
+
+  const handleViewAllClick = () => {
+    // App.tsx에서 SNS 탭으로 이동하는 로직이 필요함
+    window.dispatchEvent(new CustomEvent('navigateToSNS'));
   };
 
   return (
-    <div className="glass-card rounded-2xl p-4">
+    <div className="glass-card p-4 rounded-xl">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">📱 영향력 있는 인물들</h2>
-        <div className="text-xs text-foreground/60">실시간 업데이트</div>
+        <div className="flex items-center space-x-2">
+          <MessageSquare size={20} className="text-primary" />
+          <h3 className="font-medium">SNS</h3>
+        </div>
+        
+        <button
+          onClick={handleViewAllClick}
+          className="flex items-center space-x-1 px-3 py-1 glass-subtle rounded-lg hover:glass transition-all text-sm"
+        >
+          <span>전체보기</span>
+          <ExternalLink size={14} />
+        </button>
       </div>
 
-      <div className="space-y-4">
-        {posts.map((post) => (
-          <div key={post.id} className="glass rounded-xl p-4 hover:glass-strong transition-all">
+      {/* 플랫폼 필터 */}
+      <div className="flex space-x-2 mb-4">
+        {["all", "X", "Truth Social"].map((platform) => (
+          <button
+            key={platform}
+            onClick={() => setSelectedPlatform(platform as typeof selectedPlatform)}
+            className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+              selectedPlatform === platform
+                ? "glass text-primary"
+                : "glass-subtle text-foreground/70 hover:text-foreground"
+            }`}
+          >
+            {platform === "all" ? "전체" : platform}
+          </button>
+        ))}
+      </div>
+
+      {/* SNS 피드 목록 */}
+      <div className="space-y-3">
+        {filteredPosts.slice(0, 3).map((post) => (
+          <div
+            key={post.id}
+            onClick={() => handlePostClick(post)}
+            className="glass-subtle p-3 rounded-lg cursor-pointer hover:glass transition-all group"
+          >
             {/* 헤더 */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-3">
-                <div className="text-2xl">{post.avatar}</div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-medium">{post.author}</span>
-                    <div className="flex items-center space-x-1">
-                      {getTypeIcon(post.type)}
-                      <span className="text-xs text-foreground/60">{getTypeLabel(post.type)}</span>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <div className="relative">
+                  <img
+                    src={post.profileImage}
+                    alt={post.author}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                  {post.verified && (
+                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center">
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="white">
+                        <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2" fill="none"/>
+                      </svg>
                     </div>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center space-x-1">
+                    <p className="text-sm font-medium">{post.author}</p>
+                    <Badge variant="secondary" className="text-xs">
+                      {post.platform}
+                    </Badge>
                   </div>
-                  <span className="text-xs text-foreground/50">{post.time}</span>
+                  <p className="text-xs text-foreground/60">{formatTimestamp(post.timestamp)}</p>
                 </div>
               </div>
+
+              {post.hasMarketImpact && (
+                <div className="flex items-center space-x-1">
+                  <TrendingUp size={14} className="text-primary" />
+                  <span className="text-xs text-primary font-medium">
+                    {post.impactScore?.toFixed(1)}%
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* 관련 주식 */}
-            <div className="flex flex-wrap gap-1 mb-3">
-              {post.stocks.map((stock) => (
-                <span
-                  key={stock}
-                  className="text-xs px-2 py-1 bg-primary/20 text-primary rounded-md"
-                >
-                  ${stock}
-                </span>
-              ))}
-            </div>
+            {/* 내용 */}
+            <p className="text-sm mb-2 line-clamp-2">{post.content}</p>
 
-            {/* 콘텐츠 */}
-            <p className="text-sm mb-4 leading-relaxed">
-              {post.content}
-            </p>
-
-            {/* 액션 버튼들 */}
-            <div className="flex items-center justify-between pt-3 border-t border-white/10">
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => toggleLike(post.id)}
-                  className={`flex items-center space-x-1 text-sm transition-colors ${
-                    post.liked 
-                      ? "text-red-400 hover:text-red-300" 
-                      : "text-foreground/60 hover:text-red-400"
-                  }`}
-                >
-                  <Heart 
-                    size={16} 
-                    className={post.liked ? "fill-current" : ""} 
-                  />
-                  <span>{post.likes.toLocaleString()}</span>
-                </button>
-
-                <button className="flex items-center space-x-1 text-sm text-foreground/60 hover:text-blue-400 transition-colors">
-                  <MessageCircle size={16} />
-                  <span>{post.comments.toLocaleString()}</span>
-                </button>
-
-                <button className="flex items-center space-x-1 text-sm text-foreground/60 hover:text-green-400 transition-colors">
-                  <Share size={16} />
-                  <span>{post.shares.toLocaleString()}</span>
-                </button>
-              </div>
-
-              <div className="flex items-center space-x-1 text-xs text-foreground/50">
-                <Eye size={12} />
-                <span>실시간</span>
-              </div>
+            {/* 인게이지먼트 */}
+            <div className="flex items-center justify-between">
+              {post.platform === "X" && (
+                <div className="flex space-x-3 text-foreground/60 text-xs">
+                  <span>💬 {formatNumber(post.replies || 0)}</span>
+                  <span>🔄 {formatNumber(post.retweets || 0)}</span>
+                  <span>❤️ {formatNumber(post.likes || 0)}</span>
+                </div>
+              )}
+              
+              {post.hasMarketImpact && (
+                <Badge className="bg-primary/20 text-primary text-xs ml-auto">
+                  시장 영향 분석
+                </Badge>
+              )}
             </div>
           </div>
         ))}
+      </div>
 
-        {/* 더보기 섹션 */}
-        <div className="glass-subtle rounded-xl p-4 text-center">
-          <h3 className="font-medium mb-2">💡 투자 인사이트</h3>
-          <p className="text-sm text-foreground/70 mb-3">
-            전 세계 투자 구루들의 실시간 의견과 분석을 한 곳에서 만나보세요.
-          </p>
-          {isLoggedIn ? (
-            <div className="text-xs text-foreground/60">
-              🎯 맞춤형 피드 • 📊 심화 분석 • 🔔 실시간 알림 활성화됨
-            </div>
-          ) : (
-            <div className="text-xs text-foreground/60">
-              🌟 모든 투자 인사이트를 무료로 이용하세요
-            </div>
-          )}
-        </div>
+      {/* 더보기 버튼 */}
+      <div className="mt-4 text-center">
+        <button
+          onClick={handleViewAllClick}
+          className="px-4 py-2 glass-subtle rounded-lg hover:glass transition-all text-sm"
+        >
+          더 많은 SNS 피드 보기
+        </button>
       </div>
     </div>
   );
