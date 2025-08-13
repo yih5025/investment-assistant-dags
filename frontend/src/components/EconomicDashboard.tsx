@@ -24,16 +24,24 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     second: "treasuryRate"
   });
 
-  // 실제 API 데이터로 대체
-  const { rows, loading, error } = useEconomicIndicators({ startYear: 2014, endYear: 2024 });
+  // 실제 API 데이터로 대체 (기본: 2014 ~ 현재)
+  const { rows, loading, error } = useEconomicIndicators();
 
-  // 선택 지표의 최신/이전 값 추출 유틸
+  // 선택 지표의 최신값과 전년 동월(YoY) 값 추출
   const getLatestPair = (key: keyof EconomicIndicator): { value?: number; prev?: number } => {
-    const filtered = rows.filter((r) => (r as any)[key] != null);
-    if (filtered.length === 0) return { value: undefined, prev: undefined };
-    const last = filtered[filtered.length - 1] as any;
-    const prev = filtered.length > 1 ? (filtered[filtered.length - 2] as any) : undefined;
-    return { value: last[key] as number | undefined, prev: prev ? (prev[key] as number | undefined) : undefined };
+    const typedRows = rows as EconomicIndicatorYearlyRow[];
+    const available = typedRows.filter(r => (r as any)[key] != null && r.period);
+    if (available.length === 0) return { value: undefined, prev: undefined };
+    const last = available[available.length - 1];
+    const period = last.period as string; // 'YYYY-MM'
+    const [yy, mm] = period.split('-').map(n => parseInt(n, 10));
+    const prevPeriod = `${yy - 1}-${mm < 10 ? `0${mm}` : `${mm}`}`;
+    const periodMap = new Map(typedRows.filter(r => r.period).map(r => [r.period as string, r]));
+    const prevRow = periodMap.get(prevPeriod);
+    return {
+      value: (last as any)[key] as number | undefined,
+      prev: prevRow ? ((prevRow as any)[key] as number | undefined) : undefined,
+    };
   };
 
   const indicators = [

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { apiUrl } from "../utils/api";
 
 export interface EconomicIndicatorYearlyRow {
   year: number;          // 파생: period에서 추출한 연도
@@ -91,14 +92,14 @@ export function useEconomicIndicators(options: UseEconomicIndicatorsOptions = {}
     async function fetchAll() {
       try {
     // 1) Treasury: 전체 기간 한 번에(monthly 저장 스키마 가정)
-    const treasuryResPromise = fetch(`/api/v1/treasury-yield?maturity=10year&start_date=${startYear}-01-01&end_date=${endYear}-12-31&size=1000`);
+    const treasuryResPromise = fetch(apiUrl(`/treasury-yield?maturity=10year&start_date=${startYear}-01-01&end_date=${endYear}-12-31&size=1000`));
 
     // 2) Fed/CPI: 전체 목록(정렬 파라미터 불필요)
-    const fedResPromise = fetch(`/api/v1/federal-funds-rate`);
-    const cpiResPromise = fetch(`/api/v1/cpi`);
+    const fedResPromise = fetch(apiUrl(`/federal-funds-rate`));
+    const cpiResPromise = fetch(apiUrl(`/cpi`));
 
     // 3) Inflation: 연도 범위 조회(연도별)
-    const inflationResPromise = fetch(`/api/v1/inflation/range?start_year=${startYear}&end_year=${endYear}`);
+    const inflationResPromise = fetch(apiUrl(`/inflation/range?start_year=${startYear}&end_year=${endYear}`));
 
     const [treasuryRes, fedRes, cpiRes, inflationRes] = await Promise.all([
       treasuryResPromise,
