@@ -107,10 +107,16 @@ async def detailed_logging_middleware(request: Request, call_next):
 # 프론트엔드(React, Django)에서 API 호출할 수 있도록 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,  # config.py에서 설정한 허용 오리진
-    allow_credentials=True,                  # 쿠키, 인증 헤더 허용
-    allow_methods=["GET", "POST", "PUT", "DELETE"],  # 허용할 HTTP 메서드
-    allow_headers=["*"],                     # 모든 헤더 허용
+    allow_origins=[
+        "https://investment-assistant.site",        # 프론트엔드 프로덕션 (향후)
+        "https://api.investment-assistant.site",    # API 도메인 자체
+        "https://wei-service.vercel.app",          # Vercel 배포 도메인
+        "http://localhost:30333",                  # 로컬 포트
+        "http://127.0.0.1:30333",                  # 로컬 IP 포트
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 
