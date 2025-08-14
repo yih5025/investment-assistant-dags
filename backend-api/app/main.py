@@ -108,12 +108,14 @@ async def detailed_logging_middleware(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://investment-assistant.site",        # 프론트엔드 프로덕션 (향후)
-        "https://api.investment-assistant.site",    # API 도메인 자체
-        "https://wei-service.vercel.app",          # Vercel 배포 도메인
-        "http://localhost:30333",                  # 로컬 포트
-        "http://127.0.0.1:30333",                  # 로컬 IP 포트
+        "https://investment-assistant.site",
+        "https://api.investment-assistant.site",
+        "https://wei-service.vercel.app",
+        "http://localhost:30333",
+        "http://127.0.0.1:30333",
     ],
+    # Vercel 프리뷰 도메인 전체 허용 (예: https://<branch>--<project>.vercel.app 또는 자동 생성 프리뷰 도메인)
+    allow_origin_regex=r"https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

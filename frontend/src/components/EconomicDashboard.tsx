@@ -199,10 +199,10 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       console.log("📊 경제 데이터 로딩 시작...");
 
       const [fedResponse, inflationResponse, cpiResponse, treasuryResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/federal-funds-rate`),
-        fetch(`${API_BASE_URL}/inflation`),
-        fetch(`${API_BASE_URL}/cpi`),
-        fetch(`${API_BASE_URL}/treasury-yield?maturity=10year&size=1000`)
+        fetch(`${API_BASE_URL}/federal-funds-rate/`),
+        fetch(`${API_BASE_URL}/inflation/`),
+        fetch(`${API_BASE_URL}/cpi/`),
+        fetch(`${API_BASE_URL}/treasury-yield/?maturity=10year&size=1000`)
       ]);
 
       if (!fedResponse.ok) throw new Error(`연방기금금리 API 오류: ${fedResponse.status}`);
@@ -254,15 +254,15 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       },
       {
         name: "연방기금금리",
-        url: `${API_BASE_URL}/federal-funds-rate`
+        url: `${API_BASE_URL}/federal-funds-rate/`
       },
       {
         name: "인플레이션",
-        url: `${API_BASE_URL}/inflation`
+        url: `${API_BASE_URL}/inflation/`
       },
       {
         name: "소비자물가지수",
-        url: `${API_BASE_URL}/cpi`
+        url: `${API_BASE_URL}/cpi/`
       },
       {
         name: "국채수익률",
