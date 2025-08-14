@@ -113,6 +113,7 @@ app.add_middleware(
         "https://wei-service.vercel.app",
         "http://localhost:30333",
         "http://127.0.0.1:30333",
+        "*"
     ],
     # Vercel 프리뷰 도메인 전체 허용 (예: https://<branch>--<project>.vercel.app 또는 자동 생성 프리뷰 도메인)
     allow_origin_regex=r"https:\/\/.*\.vercel\.app$",
