@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Union
 from pydantic import BaseModel, Field
 from .common import PaginatedResponse
 
@@ -34,9 +34,9 @@ class TruthSocialPostResponse(TruthSocialPostBase):
     media_count: int = Field(0, description="미디어 개수")
     media_attachments: Optional[List[Dict[str, Any]]] = Field(None, description="첨부 미디어")
     
-    # 태그 및 멘션
-    tags: List[str] = Field(default_factory=list, description="해시태그 목록")
-    mentions: List[str] = Field(default_factory=list, description="멘션 목록")
+    # 태그 및 멘션 (DB에는 문자열 또는 객체(dict) 형태로 저장될 수 있음)
+    tags: List[Union[str, Dict[str, Any]]] = Field(default_factory=list, description="해시태그 목록")
+    mentions: List[Union[str, Dict[str, Any]]] = Field(default_factory=list, description="멘션 목록")
     has_tags: bool = Field(False, description="태그 포함 여부")
     has_mentions: bool = Field(False, description="멘션 포함 여부")
     
@@ -130,9 +130,9 @@ class TruthSocialTrendResponse(BaseModel):
     url: Optional[str] = Field(None, description="포스트 URL")
     uri: Optional[str] = Field(None, description="포스트 URI")
     
-    # 태그 및 멘션
-    tags: List[str] = Field(default_factory=list, description="해시태그 목록")
-    mentions: List[str] = Field(default_factory=list, description="멘션 목록")
+    # 태그 및 멘션 (DB에는 문자열 또는 객체(dict) 형태로 저장될 수 있음)
+    tags: List[Union[str, Dict[str, Any]]] = Field(default_factory=list, description="해시태그 목록")
+    mentions: List[Union[str, Dict[str, Any]]] = Field(default_factory=list, description="멘션 목록")
     
     # 트렌드 관련
     trend_rank: Optional[int] = Field(None, description="트렌드 순위")
