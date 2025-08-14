@@ -1,16 +1,20 @@
 {
-    "framework": "vite",
-    "buildCommand": "npm run build",
-    "outputDirectory": "dist", 
-    "installCommand": "npm install",
-    "rewrites": [
-      {
-        "source": "/(.*)",
-        "destination": "/index.html"
-      }
-    ],
-    "env": {
-      "VITE_API_URL": "http://your-server-ip:30888",
-      "VITE_WS_URL": "ws://your-server-ip:30888"
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist", 
+  "installCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.investment-assistant.site/api/v1/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
+  ],
+  "env": {
+    "VITE_API_URL": "https://api.investment-assistant.site",
+    "VITE_WS_URL": "wss://api.investment-assistant.site"
   }
+}
