@@ -1,11 +1,10 @@
 import React from 'react';
-import { ArrowLeft, ExternalLink, TrendingUp, TrendingDown, Target, Calendar, Building, Clock, Zap, BarChart, Newspaper, ChevronUp } from 'lucide-react';
+import { ArrowLeft, ExternalLink, TrendingUp, TrendingDown, Target, Calendar, Building, Clock, Zap, BarChart, Newspaper, User, Globe } from 'lucide-react';
 
 // ============================================================================
 // 타입 정의 (메인 뉴스 페이지와 동일)
 // ============================================================================
 
-// 1. Market News API
 interface MarketNewsItem {
   type: "market";
   source: string;
@@ -19,7 +18,6 @@ interface MarketNewsItem {
   fetched_at?: string;
 }
 
-// 2. Financial News API
 interface FinancialNewsItem {
   type: "financial";
   category: "crypto" | "forex" | "merger" | "general";
@@ -39,7 +37,6 @@ interface FinancialNewsItem {
   fetched_at?: string;
 }
 
-// 3. Company News API
 interface CompanyNewsItem {
   type: "company";
   symbol: string;
@@ -61,7 +58,6 @@ interface CompanyNewsItem {
   }>;
 }
 
-// 4. Market News Sentiment API
 interface SentimentNewsItem {
   type: "sentiment";
   title: string;
@@ -101,7 +97,7 @@ interface NewsDetailPageProps {
 // 뉴스 상세 페이지 컴포넌트
 // ============================================================================
 
-export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetailPageProps) {
+export default function ImprovedNewsDetailPage({ newsItem, onBack }: NewsDetailPageProps) {
   // =========================================================================
   // 유틸리티 함수들
   // =========================================================================
@@ -117,10 +113,29 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
     });
   };
 
+  const formatTimeAgo = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffHours < 1) return "방금 전";
+    if (diffHours < 24) return `${diffHours}시간 전`;
+    if (diffDays < 7) return `${diffDays}일 전`;
+    return formatTimestamp(timestamp);
+  };
+
   const getSentimentColor = (score: number) => {
     if (score > 0.3) return "text-green-400";
     if (score < -0.3) return "text-red-400";
     return "text-yellow-400";
+  };
+
+  const getSentimentBgColor = (score: number) => {
+    if (score > 0.3) return "bg-green-500/20";
+    if (score < -0.3) return "bg-red-500/20";
+    return "bg-yellow-500/20";
   };
 
   const getSentimentIcon = (score: number) => {
@@ -129,50 +144,23 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
     return <Target size={20} />;
   };
 
-  const getApiColor = (type: string) => {
-    switch (type) {
-      case "market": return "bg-blue-500/20 text-blue-400 border-blue-500/30";
-      case "financial": return "bg-green-500/20 text-green-400 border-green-500/30";
-      case "company": return "bg-purple-500/20 text-purple-400 border-purple-500/30";
-      case "sentiment": return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-      default: return "bg-gray-500/20 text-gray-400 border-gray-500/30";
-    }
-  };
-
   const getCategoryColor = (category: string) => {
     switch (category) {
-      case "crypto": return "bg-orange-500/20 text-orange-400 border-orange-500/30";
-      case "forex": return "bg-green-500/20 text-green-400 border-green-500/30";
-      case "merger": return "bg-purple-500/20 text-purple-400 border-purple-500/30";
-      case "general": return "bg-blue-500/20 text-blue-400 border-blue-500/30";
-      default: return "bg-gray-500/20 text-gray-400 border-gray-500/30";
+      case "crypto": return "bg-orange-500/20 text-orange-400 border-orange-500/50";
+      case "forex": return "bg-green-500/20 text-green-400 border-green-500/50";
+      case "merger": return "bg-purple-500/20 text-purple-400 border-purple-500/50";
+      case "general": return "bg-blue-500/20 text-blue-400 border-blue-500/50";
+      default: return "bg-gray-500/20 text-gray-400 border-gray-500/50";
     }
   };
 
-  const getTitle = () => {
-    switch (newsItem.type) {
-      case "market": return newsItem.title;
-      case "financial": return newsItem.headline;
-      case "company": return `${newsItem.symbol} - 기업 뉴스`;
-      case "sentiment": return newsItem.title;
-    }
-  };
-
-  const getDescription = () => {
-    switch (newsItem.type) {
-      case "market": return newsItem.description;
-      case "financial": return newsItem.summary;
-      case "company": return `${newsItem.symbol} 관련 ${newsItem.news_count}개 뉴스`;
-      case "sentiment": return newsItem.summary;
-    }
-  };
-
-  const getTimestamp = () => {
-    switch (newsItem.type) {
-      case "market": return newsItem.published_at;
-      case "financial": return newsItem.datetime;
-      case "company": return newsItem.news?.[0]?.published_at || "";
-      case "sentiment": return newsItem.time_published;
+  const getCategoryDisplayName = (category: string) => {
+    switch (category) {
+      case "crypto": return "암호화폐";
+      case "forex": return "외환";
+      case "merger": return "M&A";
+      case "general": return "일반";
+      default: return category;
     }
   };
 
@@ -187,95 +175,111 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
     }
   };
 
-  const getSourceLabel = () => {
-    switch (newsItem.type) {
-      case "company":
-        return newsItem.news?.[0]?.source || "";
-      default:
-        return (newsItem as Exclude<NewsItem, CompanyNewsItem>).source;
-    }
-  };
-
   // =========================================================================
   // 타입별 상세 렌더링 함수들
   // =========================================================================
 
   const renderMarketNews = (item: MarketNewsItem) => (
     <div className="space-y-6">
-      {/* 메타 정보 */}
-      <div className="glass-subtle rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Building size={16} className="text-foreground/60" />
-            <span className="text-sm text-foreground/80">{item.author}</span>
+      {/* 메타 정보 - 깔끔한 카드 */}
+      <div className="glass-card rounded-xl p-4">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <div className="flex items-center space-x-2 mb-2">
+              <Globe size={16} className="text-blue-400" />
+              <span className="font-medium text-blue-400">{item.source}</span>
+            </div>
+            {item.author && (
+              <div className="flex items-center space-x-2 text-sm text-foreground/70">
+                <User size={14} />
+                <span>{item.author}</span>
+              </div>
+            )}
           </div>
-          <span className={`px-2 py-1 rounded border text-xs ${getApiColor("market")}`}>시장뉴스</span>
+          <div className="text-right text-sm">
+            <div className="text-foreground/60">발행</div>
+            <div className="font-medium">{formatTimeAgo(item.published_at)}</div>
+          </div>
         </div>
-        
-        <div className="flex items-center space-x-2">
-          <Clock size={16} className="text-foreground/60" />
-          <span className="text-sm text-foreground/70">{formatTimestamp(item.published_at)}</span>
-        </div>
+
+        {/* 타임라인 */}
+        {item.fetched_at && (
+          <div className="border-t border-white/10 pt-3">
+            <div className="flex items-center justify-between text-xs text-foreground/50">
+              <div className="flex items-center space-x-2">
+                <Clock size={12} />
+                <span>수집: {formatTimeAgo(item.fetched_at)}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 본문 */}
+      {/* 본문 - 중복 제거된 깔끔한 구조 */}
       <div className="glass-card rounded-xl p-6 space-y-4">
-        <div className="prose prose-invert max-w-none">
-          <p className="leading-relaxed text-foreground/90 mb-4">
-            {item.description}
-          </p>
-          
-          {item.content && item.content !== item.description && (
-            <div className="mt-4 p-4 glass-subtle rounded-lg">
-              <h4 className="font-medium mb-2">전체 내용</h4>
-              <p className="text-sm text-foreground/80 leading-relaxed">{item.content}</p>
-            </div>
-          )}
+        {/* 요약 (description이 있으면 표시) */}
+        {item.description && (
+          <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
+            <h4 className="font-medium text-blue-400 mb-2 text-sm">요약</h4>
+            <p className="text-foreground/90 leading-relaxed">{item.description}</p>
+          </div>
+        )}
 
-          {item.short_description && item.short_description !== item.description && (
-            <div className="mt-4 p-4 glass-subtle rounded-lg">
-              <h4 className="font-medium mb-2">요약</h4>
-              <p className="text-sm text-foreground/80">{item.short_description}</p>
+        {/* 본문 내용 */}
+        {item.content && item.content !== item.description && (
+          <div>
+            <h4 className="font-medium mb-3 text-sm text-foreground/70">본문</h4>
+            <div className="prose prose-invert max-w-none">
+              <p className="leading-relaxed text-foreground/90 whitespace-pre-line">
+                {item.content}
+              </p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* short_description가 별도로 있으면 표시 */}
+        {item.short_description && 
+         item.short_description !== item.description && 
+         item.short_description !== item.content && (
+          <div className="p-3 glass-subtle rounded-lg">
+            <h4 className="font-medium mb-2 text-sm text-foreground/70">추가 요약</h4>
+            <p className="text-sm text-foreground/80">{item.short_description}</p>
+          </div>
+        )}
       </div>
     </div>
   );
 
   const renderFinancialNews = (item: FinancialNewsItem) => (
     <div className="space-y-6">
-      {/* 카테고리 정보 */}
-      <div className="glass-subtle rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Zap size={16} className="text-foreground/60" />
-            <span className={`px-2 py-1 rounded border text-xs ${getCategoryColor(item.category)}`}>
-              {item.category_display_name || item.category}
+      {/* 카테고리 및 메타 정보 */}
+      <div className="glass-card rounded-xl p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <span className={`px-3 py-1.5 rounded-lg border text-sm font-medium ${getCategoryColor(item.category)}`}>
+              {getCategoryDisplayName(item.category)}
             </span>
+            <div className="text-xs text-foreground/60">ID: {item.news_id}</div>
           </div>
-          <span className="text-xs text-foreground/60">ID: {item.news_id}</span>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <Clock size={16} className="text-foreground/60" />
-          <span className="text-sm text-foreground/70">{formatTimestamp(item.datetime)}</span>
+          <div className="text-right text-sm">
+            <div className="text-foreground/60">발행</div>
+            <div className="font-medium">{formatTimeAgo(item.datetime)}</div>
+          </div>
         </div>
 
-        {item.has_image && item.image && (
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-green-400">✓ 이미지 포함</span>
-          </div>
-        )}
+        <div className="flex items-center space-x-2 text-sm">
+          <Globe size={14} className="text-green-400" />
+          <span className="font-medium text-green-400">{item.source}</span>
+        </div>
       </div>
 
-      {/* 이미지 */}
+      {/* 히어로 이미지 */}
       {item.image && (
         <div className="glass-card rounded-xl p-4">
           <img 
             src={item.image} 
             alt={item.headline}
-            className="w-full max-w-md mx-auto rounded-lg"
+            className="w-full rounded-lg object-cover max-h-64"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
             }}
@@ -283,16 +287,19 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
         </div>
       )}
 
-      {/* 관련 심볼 */}
+      {/* 관련 종목 태그 */}
       {item.related_symbols && item.related_symbols.length > 0 && (
         <div className="glass-card rounded-xl p-4">
           <h4 className="font-medium mb-3 flex items-center space-x-2">
-            <BarChart size={16} />
+            <BarChart size={16} className="text-green-400" />
             <span>관련 종목</span>
           </h4>
           <div className="flex flex-wrap gap-2">
             {item.related_symbols.map((symbol, index) => (
-              <span key={index} className="px-2 py-1 rounded text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30">
+              <span 
+                key={index} 
+                className="px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 text-sm font-medium"
+              >
                 {symbol}
               </span>
             ))}
@@ -300,87 +307,87 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
         </div>
       )}
 
-      {/* 본문 */}
+      {/* 뉴스 내용 */}
       <div className="glass-card rounded-xl p-6 space-y-4">
-        <div className="space-y-3">
-          <div>
-            <h4 className="font-medium mb-2">헤드라인</h4>
-            <p className="text-foreground/90">{item.headline}</p>
+        {/* 헤드라인과 요약 */}
+        {item.summary && (
+          <div className="p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+            <h4 className="font-medium text-green-400 mb-2 text-sm">요약</h4>
+            <p className="text-foreground/90 leading-relaxed">{item.summary}</p>
           </div>
-          
-          {item.short_headline && item.short_headline !== item.headline && (
-            <div>
-              <h4 className="font-medium mb-2">짧은 헤드라인</h4>
-              <p className="text-sm text-foreground/80">{item.short_headline}</p>
-            </div>
-          )}
+        )}
 
-          <div>
-            <h4 className="font-medium mb-2">요약</h4>
-            <p className="text-sm text-foreground/80 leading-relaxed">{item.summary}</p>
+        {/* 짧은 헤드라인이 다르면 표시 */}
+        {item.short_headline && item.short_headline !== item.headline && (
+          <div className="p-3 glass-subtle rounded-lg">
+            <h4 className="font-medium mb-2 text-sm text-foreground/70">요약 헤드라인</h4>
+            <p className="text-sm text-foreground/80">{item.short_headline}</p>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
 
   const renderCompanyNews = (item: CompanyNewsItem) => (
     <div className="space-y-6">
-      {/* 주식 정보 */}
-      <div className="glass-subtle rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <TrendingUp size={16} className="text-primary" />
-            <span className="font-bold text-lg">{item.symbol}</span>
-            <span className={`px-2 py-1 rounded border text-xs ${getCategoryColor(item.category)}`}>
-              {item.category}
-            </span>
+      {/* 주식 정보 카드 */}
+      <div className="glass-card rounded-xl p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-lg bg-purple-500/20">
+              <Building size={16} className="text-purple-400" />
+            </div>
+            <div>
+              <div className="font-bold text-lg">{item.symbol}</div>
+              <div className="text-sm text-foreground/60">{item.category}</div>
+            </div>
           </div>
           {item.rank_position && (
-            <span className="px-2 py-1 rounded text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30">
-              #{item.rank_position}
-            </span>
+            <div className="text-right">
+              <div className="text-xs text-foreground/60">순위</div>
+              <div className="font-bold text-purple-400">#{item.rank_position}</div>
+            </div>
           )}
         </div>
 
-        {/* 주식 데이터 */}
+        {/* 주식 데이터 그리드 */}
         {(item.price || item.change_percentage || item.volume) && (
-          <div className="grid grid-cols-3 gap-3 mt-3">
+          <div className="grid grid-cols-3 gap-4 p-3 glass-subtle rounded-lg">
             {item.price && (
               <div className="text-center">
-                <div className="text-xs text-foreground/60">가격</div>
-                <div className="font-medium">${item.price.toFixed(2)}</div>
+                <div className="text-xs text-foreground/60 mb-1">가격</div>
+                <div className="font-bold">${item.price.toFixed(2)}</div>
               </div>
             )}
             {item.change_percentage && (
               <div className="text-center">
-                <div className="text-xs text-foreground/60">변화율</div>
-                <div className={`font-medium ${item.change_percentage.includes('-') ? 'text-red-400' : 'text-green-400'}`}>
+                <div className="text-xs text-foreground/60 mb-1">변화율</div>
+                <div className={`font-bold ${item.change_percentage.includes('-') ? 'text-red-400' : 'text-green-400'}`}>
                   {item.change_percentage}
                 </div>
               </div>
             )}
             {item.volume && (
               <div className="text-center">
-                <div className="text-xs text-foreground/60">거래량</div>
-                <div className="font-medium text-xs">{item.volume.toLocaleString()}</div>
+                <div className="text-xs text-foreground/60 mb-1">거래량</div>
+                <div className="font-bold text-xs">{item.volume.toLocaleString()}</div>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* 뉴스 목록 */}
-      <div className="glass-card rounded-xl p-6 space-y-4">
-        <h4 className="font-medium mb-3 flex items-center space-x-2">
-          <Newspaper size={16} />
+      {/* 뉴스 리스트 */}
+      <div className="glass-card rounded-xl p-6">
+        <h4 className="font-medium mb-4 flex items-center space-x-2">
+          <Newspaper size={16} className="text-purple-400" />
           <span>관련 뉴스 ({item.news_count}개)</span>
         </h4>
         
-        <div className="space-y-3">
+        <div className="space-y-4">
           {item.news?.map((news, index) => (
-            <div key={index} className="glass-subtle rounded-lg p-3">
-              <div className="flex items-start space-x-3">
+            <div key={index} className="glass-subtle rounded-lg p-4 hover:glass transition-all">
+              <div className="flex space-x-3">
                 {news.image && (
                   <img 
                     src={news.image} 
@@ -391,12 +398,12 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
                     }}
                   />
                 )}
-                <div className="flex-1">
-                  <h5 className="font-medium text-sm mb-1">{news.headline}</h5>
-                  <p className="text-xs text-foreground/70 mb-2">{news.summary}</p>
+                <div className="flex-1 min-w-0">
+                  <h5 className="font-medium text-sm mb-2 line-clamp-2">{news.headline}</h5>
+                  <p className="text-xs text-foreground/70 mb-2 line-clamp-2">{news.summary}</p>
                   <div className="flex items-center justify-between text-xs text-foreground/60">
                     <span>{news.source}</span>
-                    <span>{formatTimestamp(news.published_at)}</span>
+                    <span>{formatTimeAgo(news.published_at)}</span>
                   </div>
                 </div>
               </div>
@@ -409,11 +416,11 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
 
   const renderSentimentNews = (item: SentimentNewsItem) => (
     <div className="space-y-6">
-      {/* 감성 분석 메인 */}
-      <div className="glass-subtle rounded-xl p-4 space-y-4">
-        <div className="flex items-center justify-between">
+      {/* 감성 분석 메인 카드 */}
+      <div className="glass-card rounded-xl p-4">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">
-            <div className={`p-2 rounded-lg ${getSentimentColor(item.overall_sentiment_score)} bg-current/10`}>
+            <div className={`p-3 rounded-lg ${getSentimentBgColor(item.overall_sentiment_score)}`}>
               {getSentimentIcon(item.overall_sentiment_score)}
             </div>
             <div>
@@ -425,43 +432,73 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
           </div>
           
           {item.sentiment_emoji && (
-            <span className="text-2xl">{item.sentiment_emoji}</span>
+            <span className="text-3xl">{item.sentiment_emoji}</span>
           )}
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Clock size={16} className="text-foreground/60" />
-          <span className="text-sm text-foreground/70">{formatTimestamp(item.time_published)}</span>
+        {/* 감성 점수 프로그레스 바 */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs text-foreground/60">
+            <span>매우 부정적</span>
+            <span>중립</span>
+            <span>매우 긍정적</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-2">
+            <div 
+              className={`h-2 rounded-full transition-all duration-1000 ${
+                item.overall_sentiment_score > 0 ? 'bg-green-400' : 'bg-red-400'
+              }`}
+              style={{ 
+                width: `${Math.abs(item.overall_sentiment_score) * 100}%`,
+                marginLeft: item.overall_sentiment_score < 0 ? 'auto' : '0'
+              }}
+            />
+          </div>
         </div>
 
-        {item.batch_id && (
-          <div className="text-xs text-foreground/60">
-            배치 ID: {item.batch_id} • 쿼리: {item.query_type}
+        <div className="flex items-center justify-between text-sm mt-3">
+          <div className="flex items-center space-x-2">
+            <User size={14} className="text-orange-400" />
+            <span className="text-orange-400">{item.authors}</span>
           </div>
-        )}
+          <span className="text-foreground/60">{formatTimeAgo(item.time_published)}</span>
+        </div>
       </div>
 
       {/* 관련 티커 분석 */}
       {item.ticker_sentiment && item.ticker_sentiment.length > 0 && (
         <div className="glass-card rounded-xl p-4">
-          <h4 className="font-medium mb-3 flex items-center space-x-2">
-            <BarChart size={16} />
-            <span>관련 종목 분석</span>
+          <h4 className="font-medium mb-4 flex items-center space-x-2">
+            <BarChart size={16} className="text-orange-400" />
+            <span>종목별 감성 분석</span>
           </h4>
-          <div className="space-y-3">
+          <div className="grid gap-3">
             {item.ticker_sentiment.map((ticker, index) => (
               <div key={index} className="glass-subtle rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold">{ticker.ticker}</span>
-                  <span className={`px-2 py-1 rounded text-xs ${getSentimentColor(parseFloat(ticker.ticker_sentiment_score))}`}>
+                  <span className="font-bold text-lg">{ticker.ticker}</span>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${getSentimentBgColor(parseFloat(ticker.ticker_sentiment_score))} ${getSentimentColor(parseFloat(ticker.ticker_sentiment_score))}`}>
                     {ticker.ticker_sentiment_label}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-foreground/60">연관성: {(parseFloat(ticker.relevance_score) * 100).toFixed(1)}%</span>
-                  <span className={getSentimentColor(parseFloat(ticker.ticker_sentiment_score))}>
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-foreground/60">
+                    연관성: {(parseFloat(ticker.relevance_score) * 100).toFixed(1)}%
+                  </div>
+                  <div className={`text-sm font-medium ${getSentimentColor(parseFloat(ticker.ticker_sentiment_score))}`}>
                     감성: {(parseFloat(ticker.ticker_sentiment_score) * 100).toFixed(1)}%
-                  </span>
+                  </div>
+                </div>
+                {/* 티커별 감성 바 */}
+                <div className="w-full bg-gray-700 rounded-full h-1.5 mt-2">
+                  <div 
+                    className={`h-1.5 rounded-full ${
+                      parseFloat(ticker.ticker_sentiment_score) > 0 ? 'bg-green-400' : 'bg-red-400'
+                    }`}
+                    style={{ 
+                      width: `${Math.abs(parseFloat(ticker.ticker_sentiment_score)) * 100}%`
+                    }}
+                  />
                 </div>
               </div>
             ))}
@@ -469,38 +506,55 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
         </div>
       )}
 
-      {/* 관련 토픽 */}
+      {/* 관련 토픽 클라우드 */}
       {item.topics && item.topics.length > 0 && (
         <div className="glass-card rounded-xl p-4">
-          <h4 className="font-medium mb-3 flex items-center space-x-2">
-            <Target size={16} />
+          <h4 className="font-medium mb-4 flex items-center space-x-2">
+            <Zap size={16} className="text-orange-400" />
             <span>관련 토픽</span>
           </h4>
-          <div className="space-y-2">
-            {item.topics.map((topic, index) => (
-              <div key={index} className="flex items-center justify-between glass-subtle rounded-lg p-2">
-                <span className="text-sm">{topic.topic}</span>
-                <div className="text-xs text-foreground/60">
-                  {(parseFloat(topic.relevance_score) * 100).toFixed(0)}%
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            {item.topics.map((topic, index) => {
+              const relevance = parseFloat(topic.relevance_score);
+              const opacity = Math.max(0.3, relevance); // 최소 30% 투명도
+              const scale = 0.8 + (relevance * 0.4); // 0.8~1.2 크기
+              return (
+                <span 
+                  key={index} 
+                  className="px-3 py-2 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/30 text-sm font-medium"
+                  style={{ 
+                    opacity,
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'center'
+                  }}
+                >
+                  {topic.topic}
+                  <span className="ml-1 text-xs opacity-60">
+                    {(relevance * 100).toFixed(0)}%
+                  </span>
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
 
       {/* 뉴스 본문 */}
-      <div className="glass-card rounded-xl p-6 space-y-4">
-        <div className="flex items-center space-x-2 mb-4">
-          <Building size={16} className="text-foreground/60" />
-          <span className="text-sm text-foreground/80">{item.authors}</span>
+      <div className="glass-card rounded-xl p-6">
+        <div className="p-4 bg-orange-500/10 rounded-lg border border-orange-500/20">
+          <h4 className="font-medium text-orange-400 mb-2 text-sm">뉴스 요약</h4>
+          <p className="text-foreground/90 leading-relaxed">{item.summary}</p>
         </div>
-        
-        <div className="prose prose-invert max-w-none">
-          <p className="leading-relaxed text-foreground/90">
-            {item.summary}
-          </p>
-        </div>
+
+        {/* 배치 정보 */}
+        {item.batch_id && (
+          <div className="mt-4 p-3 glass-subtle rounded-lg text-xs text-foreground/60">
+            <div className="flex justify-between">
+              <span>배치 ID: {item.batch_id}</span>
+              <span>쿼리: {item.query_type}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -509,39 +563,55 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
   // 메인 렌더링
   // =========================================================================
 
+  const getTitle = () => {
+    switch (newsItem.type) {
+      case "market": return newsItem.title;
+      case "financial": return newsItem.headline;
+      case "company": return `${newsItem.symbol} - 기업 뉴스`;
+      case "sentiment": return newsItem.title;
+    }
+  };
+
+  const getSourceLabel = () => {
+    switch (newsItem.type) {
+      case "company":
+        return newsItem.news?.[0]?.source || "";
+      default:
+        return (newsItem as Exclude<NewsItem, CompanyNewsItem>).source;
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="flex items-center space-x-2 px-3 py-1.5 glass-subtle rounded-lg hover:glass transition-all"
-        >
-          <ArrowLeft size={16} />
-          <span className="text-sm">뒤로가기</span>
-        </button>
-        
-        <button
-          onClick={() => window.open(getUrl(), '_blank')}
-          className="flex items-center space-x-2 px-3 py-1.5 glass-card rounded-lg hover:glass transition-all"
-        >
-          <ExternalLink size={16} />
-          <span className="text-sm">원문보기</span>
-        </button>
+    <div className="space-y-4 pb-6">
+      {/* 헤더 - 모바일 최적화 */}
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-white/10 p-4 -m-4 mb-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={onBack}
+            className="flex items-center space-x-2 px-3 py-2 glass-subtle rounded-lg hover:glass transition-all"
+          >
+            <ArrowLeft size={18} />
+            <span className="text-sm">뒤로</span>
+          </button>
+          
+          <button
+            onClick={() => window.open(getUrl(), '_blank')}
+            className="flex items-center space-x-2 px-3 py-2 glass-card rounded-lg hover:glass transition-all"
+          >
+            <ExternalLink size={16} />
+            <span className="text-sm">원문</span>
+          </button>
+        </div>
       </div>
 
-      {/* 제목 */}
+      {/* 제목 섹션 - 더 임팩트 있게 */}
       <div className="glass-card rounded-xl p-6">
         <div className="flex items-start justify-between mb-4">
-          <h1 className="text-xl font-bold leading-tight pr-4">{getTitle()}</h1>
+          <h1 className="text-xl font-bold leading-tight pr-4 flex-1">{getTitle()}</h1>
           <span className="px-2 py-1 rounded text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30 flex-shrink-0">
             {getSourceLabel()}
           </span>
         </div>
-        
-        <p className="text-foreground/80 leading-relaxed">
-          {getDescription()}
-        </p>
       </div>
 
       {/* 타입별 상세 내용 */}
@@ -550,51 +620,21 @@ export default function IntegratedNewsDetailPage({ newsItem, onBack }: NewsDetai
       {newsItem.type === "company" && renderCompanyNews(newsItem)}
       {newsItem.type === "sentiment" && renderSentimentNews(newsItem)}
 
-      {/* 메타 정보 */}
+      {/* 하단 메타 정보 - 간소화 */}
       <div className="glass-subtle rounded-xl p-4">
-        <div className="grid grid-cols-2 gap-3 text-xs text-foreground/60">
-          <div>
-            <span>발행:</span>
-            <span className="ml-2">{formatTimestamp(getTimestamp())}</span>
+        <div className="grid grid-cols-1 gap-2 text-xs text-foreground/60">
+          <div className="flex justify-between">
+            <span>뉴스 타입:</span>
+            <span className="capitalize font-medium">{newsItem.type}</span>
           </div>
-          {newsItem.type !== "sentiment" && "fetched_at" in newsItem && newsItem.fetched_at && (
-            <div>
-              <span>수집:</span>
-              <span className="ml-2">{formatTimestamp(newsItem.fetched_at)}</span>
-            </div>
-          )}
           {newsItem.type === "sentiment" && newsItem.created_at && (
-            <div>
-              <span>생성:</span>
-              <span className="ml-2">{formatTimestamp(newsItem.created_at)}</span>
+            <div className="flex justify-between">
+              <span>분석 생성:</span>
+              <span>{formatTimeAgo(newsItem.created_at)}</span>
             </div>
           )}
-          <div>
-            <span>타입:</span>
-            <span className="ml-2 capitalize">{newsItem.type}</span>
-          </div>
         </div>
       </div>
-
-      {/* 개발자 디버깅 정보 */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="glass-card p-4 rounded-lg space-y-2 text-xs text-foreground/60">
-          <div className="font-medium">디버깅 정보 (뉴스 상세):</div>
-          <div>뉴스 타입: {newsItem.type}</div>
-          <div>소스: {getSourceLabel()}</div>
-          <div>URL: {getUrl()}</div>
-          {newsItem.type === "company" && (
-            <div>뉴스 개수: {newsItem.news_count}개</div>
-          )}
-          {newsItem.type === "sentiment" && (
-            <>
-              <div>감성 점수: {newsItem.overall_sentiment_score}</div>
-              <div>티커 개수: {newsItem.ticker_sentiment?.length || 0}개</div>
-              <div>토픽 개수: {newsItem.topics?.length || 0}개</div>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
