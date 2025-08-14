@@ -390,6 +390,31 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   };
 
   // =========================================================================
+  // 유틸리티 함수들 (TDZ 방지를 위해 먼저 선언)
+  // =========================================================================
+
+  function getTimestamp(item: NewsItem): string {
+    switch (item.type) {
+      case "market": return item.published_at;
+      case "financial": return item.datetime;
+      case "company": return item.news?.[0]?.published_at || "";
+      case "sentiment": return item.time_published;
+      default: return "";
+    }
+  }
+
+  function getItemSourceLabel(item: NewsItem): string {
+    switch (item.type) {
+      case "company":
+        return item.news?.[0]?.source || "";
+      case "market":
+      case "financial":
+      case "sentiment":
+        return item.source;
+    }
+  }
+
+  // =========================================================================
   // 필터링 및 정렬
   // =========================================================================
 
@@ -458,16 +483,6 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   // 유틸리티 함수들
   // =========================================================================
 
-  const getTimestamp = (item: NewsItem) => {
-    switch (item.type) {
-      case "market": return item.published_at;
-      case "financial": return item.datetime;
-      case "company": return item.news?.[0]?.published_at || "";
-      case "sentiment": return item.time_published;
-      default: return "";
-    }
-  };
-
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -508,17 +523,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     }
   };
 
-  // 공통 소스 라벨
-  const getItemSourceLabel = (item: NewsItem) => {
-    switch (item.type) {
-      case "company":
-        return item.news?.[0]?.source || "";
-      case "market":
-      case "financial":
-      case "sentiment":
-        return item.source;
-    }
-  };
+  // 공통 소스 라벨 (상단에서 함수 선언으로 정의됨)
 
   const getCategoryColor = (category: string) => {
     switch (category) {
