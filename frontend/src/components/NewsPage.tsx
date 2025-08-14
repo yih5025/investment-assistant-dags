@@ -123,7 +123,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   
   // 검색 및 필터
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedApi, setSelectedApi] = useState<"all" | "market" | "financial" | "company" | "sentiment">("all");
+  const [selectedApi, setSelectedApi] = useState<"all" | "market" | "financial" | "sentiment">("all");
   const [selectedCategory, setSelectedCategory] = useState<"all" | "crypto" | "forex" | "merger" | "general">("all");
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"recent" | "sentiment" | "relevance">("recent");
@@ -131,14 +131,13 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   
   // 페이징
   const [currentPage, setCurrentPage] = useState(1);
-  const [limit] = useState(20);
+  const [limit] = useState(100);
   const [hasMore, setHasMore] = useState(true);
   
   // 통계
   const [apiStats, setApiStats] = useState({
     market: 0,
     financial: 0,
-    company: 0,
     sentiment: 0,
     total: 0
   });
@@ -168,15 +167,28 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
 
   const API_BASE_URL = getAPIBaseURL();
 
-  // 1. Market News API 호출
-  const fetchMarketNews = async (days = 7, limit = 20, offset = 0) => {
+  // 월별 창으로 조회하기 위한 인덱스 상태 (0=최근 30일, 1=그 이전 30일 ...)
+  const [monthIndex, setMonthIndex] = useState(0);
+
+  const getMonthDateRange = (index: number) => {
+    const now = new Date();
+    const end = new Date(now.getTime() - index * 30 * 24 * 60 * 60 * 1000);
+    const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return {
+      startIso: start.toISOString(),
+      endIso: end.toISOString()
+    };
+  };
+
+  // 1. Market News API 호출 (기간 기반)
+  const fetchMarketNews = async (startIso: string, endIso: string, limit = 100, page = 1) => {
     try {
       console.log('🔄 Market News API 호출 중...');
-      // Backend 스펙: page, limit, (optional) sources
-      const page = Math.floor(offset / limit) + 1;
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: limit.toString()
+        limit: limit.toString(),
+        start_date: startIso,
+        end_date: endIso
       });
       if (selectedSource !== 'all') {
         params.append('sources', selectedSource);
@@ -202,15 +214,15 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     }
   };
 
-  // 2. Financial News API 호출
-  const fetchFinancialNews = async (limit = 20, offset = 0) => {
+  // 2. Financial News API 호출 (기간 기반)
+  const fetchFinancialNews = async (startIso: string, endIso: string, limit = 100, page = 1) => {
     try {
       console.log('🔄 Financial News API 호출 중...');
-      // Backend 스펙: page, limit, (optional) categories, sources
-      const page = Math.floor(offset / limit) + 1;
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: limit.toString()
+        limit: limit.toString(),
+        start_date: startIso,
+        end_date: endIso
       });
       if (selectedCategory !== 'all') {
         params.append('categories', selectedCategory);
@@ -239,38 +251,8 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     }
   };
 
-  // 3. Company News API 호출 (Trending)
-  const fetchCompanyNews = async (days = 3, limit = 20, offset = 0) => {
-    try {
-      console.log('🔄 Company News API 호출 중...');
-      const params = new URLSearchParams({
-        days: days.toString(),
-        limit: limit.toString(),
-        offset: offset.toString()
-      });
-
-      const response = await fetch(`${API_BASE_URL}/company-news/trending?${params.toString()}`);
-      
-      if (!response.ok) {
-        throw new Error(`Company News API 오류: ${response.status}`);
-      }
-
-      const data: ApiResponse<any> = await response.json();
-      console.log('✅ Company News 응답:', data);
-      
-      const stocks = data.stocks || [];
-      return stocks.map((stock: any) => ({
-        ...stock,
-        type: "company" as const
-      }));
-    } catch (error) {
-      console.error('❌ Company News API 오류:', error);
-      return [];
-    }
-  };
-
-  // 4. Market News Sentiment API 호출
-  const fetchSentimentNews = async (days = 7, limit = 20, offset = 0) => {
+  // 3. Market News Sentiment API 호출 (30일 윈도우, 오프셋 증가)
+  const fetchSentimentNews = async (days = 30, limit = 50, offset = 0) => {
     try {
       console.log('🔄 Sentiment News API 호출 중...');
       const params = new URLSearchParams({
@@ -317,35 +299,33 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     try {
       console.log('🚀 모든 뉴스 API 호출 시작...');
       
-      const offset = refresh ? 0 : (currentPage - 1) * limit;
+      const monthIdx = refresh ? 0 : (currentPage - 1);
+      const { startIso, endIso } = getMonthDateRange(monthIdx);
+      const sentimentOffset = monthIdx * 50;
       
       // 선택된 API에 따라 호출
       let results: NewsItem[] = [];
       
       if (selectedApi === "all") {
-        // 모든 API 병렬 호출
-        const [marketNews, financialNews, companyNews, sentimentNews] = await Promise.all([
-          fetchMarketNews(7, limit / 4, offset),
-          fetchFinancialNews(limit / 4, offset),
-          fetchCompanyNews(3, limit / 4, offset),
-          fetchSentimentNews(7, limit / 4, offset)
+        // Market, Financial: 최근 30일, Sentiment: 30일 창 + offset 페이징
+        const [marketNews, financialNews, sentimentNews] = await Promise.all([
+          fetchMarketNews(startIso, endIso, 100, 1),
+          fetchFinancialNews(startIso, endIso, 100, 1),
+          fetchSentimentNews(30, 50, sentimentOffset)
         ]);
         
-        results = [...marketNews, ...financialNews, ...companyNews, ...sentimentNews];
+        results = [...marketNews, ...financialNews, ...sentimentNews];
       } else {
         // 특정 API만 호출
         switch (selectedApi) {
           case "market":
-            results = await fetchMarketNews(7, limit, offset);
+            results = await fetchMarketNews(startIso, endIso, 100, 1);
             break;
           case "financial":
-            results = await fetchFinancialNews(limit, offset);
-            break;
-          case "company":
-            results = await fetchCompanyNews(3, limit, offset);
+            results = await fetchFinancialNews(startIso, endIso, 100, 1);
             break;
           case "sentiment":
-            results = await fetchSentimentNews(7, limit, offset);
+            results = await fetchSentimentNews(30, 50, sentimentOffset);
             break;
         }
       }
@@ -359,15 +339,15 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
         setAllNews(prev => [...prev, ...results]);
       }
 
-      // 소스 목록 업데이트 (Company 타입은 내부 뉴스의 source 사용)
+      // 소스 목록 업데이트
       const sources = [...new Set(results.map(item => getItemSourceLabel(item)).filter(Boolean))] as string[];
       setAvailableSources(prev => [...new Set([...prev, ...sources])]);
 
       // 통계 업데이트
       updateStats(refresh ? results : [...allNews, ...results]);
 
-      // 더 보기 여부 결정
-      setHasMore(results.length === limit);
+      // 더 보기 여부 결정 (해당 월에 결과가 있으면 더보기 노출)
+      setHasMore(results.length > 0);
 
     } catch (error) {
       console.error('❌ 뉴스 로딩 오류:', error);
@@ -382,9 +362,8 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     const stats = {
       market: newsData.filter(n => n.type === "market").length,
       financial: newsData.filter(n => n.type === "financial").length,
-      company: newsData.filter(n => n.type === "company").length,
       sentiment: newsData.filter(n => n.type === "sentiment").length,
-      total: newsData.length
+      total: newsData.filter(n => n.type !== "company").length
     };
     setApiStats(stats);
   };
@@ -397,7 +376,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     switch (item.type) {
       case "market": return item.published_at;
       case "financial": return item.datetime;
-      case "company": return item.news?.[0]?.published_at || "";
+      case "company": return ""; // company 뉴스는 제외
       case "sentiment": return item.time_published;
       default: return "";
     }
@@ -406,7 +385,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   function getItemSourceLabel(item: NewsItem): string {
     switch (item.type) {
       case "company":
-        return item.news?.[0]?.source || "";
+        return ""; // 제외
       case "market":
       case "financial":
       case "sentiment":
@@ -657,12 +636,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
                   </span>
                 )}
                 
-                {/* 심볼 배지 */}
-                {item.type === "company" && (
-                  <span className="px-2 py-1 rounded text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30">
-                    {item.symbol}
-                  </span>
-                )}
+                 {/* company 타입은 제외 */}
 
                 {/* 감성 이모지 */}
                 {item.type === "sentiment" && item.sentiment_emoji && (
@@ -712,19 +686,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
                   </div>
                 )}
 
-                {/* Company News 추가 정보 */}
-                {item.type === "company" && (
-                  <div className="flex gap-2 text-xs">
-                    {item.price && (
-                      <span className="text-foreground/60">${item.price.toFixed(2)}</span>
-                    )}
-                    {item.change_percentage && (
-                      <span className={item.change_percentage.includes('-') ? 'text-red-400' : 'text-green-400'}>
-                        {item.change_percentage}
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* company 타입은 제외 */}
 
                 {/* 관련 토픽 */}
                 {item.type === "sentiment" && item.topics?.length > 0 && (
@@ -782,10 +744,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
           <div className="text-lg font-bold text-green-400">{apiStats.financial}</div>
           <div className="text-xs text-foreground/60">금융뉴스</div>
         </div>
-        <div className="glass-card p-3 rounded-lg text-center">
-          <div className="text-lg font-bold text-purple-400">{apiStats.company}</div>
-          <div className="text-xs text-foreground/60">기업뉴스</div>
-        </div>
+         {/* company 통계 카드 제거 */}
         <div className="glass-card p-3 rounded-lg text-center">
           <div className="text-lg font-bold text-orange-400">{apiStats.sentiment}</div>
           <div className="text-xs text-foreground/60">감성분석</div>
@@ -831,7 +790,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
                   <option value="all">전체</option>
                   <option value="market">시장뉴스</option>
                   <option value="financial">금융뉴스</option>
-                  <option value="company">기업뉴스</option>
+                   {/* company 타입 제거 */}
                   <option value="sentiment">감성분석</option>
                 </select>
               </div>
@@ -891,7 +850,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
               <div className="flex gap-4 text-xs">
                 <span>시장: {filteredNews.filter(n => n.type === "market").length}</span>
                 <span>금융: {filteredNews.filter(n => n.type === "financial").length}</span>
-                <span>기업: {filteredNews.filter(n => n.type === "company").length}</span>
+                 {/* company 타입 제거 */}
                 <span>감성: {filteredNews.filter(n => n.type === "sentiment").length}</span>
               </div>
             </div>
