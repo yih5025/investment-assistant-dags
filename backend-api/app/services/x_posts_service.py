@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc, and_, or_, text
 from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.models.x_posts_model import XPost
 from app.schemas.x_posts_schema import (
@@ -37,7 +37,7 @@ class XPostsService:
         Returns:
             datetime: 해당 기간의 시작 시점
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         period_map = {
             '1h': now - timedelta(hours=1),
             '6h': now - timedelta(hours=6), 
@@ -284,8 +284,39 @@ class XPostsService:
             
             sort_column = ranking_columns.get(ranking_type, XPost.like_count)
             query = query.order_by(desc(sort_column))
-        
-        return query.limit(request.limit).all()
+
+        results = query.limit(request.limit).all()
+
+        # 가끔 최근 기간(1h/6h/24h)에 데이터가 없을 수 있으므로 보조 기간으로 자동 완화
+        if not results and request.period in {'1h', '6h', '24h'}:
+            fallback_since = datetime.now(timezone.utc) - timedelta(days=7)
+            fallback_query = self.db.query(XPost)
+            if request.category:
+                fallback_query = fallback_query.filter(XPost.account_category == request.category.value)
+            fallback_query = fallback_query.filter(XPost.created_at >= fallback_since)
+            if ranking_type == 'most-engaged':
+                engagement_expr = (
+                    XPost.like_count +
+                    XPost.retweet_count +
+                    XPost.reply_count +
+                    XPost.quote_count +
+                    XPost.bookmark_count
+                )
+                fallback_query = fallback_query.order_by(desc(engagement_expr))
+            else:
+                ranking_columns = {
+                    'most-liked': XPost.like_count,
+                    'most-retweeted': XPost.retweet_count,
+                    'most-replied': XPost.reply_count,
+                    'most-quoted': XPost.quote_count,
+                    'most-bookmarked': XPost.bookmark_count,
+                    'most-viewed': XPost.impression_count,
+                }
+                sort_column = ranking_columns.get(ranking_type, XPost.like_count)
+                fallback_query = fallback_query.order_by(desc(sort_column))
+            results = fallback_query.limit(request.limit).all()
+
+        return results
     
     def search_posts(self, request: XPostSearchRequest) -> Tuple[List[XPost], int]:
         """
@@ -446,7 +477,7 @@ class XPostsService:
             .scalar()
         
         # 오늘의 인기 포스트 (좋아요 기준)
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         top_posts_today = self.db.query(XPost)\
             .filter(XPost.created_at >= today_start)\
             .order_by(desc(XPost.like_count))\
