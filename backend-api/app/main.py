@@ -115,8 +115,8 @@ app.add_middleware(
         "http://127.0.0.1:30333",
         "*"
     ],
-    # Vercel 프리뷰 도메인 전체 허용 (예: https://<branch>--<project>.vercel.app 또는 자동 생성 프리뷰 도메인)
-    allow_origin_regex=r"https:\/\/.*\.vercel\.app$",
+    # Vercel 프리뷰 도메인 전체 + 로컬/내부 IP(http/https) 허용
+    allow_origin_regex=r"^(https?:\/\/.*\.vercel\.app|https?:\/\/(localhost|127\.0\.0\.1)(:\\d+)?|https?:\/\/[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?::\\d+)?)$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

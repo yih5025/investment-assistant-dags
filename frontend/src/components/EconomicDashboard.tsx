@@ -266,7 +266,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       },
       {
         name: "국채수익률",
-        url: `${API_BASE_URL}/treasury-yield?maturity=10year&size=5`
+        url: `${API_BASE_URL}/treasury-yield/?maturity=10year&size=5`
       }
     ];
 

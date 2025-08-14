@@ -92,7 +92,7 @@ export function useEconomicIndicators(options: UseEconomicIndicatorsOptions = {}
     async function fetchAll() {
       try {
     // 1) Treasury: 전체 기간 한 번에(monthly 저장 스키마 가정)
-    const treasuryResPromise = fetch(apiUrl(`/treasury-yield?maturity=10year&start_date=${startYear}-01-01&end_date=${endYear}-12-31&size=1000`));
+    const treasuryResPromise = fetch(apiUrl(`/treasury-yield/?maturity=10year&start_date=${startYear}-01-01&end_date=${endYear}-12-31&size=1000`));
 
     // 2) Fed/CPI: 전체 목록(정렬 파라미터 불필요)
     const fedResPromise = fetch(apiUrl(`/federal-funds-rate`));

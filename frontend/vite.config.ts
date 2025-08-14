@@ -9,11 +9,11 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:30888',
+        target: "https://api.investment-assistant.site",
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:30888',
+        target: "wss://api.investment-assistant.site",
         ws: true,
         changeOrigin: true,
       },
