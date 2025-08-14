@@ -15,7 +15,7 @@ interface EconomicIndicator {
   inflation: number;
 }
 
-// 백엔드 API 응답 타입 정의
+// 백엔드 API 응답 타입 정
 interface APIResponse<T> {
   total_count?: number;
   items: T[];
