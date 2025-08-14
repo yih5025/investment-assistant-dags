@@ -78,11 +78,22 @@ const MarketPage: React.FC = () => {
 
   // 현재 호스트 기반 WebSocket URL 생성
   const buildWsUrl = (path: string) => {
+    // 1) 절대 WS URL 환경변수 우선 (예: wss://api.investment-assistant.site/api/v1/ws)
+    const abs = (import.meta as any)?.env?.VITE_WS_URL;
+    if (abs) return `${abs}${path}`;
+
     if (typeof window === 'undefined') return path;
+
+    // 2) Vercel과 같은 정적 호스팅에서는 동일 출처에 WS 엔드포인트가 없으므로 공개 API 도메인 사용
+    const hostname = window.location.hostname;
+    if (hostname.includes('vercel.app')) {
+      return `wss://api.investment-assistant.site/api/v1/ws${path}`;
+    }
+
+    // 3) 기본: 동일 출처 프록시 경로 사용 (K8s/Nginx 프록시)
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const host = window.location.host;
     const wsBase = (import.meta as any)?.env?.VITE_WS_BASE || '/ws';
-    // path는 '/crypto' 또는 '/stocks/sp500' 형식으로 전달
     return `${protocol}://${host}${wsBase}${path}`;
   };
 
