@@ -69,6 +69,10 @@ interface EconomicIndicatorRow {
 export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboardProps) {
   const [selectedIndicator, setSelectedIndicator] = useState<string>("treasuryRate");
   const [correlationMode, setCorrelationMode] = useState<boolean>(false);
+  const [correlationPair, setCorrelationPair] = useState<{first: string, second: string}>({
+    first: "fedRate",
+    second: "treasuryRate"
+  });
 
   // API 테스트 관련 상태
   const [showAPITest, setShowAPITest] = useState<boolean>(false);
@@ -519,6 +523,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     };
   };
 
+  // 🔧 모든 지표를 로그인 없이 이용 가능하도록 수정
   const indicators = [
     {
       key: "treasuryRate",
@@ -527,6 +532,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       color: "#3b82f6",
       description: "장기 금리 동향을 나타내는 핵심 지표",
       impact: "높아지면 대출금리 상승, 주식보다 채권 매력도 증가"
+      // premium 속성 제거 - 모든 사용자가 이용 가능
     },
     {
       key: "fedRate",
@@ -535,6 +541,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       color: "#10b981",
       description: "미국 연방준비제도의 기준 금리",
       impact: "경기 과열시 올리고, 침체시 낮춰서 경기 조절"
+      // premium 속성 제거
     },
     {
       key: "inflation",
@@ -542,8 +549,8 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       unit: "%",
       color: "#f59e0b",
       description: "물가 상승률을 나타내는 지표",
-      impact: "높아지면 돈의 가치 하락, 연준이 금리 인상 고려",
-      premium: !isLoggedIn
+      impact: "높아지면 돈의 가치 하락, 연준이 금리 인상 고려"
+      // premium 속성 제거 - 이제 로그인 없이도 이용 가능
     },
     {
       key: "cpi",
@@ -551,9 +558,17 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       unit: "pt",
       color: "#8b5cf6",
       description: "소비자가 구매하는 상품과 서비스의 가격 수준",
-      impact: "CPI 상승률이 인플레이션율과 직결됨",
-      premium: !isLoggedIn
+      impact: "CPI 상승률이 인플레이션율과 직결됨"
+      // premium 속성 제거 - 이제 로그인 없이도 이용 가능
     }
+  ];
+
+  // 🔧 상관관계 분석 옵션들 (모든 사용자 이용 가능)
+  const correlationPairs = [
+    { first: "fedRate", second: "treasuryRate", description: "연준 금리와 국채 수익률은 강한 양의 상관관계" },
+    { first: "inflation", second: "fedRate", description: "인플레이션 상승 시 연준이 금리를 올리는 패턴" },
+    { first: "cpi", second: "inflation", description: "CPI 변화율이 인플레이션을 직접 반영" },
+    { first: "treasuryRate", second: "inflation", description: "인플레이션 기대가 장기 금리에 반영됨" }
   ];
 
   const currentIndicator = indicators.find(ind => ind.key === selectedIndicator);
@@ -564,8 +579,27 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
   const change = hasPrev ? currentValue - (previousValue as number) : 0;
   const changePercent = hasPrev && previousValue !== 0 ? ((change / (previousValue as number)) * 100) : 0;
 
+  // 🔧 상관관계 차트 데이터 생성 함수
+  const getCorrelationData = () => {
+    const firstKey = correlationPair.first as keyof EconomicIndicatorRow;
+    const secondKey = correlationPair.second as keyof EconomicIndicatorRow;
+    
+    return economicData.filter(r => 
+      (r as any)[firstKey] != null && (r as any)[secondKey] != null
+    ).map(r => ({
+      period: r.period,
+      year: r.year,
+      [firstKey]: (r as any)[firstKey],
+      [secondKey]: (r as any)[secondKey]
+    }));
+  };
+
   // 차트 데이터
   const chartData = useMemo(() => {
+    if (correlationMode) {
+      return getCorrelationData();
+    }
+    
     return economicData
       .filter((r) => (r as any)[selectedIndicator] != null)
       .map((r) => ({
@@ -576,7 +610,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
         cpi: r.cpi,
         inflation: r.inflation,
       }));
-  }, [economicData, selectedIndicator]);
+  }, [economicData, selectedIndicator, correlationMode, correlationPair]);
 
   const formatTooltipValue = (value: any, name: string) => {
     const indicator = indicators.find(ind => ind.key === name);
@@ -584,10 +618,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
   };
 
   const handleIndicatorClick = (indicator: any) => {
-    if (indicator.premium) {
-      onLoginPrompt();
-      return;
-    }
+    // premium 체크 제거 - 모든 지표 자유 이용
     setSelectedIndicator(indicator.key);
   };
 
@@ -842,22 +873,16 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
           )}
         </p>
         
-        {!isLoggedIn && (
-          <div className="mt-4 p-3 glass rounded-xl border border-primary/30">
-            <div className="flex items-center space-x-2">
-              <Lock className="text-primary" size={16} />
-              <p className="text-sm">
-                <span className="font-medium">로그인하면</span> 모든 경제 지표와 상관관계 분석을 이용할 수 있어요.
-              </p>
-              <button
-                onClick={onLoginPrompt}
-                className="px-3 py-1 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30 transition-colors"
-              >
-                로그인
-              </button>
-            </div>
+        {/* 🔧 로그인 프롬프트 제거 - 모든 기능 무료 이용 */}
+        <div className="mt-4 p-3 glass rounded-xl border border-green-500/30">
+          <div className="flex items-center space-x-2">
+            <CheckCircle className="text-green-400" size={16} />
+            <p className="text-sm">
+              <span className="font-medium text-green-400">모든 기능 이용 가능!</span> 
+              <span className="text-foreground/70 ml-2">경제 지표와 상관관계 분석을 자유롭게 사용하세요.</span>
+            </p>
           </div>
-        )}
+        </div>
       </div>
 
       {/* API 진단 결과 */}
@@ -923,7 +948,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
           <div className="flex items-center justify-center space-x-2">
             <GitCompare size={16} />
             <span className="text-sm font-medium">상관관계</span>
-            {!isLoggedIn && <Lock size={12} className="text-yellow-400" />}
+            {/* 🔧 Lock 아이콘 제거 - 모든 사용자 이용 가능 */}
           </div>
         </button>
       </div>
@@ -945,13 +970,9 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                   onClick={() => handleIndicatorClick(indicator)}
                   className={`glass-card rounded-xl p-4 text-left transition-all relative ${
                     isSelected ? "bg-primary/20 border border-primary/30" : "hover:bg-white/10"
-                  } ${indicator.premium ? "cursor-pointer" : ""}`}
+                  }`}
                 >
-                  {indicator.premium && (
-                    <div className="absolute top-2 right-2">
-                      <Lock size={12} className="text-yellow-400" />
-                    </div>
-                  )}
+                  {/* 🔧 Lock 아이콘 제거 - 모든 지표 자유 이용 */}
                   
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium">{indicator.name}</span>
@@ -962,12 +983,14 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                     </div>
                   </div>
                   <div className="text-lg font-semibold" style={{ color: indicator.color }}>
-                    {indicator.premium ? "••••" : (value != null ? `${value.toFixed(2)}${indicator.unit}` : "--")}
+                    {/* 🔧 premium 체크 제거 - 모든 데이터 표시 */}
+                    {value != null ? `${value.toFixed(2)}${indicator.unit}` : "--"}
                   </div>
                   <div className={`text-xs ${
-                    indicator.premium ? "text-foreground/40" : value != null && prevValue != null ? (indicatorChange >= 0 ? "text-green-400" : "text-red-400") : "text-foreground/40"
+                    value != null && prevValue != null ? (indicatorChange >= 0 ? "text-green-400" : "text-red-400") : "text-foreground/40"
                   }`}>
-                    {indicator.premium ? "로그인 필요" : value != null && prevValue != null ?
+                    {/* 🔧 premium 체크 제거 - 모든 변화량 표시 */}
+                    {value != null && prevValue != null ?
                       `${indicatorChange >= 0 ? "+" : ""}${indicatorChange.toFixed(2)}${indicator.unit}` : "데이터 없음"}
                   </div>
                 </button>
@@ -976,7 +999,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
           </div>
 
           {/* 선택된 지표 상세 정보 */}
-          {currentIndicator && !currentIndicator.premium && (
+          {currentIndicator && (
             <div className="glass-card rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold" style={{ color: currentIndicator.color }}>
@@ -1012,26 +1035,9 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
             </div>
           )}
 
-          {/* 개별 지표 차트 */}
-          <div className={`glass-card rounded-2xl p-6 ${(!currentIndicator || currentIndicator.premium || loading) ? 'relative' : ''}`}>
-            {(!currentIndicator || currentIndicator.premium) && (
-              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-2xl z-10 flex items-center justify-center">
-                <div className="text-center">
-                  <Lock className="mx-auto mb-2 text-primary" size={32} />
-                  <p className="font-medium mb-1">상세 차트 분석</p>
-                  <p className="text-sm text-foreground/70 mb-3">
-                    모든 경제 지표의 추이를 확인하세요
-                  </p>
-                  <button
-                    onClick={onLoginPrompt}
-                    className="px-4 py-2 bg-primary/20 text-primary rounded-xl text-sm hover:bg-primary/30 transition-colors"
-                  >
-                    로그인하고 보기
-                  </button>
-                </div>
-              </div>
-            )}
-            {loading && currentIndicator && !currentIndicator.premium && (
+          {/* 개별 지표 차트 - 🔧 premium 체크 제거 */}
+          <div className={`glass-card rounded-2xl p-6 ${loading ? 'relative' : ''}`}>
+            {loading && (
               <div className="absolute inset-0 bg-black/30 backdrop-blur-sm rounded-2xl z-10 flex items-center justify-center">
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -1071,15 +1077,15 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                     dataKey={selectedIndicator}
                     stroke={currentIndicator?.color || "#3b82f6"}
                     strokeWidth={3}
-                    dot={{ fill: currentIndicator?.color, strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6, fill: currentIndicator?.color }}
+                    dot={false}  // 🔧 포인트 제거
+                    activeDot={{ r: 6, fill: currentIndicator?.color }} // 호버 시에만 포인트 표시
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
             
             {/* 차트 하단 데이터 요약 */}
-            {!loading && chartData.length > 0 && currentIndicator && !currentIndicator.premium && (
+            {!loading && chartData.length > 0 && currentIndicator && (
               <div className="mt-4 grid grid-cols-3 gap-4 text-center">
                 <div className="glass rounded-lg p-3">
                   <div className="text-xs text-foreground/60 mb-1">데이터 포인트</div>
@@ -1109,21 +1115,100 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
         </>
       ) : (
         <>
-          {/* 상관관계 모드는 로그인 필요 */}
+          {/* 🔧 상관관계 모드 - 로그인 제한 제거하고 실제 기능 구현 */}
           <div className="glass-card rounded-2xl p-6">
-            <div className="text-center py-8">
-              <GitCompare className="mx-auto mb-3 text-primary" size={48} />
-              <h3 className="font-semibold mb-2">상관관계 분석</h3>
-              <p className="text-sm text-foreground/70 mb-4">
-                경제 지표들 간의 상관관계를 분석하고<br/>
-                투자 인사이트를 얻어보세요.
-              </p>
-              <button
-                onClick={onLoginPrompt}
-                className="px-4 py-2 bg-primary/20 text-primary rounded-xl font-medium hover:bg-primary/30 transition-colors"
-              >
-                로그인하고 분석하기
-              </button>
+            <h3 className="font-semibold mb-4 flex items-center">
+              <GitCompare className="mr-2" size={20} />
+              📈 경제 지표 상관관계 분석
+            </h3>
+
+            {/* 상관관계 쌍 선택 */}
+            <div className="mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {correlationPairs.map((pair, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCorrelationPair({ first: pair.first, second: pair.second })}
+                    className={`glass rounded-xl p-4 text-left transition-all ${
+                      correlationPair.first === pair.first && correlationPair.second === pair.second
+                        ? "bg-primary/20 border border-primary/30" 
+                        : "hover:bg-white/10"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2 mb-2">
+                      <GitCompare size={16} className="text-primary" />
+                      <span className="font-medium text-sm">
+                        {indicators.find(i => i.key === pair.first)?.name} ↔ {indicators.find(i => i.key === pair.second)?.name}
+                      </span>
+                    </div>
+                    <p className="text-xs text-foreground/70">{pair.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 상관관계 차트 */}
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={getCorrelationData()}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis 
+                    dataKey="period" 
+                    stroke="rgba(255,255,255,0.6)"
+                    fontSize={12}
+                    tickFormatter={(value) => value.replace('-', '.')}
+                  />
+                  <YAxis 
+                    stroke="rgba(255,255,255,0.6)"
+                    fontSize={12}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(0,0,0,0.8)",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      borderRadius: "8px",
+                      color: "white"
+                    }}
+                    labelFormatter={(label) => `기간: ${label.replace('-', '년 ')}월`}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey={correlationPair.first}
+                    stroke={indicators.find(i => i.key === correlationPair.first)?.color || "#3b82f6"}
+                    strokeWidth={3}
+                    dot={false}  // 🔧 포인트 제거
+                    name={indicators.find(i => i.key === correlationPair.first)?.name}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey={correlationPair.second}
+                    stroke={indicators.find(i => i.key === correlationPair.second)?.color || "#10b981"}
+                    strokeWidth={3}
+                    dot={false}  // 🔧 포인트 제거
+                    name={indicators.find(i => i.key === correlationPair.second)?.name}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* 상관관계 분석 정보 */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="glass rounded-xl p-4">
+                <h4 className="font-medium mb-2" style={{ color: indicators.find(i => i.key === correlationPair.first)?.color }}>
+                  {indicators.find(i => i.key === correlationPair.first)?.name}
+                </h4>
+                <div className="text-sm text-foreground/70">
+                  {indicators.find(i => i.key === correlationPair.first)?.description}
+                </div>
+              </div>
+              <div className="glass rounded-xl p-4">
+                <h4 className="font-medium mb-2" style={{ color: indicators.find(i => i.key === correlationPair.second)?.color }}>
+                  {indicators.find(i => i.key === correlationPair.second)?.name}
+                </h4>
+                <div className="text-sm text-foreground/70">
+                  {indicators.find(i => i.key === correlationPair.second)?.description}
+                </div>
+              </div>
             </div>
           </div>
         </>
@@ -1144,12 +1229,8 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
             </p>
           </div>
           
-          <div className={`glass rounded-xl p-4 ${!isLoggedIn ? 'relative' : ''}`}>
-            {!isLoggedIn && (
-              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
-                <Lock className="text-primary" size={20} />
-              </div>
-            )}
+          {/* 🔧 Lock 아이콘 제거 - 모든 정보 공개 */}
+          <div className="glass rounded-xl p-4">
             <h4 className="font-medium mb-2 text-yellow-400">인플레이션 ↔ 금리</h4>
             <p className="text-sm text-foreground/70">
               인플레이션이 높아지면 연준이 금리를 올려서 경기를 식히려 해요. 
@@ -1157,12 +1238,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
             </p>
           </div>
           
-          <div className={`glass rounded-xl p-4 ${!isLoggedIn ? 'relative' : ''}`}>
-            {!isLoggedIn && (
-              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
-                <Lock className="text-primary" size={20} />
-              </div>
-            )}
+          <div className="glass rounded-xl p-4">
             <h4 className="font-medium mb-2 text-green-400">💡 투자 시사점</h4>
             <p className="text-sm text-foreground/70">
               • 금리 상승기: 채권 매력도 증가, 성장주 부담<br/>
@@ -1210,6 +1286,10 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
               <div><strong>로딩 상태:</strong> {loading ? '로딩 중' : '완료'}</div>
               <div><strong>데이터 개수:</strong> {economicData.length}</div>
               <div><strong>선택된 지표:</strong> {selectedIndicator}</div>
+              <div><strong>상관관계 모드:</strong> {correlationMode ? 'ON' : 'OFF'}</div>
+              {correlationMode && (
+                <div><strong>상관관계 쌍:</strong> {correlationPair.first} ↔ {correlationPair.second}</div>
+              )}
               <div><strong>User Agent:</strong> {navigator.userAgent.slice(0, 50)}...</div>
             </div>
           </details>
@@ -1217,4 +1297,4 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       )}
     </div>
   );
-}
+} 
