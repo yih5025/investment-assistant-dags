@@ -393,6 +393,10 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     }
   }
 
+  function safeLower(value: unknown): string {
+    return typeof value === "string" ? value.toLowerCase() : "";
+  }
+
   // =========================================================================
   // 필터링 및 정렬
   // =========================================================================
@@ -404,20 +408,19 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
         const query = searchQuery.toLowerCase();
         switch (item.type) {
           case "market":
-            return item.title.toLowerCase().includes(query) || 
-                   item.description.toLowerCase().includes(query) ||
-                   item.source.toLowerCase().includes(query);
+            return [item.title, item.description, item.source]
+              .some(v => safeLower(v).includes(query));
           case "financial":
-            return item.headline.toLowerCase().includes(query) || 
-                   item.summary.toLowerCase().includes(query) ||
-                   item.source.toLowerCase().includes(query);
+            return [item.headline, item.summary, item.source]
+              .some(v => safeLower(v).includes(query));
           case "company":
-            return item.symbol.toLowerCase().includes(query) ||
-                   item.news.some(n => n.headline.toLowerCase().includes(query));
+            return safeLower(item.symbol).includes(query) ||
+                   (item.news?.some(n =>
+                     [n.headline, n.summary, n.source].some(v => safeLower(v).includes(query))
+                   ) ?? false);
           case "sentiment":
-            return item.title.toLowerCase().includes(query) || 
-                   item.summary.toLowerCase().includes(query) ||
-                   item.source.toLowerCase().includes(query);
+            return [item.title, item.summary, item.source]
+              .some(v => safeLower(v).includes(query));
           default:
             return false;
         }
