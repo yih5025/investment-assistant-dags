@@ -84,8 +84,8 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
   const [error, setError] = useState<string | null>(null);
   const [economicData, setEconomicData] = useState<EconomicIndicatorRow[]>([]);
 
-  // API 기본 URL
-  const API_BASE_URL = 'https://api.investment-assistant.site/api/v1';
+  // API 기본 URL: 프론트 Nginx가 /api/를 백엔드 /api/v1/로 프록시하므로 상대 경로 사용
+  const API_BASE_URL = '/api';
 
   // 숫자 값 추출 함수 (여러 필드명 대응)
   const extractNumber = (item: any, fields: string[]): number | undefined => {
@@ -249,12 +249,8 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     
     const tests: Omit<APITestResult, 'status'>[] = [
       {
-        name: "기본 연결",
-        url: `${API_BASE_URL.replace('/api/v1', '')}/`
-      },
-      {
-        name: "API 정보",
-        url: `${API_BASE_URL}/`
+        name: "프론트 헬스",
+        url: `/health`
       },
       {
         name: "연방기금금리",
