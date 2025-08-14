@@ -9,12 +9,16 @@
       "destination": "https://api.investment-assistant.site/api/v1/:path*"
     },
     {
+      "source": "/ws/:path*",
+      "destination": "https://api.investment-assistant.site/api/v1/ws/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
   "env": {
-    "VITE_API_URL": "https://api.investment-assistant.site",
-    "VITE_WS_URL": "wss://api.investment-assistant.site"
+    "VITE_API_BASE": "/api",
+    "VITE_WS_BASE": "/ws"
   }
 }
