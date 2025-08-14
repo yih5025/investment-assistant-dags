@@ -1,3 +1,4 @@
+// NewsList.tsx
 import { useState } from "react";
 import { Newspaper, ExternalLink, TrendingUp, TrendingDown, Clock, Target, ArrowRight } from "lucide-react";
 import { Badge } from "./ui/badge";
