@@ -35,7 +35,11 @@ router = APIRouter(
 # 기본 뉴스 조회 API
 # =============================================================================
 
-@router.get("/", response_model=MarketSentimentListResponse)
+@router.get(
+    "/",
+    response_model=MarketSentimentListResponse,
+    summary="뉴스 감성 리스트 (Alpha Vantage 25/일 수집)"
+)
 async def get_market_sentiment_news(
     db: Session = Depends(get_db),
     days: int = Query(7, ge=1, le=30, description="최근 N일 데이터 (1-30일)"),
@@ -48,22 +52,12 @@ async def get_market_sentiment_news(
     order: str = Query("desc", pattern="^(asc|desc)$", description="정렬 순서")
 ):
     """
-    시장 뉴스 감성 분석 데이터를 조회합니다.
+    Alpha Vantage NEWS_SENTIMENT에서 수집해 DB(`market_news_sentiment`)에 저장된 감성 뉴스를 조회합니다.
     
-    전체 뉴스 목록을 감성 점수와 함께 제공하며, 다양한 필터링 옵션을 지원합니다.
-    
-    Args:
-        days: 최근 N일 데이터 조회 (기본 7일)
-        limit: 최대 결과 개수 (기본 20개)
-        offset: 페이징 오프셋
-        min_sentiment: 최소 감성 점수 (-1.0 ~ 1.0)
-        max_sentiment: 최대 감성 점수 (-1.0 ~ 1.0)
-        sentiment_labels: 감성 라벨 필터 (예: "Bullish,Bearish")
-        sort_by: 정렬 기준 (time_published, sentiment_score)
-        order: 정렬 순서 (asc, desc)
-        
-    Returns:
-        MarketSentimentListResponse: 뉴스 목록 + 배치 정보
+    - 데이터 수집: Airflow DAG `ingest_market_news_sentiment`
+      - 일일 호출 제한: 25회 (요일별 전문화 쿼리 세트)
+      - 저장 필드: overall_sentiment_score/label, ticker_sentiment, topics, batch_id, query_type, query_params, time_published 등
+    - 필터: 기간(days), 감성 점수/라벨, 정렬/페이지네이션
     """
     service = MarketNewsSentimentService(db)
     
@@ -92,13 +86,10 @@ async def get_market_sentiment_news(
 # Ticker 관련 API
 # =============================================================================
 
-@router.get("/tickers", response_model=TickerListResponse)
+@router.get("/tickers", response_model=TickerListResponse, summary="언급된 티커 목록")
 async def get_all_tickers(db: Session = Depends(get_db)):
     """
-    언급된 모든 티커 목록을 조회합니다.
-    
-    Returns:
-        TickerListResponse: 티커 목록과 상세 정보
+    수집 데이터에서 언급된 모든 티커와 간단 통계를 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -122,7 +113,7 @@ async def get_all_tickers(db: Session = Depends(get_db)):
     )
 
 
-@router.get("/ticker/{symbol}", response_model=TickerNewsResponse)
+@router.get("/ticker/{symbol}", response_model=TickerNewsResponse, summary="티커별 감성 뉴스")
 async def get_ticker_news(
     symbol: str = Path(..., description="주식 심볼", example="AAPL"),
     db: Session = Depends(get_db),
@@ -131,16 +122,7 @@ async def get_ticker_news(
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    특정 티커의 뉴스를 조회합니다.
-    
-    Args:
-        symbol: 주식 심볼 (예: "AAPL", "TSLA")
-        days: 최근 N일 데이터
-        limit: 최대 결과 개수
-        offset: 페이징 오프셋
-        
-    Returns:
-        TickerNewsResponse: 티커별 뉴스 + 감성 요약
+    특정 티커의 뉴스와 감성 요약을 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -162,7 +144,7 @@ async def get_ticker_news(
     )
 
 
-@router.get("/tickers/ranking", response_model=TickerRankingResponse)
+@router.get("/tickers/ranking", response_model=TickerRankingResponse, summary="티커 감성 랭킹")
 async def get_ticker_ranking(
     db: Session = Depends(get_db),
     days: int = Query(7, ge=1, le=30, description="랭킹 계산 기간"),
@@ -171,18 +153,7 @@ async def get_ticker_ranking(
     min_mentions: int = Query(2, ge=1, description="최소 언급 횟수")
 ):
     """
-    티커별 감성 랭킹을 조회합니다.
-    
-    가장 "핫한" 티커(긍정적 감성)와 "차가운" 티커(부정적 감성)를 제공합니다.
-    
-    Args:
-        days: 랭킹 계산 기간 (기본 7일)
-        top_count: 상위 티커 개수 (기본 10개)
-        bottom_count: 하위 티커 개수 (기본 10개)
-        min_mentions: 최소 언급 횟수 (기본 2회)
-        
-    Returns:
-        TickerRankingResponse: 티커별 감성 랭킹
+    최근 N일 기준 "긍정 상위/부정 하위" 티커 랭킹을 제공합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -201,7 +172,11 @@ async def get_ticker_ranking(
 # 크로스 분석 API
 # =============================================================================
 
-@router.get("/topic/{topic}/tickers", response_model=CrossAnalysisResponse)
+@router.get(
+    "/topic/{topic}/tickers",
+    response_model=CrossAnalysisResponse,
+    summary="주제→티커 크로스 분석"
+)
 async def get_topic_related_tickers(
     topic: str = Path(..., description="주제명", example="Technology"),
     db: Session = Depends(get_db),
@@ -209,15 +184,7 @@ async def get_topic_related_tickers(
     limit: int = Query(10, ge=1, le=50, description="관련 티커 개수")
 ):
     """
-    특정 주제와 관련된 티커들을 조회합니다.
-    
-    Args:
-        topic: 주제명
-        days: 분석 기간
-        limit: 관련 티커 개수
-        
-    Returns:
-        CrossAnalysisResponse: 주제↔티커 크로스 분석 결과
+    특정 주제와 함께 자주 언급된 티커와 감성 요약을 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -238,7 +205,11 @@ async def get_topic_related_tickers(
     )
 
 
-@router.get("/ticker/{symbol}/topics", response_model=CrossAnalysisResponse)
+@router.get(
+    "/ticker/{symbol}/topics",
+    response_model=CrossAnalysisResponse,
+    summary="티커→주제 크로스 분석"
+)
 async def get_ticker_related_topics(
     symbol: str = Path(..., description="주식 심볼", example="AAPL"),
     db: Session = Depends(get_db),
@@ -246,15 +217,7 @@ async def get_ticker_related_topics(
     limit: int = Query(10, ge=1, le=50, description="관련 주제 개수")
 ):
     """
-    특정 티커와 관련된 주제들을 조회합니다.
-    
-    Args:
-        symbol: 주식 심볼
-        days: 분석 기간
-        limit: 관련 주제 개수
-        
-    Returns:
-        CrossAnalysisResponse: 티커↔주제 크로스 분석 결과
+    특정 티커와 함께 언급된 주제와 감성 요약을 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -281,13 +244,13 @@ async def get_ticker_related_topics(
 # 정보 및 헬프 API
 # =============================================================================
 
-@router.get("/info", response_model=dict)
+@router.get("/info", response_model=dict, summary="API/데이터셋 정보")
 async def get_api_info(db: Session = Depends(get_db)):
     """
-    Market Sentiment API 정보를 제공합니다.
+    수집 주기, 배치 정보, 사용 가능 리소스 등을 제공합니다.
     
-    Returns:
-        dict: API 정보 및 사용 가능한 엔드포인트
+    - 수집 소스: Alpha Vantage NEWS_SENTIMENT (25회/일)
+    - 요일별 전문 쿼리 세트 사용, `batch_id`로 배치 구분
     """
     service = MarketNewsSentimentService(db)
     
@@ -342,19 +305,13 @@ async def get_api_info(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/stats", response_model=dict)
+@router.get("/stats", response_model=dict, summary="감성 통계 요약")
 async def get_sentiment_stats(
     db: Session = Depends(get_db),
     days: int = Query(7, ge=1, le=30, description="통계 계산 기간")
 ):
     """
-    감성 분석 통계를 제공합니다.
-    
-    Args:
-        days: 통계 계산 기간
-        
-    Returns:
-        dict: 감성 분석 통계 정보
+    최근 N일 동안의 감성 분포, 평균 점수, 시장 무드 등을 요약합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -414,17 +371,18 @@ async def get_sentiment_stats(
     )
 
 
-@router.get("/latest", response_model=MarketSentimentListResponse)
+@router.get(
+    "/latest",
+    response_model=MarketSentimentListResponse,
+    summary="최근 24시간 감성 뉴스"
+)
 async def get_latest_news(
     db: Session = Depends(get_db),
     limit: int = Query(20, ge=1, le=100, description="결과 개수 제한"),
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    최신 뉴스만 조회합니다 (최근 24시간).
-    
-    Returns:
-        MarketSentimentListResponse: 최신 뉴스 목록
+    최근 24시간 내 수집된 감성 뉴스를 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -441,7 +399,11 @@ async def get_latest_news(
     )
 
 
-@router.get("/batch/{batch_id}", response_model=MarketSentimentListResponse)
+@router.get(
+    "/batch/{batch_id}",
+    response_model=MarketSentimentListResponse,
+    summary="배치별 감성 뉴스"
+)
 async def get_batch_news(
     batch_id: int = Path(..., description="배치 ID", example=2),
     db: Session = Depends(get_db),
@@ -449,15 +411,7 @@ async def get_batch_news(
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    특정 배치 ID의 뉴스를 조회합니다.
-    
-    Args:
-        batch_id: 조회할 배치 ID
-        limit: 최대 결과 개수
-        offset: 페이징 오프셋
-        
-    Returns:
-        MarketSentimentListResponse: 해당 배치의 뉴스 목록
+    특정 `batch_id`로 저장된 감성 뉴스 묶음을 조회합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -481,7 +435,11 @@ async def get_batch_news(
 # 감성 필터 API
 # =============================================================================
 
-@router.get("/bullish", response_model=MarketSentimentListResponse)
+@router.get(
+    "/bullish",
+    response_model=MarketSentimentListResponse,
+    summary="긍정(Bullish) 뉴스"
+)
 async def get_bullish_news(
     db: Session = Depends(get_db),
     days: int = Query(7, ge=1, le=30, description="최근 N일 데이터"),
@@ -489,10 +447,7 @@ async def get_bullish_news(
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    긍정적인 뉴스만 조회합니다 (감성 점수 > 0.1).
-    
-    Returns:
-        MarketSentimentListResponse: 긍정적인 뉴스 목록
+    감성 점수 기준으로 긍정적 뉴스만 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -506,7 +461,11 @@ async def get_bullish_news(
     )
 
 
-@router.get("/bearish", response_model=MarketSentimentListResponse)
+@router.get(
+    "/bearish",
+    response_model=MarketSentimentListResponse,
+    summary="부정(Bearish) 뉴스"
+)
 async def get_bearish_news(
     db: Session = Depends(get_db),
     days: int = Query(7, ge=1, le=30, description="최근 N일 데이터"),
@@ -514,10 +473,7 @@ async def get_bearish_news(
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    부정적인 뉴스만 조회합니다 (감성 점수 < -0.1).
-    
-    Returns:
-        MarketSentimentListResponse: 부정적인 뉴스 목록
+    감성 점수 기준으로 부정적 뉴스만 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -531,7 +487,11 @@ async def get_bearish_news(
     )
 
 
-@router.get("/neutral", response_model=MarketSentimentListResponse)
+@router.get(
+    "/neutral",
+    response_model=MarketSentimentListResponse,
+    summary="중립(Neutral) 뉴스"
+)
 async def get_neutral_news(
     db: Session = Depends(get_db),
     days: int = Query(7, ge=1, le=30, description="최근 N일 데이터"),
@@ -539,10 +499,7 @@ async def get_neutral_news(
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    중립적인 뉴스만 조회합니다 (감성 점수 -0.1 ~ 0.1).
-    
-    Returns:
-        MarketSentimentListResponse: 중립적인 뉴스 목록
+    감성 점수 기준으로 중립적 뉴스만 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -559,13 +516,10 @@ async def get_neutral_news(
 # Topic 관련 API
 # =============================================================================
 
-@router.get("/topics", response_model=TopicListResponse)
+@router.get("/topics", response_model=TopicListResponse, summary="주제 목록")
 async def get_all_topics(db: Session = Depends(get_db)):
     """
-    사용 가능한 모든 주제 목록을 조회합니다.
-    
-    Returns:
-        TopicListResponse: 주제 목록과 상세 정보
+    수집 데이터에서 발견된 주제 목록과 간단 통계를 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -589,7 +543,11 @@ async def get_all_topics(db: Session = Depends(get_db)):
     )
 
 
-@router.get("/topic/{topic}", response_model=TopicNewsResponse)
+@router.get(
+    "/topic/{topic}",
+    response_model=TopicNewsResponse,
+    summary="주제별 감성 뉴스"
+)
 async def get_topic_news(
     topic: str = Path(..., description="주제명", example="Technology"),
     db: Session = Depends(get_db),
@@ -598,16 +556,7 @@ async def get_topic_news(
     offset: int = Query(0, ge=0, description="페이징 오프셋")
 ):
     """
-    특정 주제의 뉴스를 조회합니다.
-    
-    Args:
-        topic: 주제명 (예: "Technology", "Energy & Transportation")
-        days: 최근 N일 데이터
-        limit: 최대 결과 개수
-        offset: 페이징 오프셋
-        
-    Returns:
-        TopicNewsResponse: 주제별 뉴스 + 감성 요약
+    특정 주제의 뉴스와 감성 요약을 반환합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -626,7 +575,11 @@ async def get_topic_news(
     )
 
 
-@router.get("/topics/ranking", response_model=TopicRankingResponse)
+@router.get(
+    "/topics/ranking",
+    response_model=TopicRankingResponse,
+    summary="주제 감성 랭킹"
+)
 async def get_topic_ranking(
     db: Session = Depends(get_db),
     days: int = Query(7, ge=1, le=30, description="랭킹 계산 기간"),
@@ -635,18 +588,7 @@ async def get_topic_ranking(
     min_mentions: int = Query(2, ge=1, description="최소 언급 횟수")
 ):
     """
-    주제별 감성 랭킹을 조회합니다.
-    
-    가장 "핫한" 주제(긍정적 감성)와 "차가운" 주제(부정적 감성)를 제공합니다.
-    
-    Args:
-        days: 랭킹 계산 기간 (기본 7일)
-        top_count: 상위 주제 개수 (기본 10개)
-        bottom_count: 하위 주제 개수 (기본 10개)
-        min_mentions: 최소 언급 횟수 (기본 2회)
-        
-    Returns:
-        TopicRankingResponse: 주제별 감성 랭킹
+    최근 N일 기준 "긍정 상위/부정 하위" 주제 랭킹을 제공합니다.
     """
     service = MarketNewsSentimentService(db)
     
@@ -665,7 +607,11 @@ async def get_topic_ranking(
 # 감정 점수 추이 API (프론트엔드 차트용)
 # =============================================================================
 
-@router.get("/sentiment-trends", response_model=SentimentTrendsResponse)
+@router.get(
+    "/sentiment-trends",
+    response_model=SentimentTrendsResponse,
+    summary="감성 점수 추이 (차트용)"
+)
 async def get_sentiment_trends(
     db: Session = Depends(get_db),
     interval: str = Query("daily", pattern="^(hourly|daily)$", description="시간 간격 (hourly/daily)"),
@@ -674,23 +620,9 @@ async def get_sentiment_trends(
     topics: Optional[str] = Query(None, description="분석할 주제들 (쉼표 구분, 예: Technology,Energy)")
 ):
     """
-    프론트엔드 차트용 감정 점수 추이 데이터를 제공합니다.
+    시간 간격(시간/일)별 원시 감성 점수 추이 데이터를 반환합니다.
     
-    원시 감정 점수 수치를 시간대별로 제공하여 차트나 그래프를 그릴 수 있습니다.
-    
-    Args:
-        interval: 시간 간격 ('hourly' 또는 'daily')
-        days: 분석 기간 (1-30일)
-        tickers: 특정 티커들의 추이 분석 (선택사항)
-        topics: 특정 주제들의 추이 분석 (선택사항)
-        
-    Returns:
-        SentimentTrendsResponse: 시간대별 감정 점수 추이 (원시 수치)
-        
-    Example:
-        - GET /sentiment-trends?interval=daily&days=7
-        - GET /sentiment-trends?interval=hourly&days=3&tickers=AAPL,TSLA
-        - GET /sentiment-trends?days=14&topics=Technology,Energy
+    - 필터: tickers, topics (쉼표 구분)
     """
     service = MarketNewsSentimentService(db)
     

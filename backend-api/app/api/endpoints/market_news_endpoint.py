@@ -22,7 +22,11 @@ router = APIRouter(
 )
 
 
-@router.get("/", response_model=MarketNewsListResponse, summary="시장 뉴스 목록 조회")
+@router.get(
+    "/",
+    response_model=MarketNewsListResponse,
+    summary="시장 뉴스 목록 (NewsAPI 수집 데이터)"
+)
 async def get_market_news_list(
     page: int = Query(1, ge=1, description="페이지 번호 (1부터 시작)"),
     limit: int = Query(20, ge=1, le=100, description="페이지당 항목 수 (최대 100)"),
@@ -33,26 +37,26 @@ async def get_market_news_list(
     db: Session = Depends(get_db)
 ):
     """
-    **시장 뉴스 목록을 페이징하여 조회합니다.**
+    NewsAPI에서 수집해 DB(`market_news`)에 저장된 시장 뉴스를 페이징하여 조회합니다.
     
-    ### 주요 기능:
-    - **페이징**: page, limit 파라미터로 페이지 단위 조회
-    - **날짜 필터링**: start_date, end_date로 특정 기간 뉴스만 조회
-    - **소스 필터링**: 특정 뉴스 소스만 포함하거나 제외
-    - **최신순 정렬**: published_at 기준 내림차순
+    - 데이터 수집: Airflow DAG `ingest_market_newsapi_to_db_k8s`
+      - Top-Headlines: category=business, technology, general, politics
+      - Everything: economy, business, technology, IPO, inflation, tariff, trade war, sanctions, war, politics, election, government policy, congress, diplomatic, nuclear, military 키워드
+      - 주요 소스: Bloomberg, Reuters, CNBC, WSJ, Business Insider, Financial Times
+      - 스케줄: 매일 04:00 (UTC 기준 시스템 설정에 따름)
     
-    ### 사용 예시:
-    ```
-    GET /api/v1/market-news/?page=1&limit=10
-    GET /api/v1/market-news/?start_date=2025-07-01&end_date=2025-07-31
-    GET /api/v1/market-news/?sources=BBC News,Reuters
-    ```
+    - 주요 기능:
+      - 페이징: page, limit
+      - 날짜 필터링: start_date, end_date (ISO)
+      - 소스 필터링: 포함(sources)/제외(exclude_sources)
+      - 최신순 정렬: published_at desc
     
-    ### 응답 구조:
-    - **total**: 전체 뉴스 개수
-    - **items**: 뉴스 목록 (content 제외한 요약 정보)
-    - **page, limit**: 페이징 정보
-    - **has_next**: 다음 페이지 존재 여부
+    - 사용 예시:
+      - GET /api/v1/market-news/?page=1&limit=10
+      - GET /api/v1/market-news/?start_date=2025-07-01&end_date=2025-07-31
+      - GET /api/v1/market-news/?sources=Reuters,CNBC
+    
+    - 응답: total, items(요약), page, limit, has_next
     """
     try:
         # 페이지 번호를 offset으로 변환 (page 1 = skip 0)
@@ -80,25 +84,24 @@ async def get_market_news_list(
         )
 
 
-@router.get("/recent", response_model=List[MarketNewsResponse], summary="최근 뉴스 조회")
+@router.get(
+    "/recent",
+    response_model=List[MarketNewsResponse],
+    summary="최근 시장 뉴스 조회 (24–168시간)"
+)
 async def get_recent_market_news(
     hours: int = Query(24, ge=1, le=168, description="몇 시간 이내 뉴스 (최대 7일)"),
     limit: int = Query(10, ge=1, le=50, description="최대 개수 (최대 50)"),
     db: Session = Depends(get_db)
 ):
     """
-    **최근 발행된 시장 뉴스를 조회합니다.**
+    최근 N시간 내 수집된 시장 뉴스를 최신순으로 반환합니다.
     
-    ### 특징:
-    - 설정한 시간 이내에 발행된 뉴스만 조회
-    - 최신순으로 정렬
-    - 전체 정보 포함 (content 포함)
-    
-    ### 사용 예시:
-    ```
-    GET /api/v1/market-news/recent?hours=6&limit=5  # 6시간 이내 최신 5개
-    GET /api/v1/market-news/recent                  # 24시간 이내 최신 10개 (기본값)
-    ```
+    - 데이터 출처: NewsAPI (Airflow 일일 수집 결과)
+    - 포함 정보: 본문 `content` 포함
+    - 예시:
+      - GET /api/v1/market-news/recent?hours=6&limit=5
+      - GET /api/v1/market-news/recent
     """
     try:
         service = MarketNewsService(db)
@@ -113,7 +116,11 @@ async def get_recent_market_news(
         )
 
 
-@router.get("/search", response_model=MarketNewsSearchResponse, summary="뉴스 검색")
+@router.get(
+    "/search",
+    response_model=MarketNewsSearchResponse,
+    summary="시장 뉴스 전문 검색 (제목/설명/본문)"
+)
 async def search_market_news(
     q: str = Query(..., min_length=2, description="검색어 (최소 2글자)"),
     page: int = Query(1, ge=1, description="페이지 번호"),
@@ -123,24 +130,14 @@ async def search_market_news(
     db: Session = Depends(get_db)
 ):
     """
-    **뉴스 전문 검색을 수행합니다.**
+    PostgreSQL Full-Text Search로 NewsAPI 수집 기사(제목/설명/본문)를 검색합니다.
     
-    ### 검색 대상:
-    - **제목 (title)**: 주요 검색 대상
-    - **설명 (description)**: 뉴스 요약문
-    - **본문 (content)**: 전체 기사 내용
-    
-    ### 검색 엔진:
-    - PostgreSQL Full-Text Search 사용
-    - 영어 텍스트 처리 최적화
-    - 관련도 순으로 정렬
-    
-    ### 사용 예시:
-    ```
-    GET /api/v1/market-news/search?q=Trump
-    GET /api/v1/market-news/search?q=economy&start_date=2025-07-01
-    GET /api/v1/market-news/search?q="stock market"  # 구문 검색
-    ```
+    - 정렬: 관련도 우선
+    - 날짜 범위 필터 지원
+    - 예시:
+      - GET /api/v1/market-news/search?q=Trump
+      - GET /api/v1/market-news/search?q=economy&start_date=2025-07-01
+      - GET /api/v1/market-news/search?q="stock market"
     """
     try:
         skip = (page - 1) * limit
@@ -163,24 +160,22 @@ async def search_market_news(
         )
 
 
-@router.get("/detail", response_model=MarketNewsResponse, summary="뉴스 상세 조회")
+@router.get(
+    "/detail",
+    response_model=MarketNewsResponse,
+    summary="시장 뉴스 상세 조회 (source+url)"
+)
 async def get_market_news_detail(
     source: str = Query(..., description="뉴스 소스"),
     url: str = Query(..., description="뉴스 URL"),
     db: Session = Depends(get_db)
 ):
     """
-    **특정 뉴스의 상세 정보를 조회합니다.**
+    수집된 기사 중 한 건의 상세 정보를 반환합니다.
     
-    ### 특징:
-    - source + url 복합키로 고유 뉴스 식별
-    - 전체 본문 내용 포함
-    - short_description, content_preview 등 편의 정보 제공
-    
-    ### 사용 예시:
-    ```
-    GET /api/v1/market-news/detail?source=BBC News&url=https://www.bbc.com/news/articles/c23g5xpggzmo
-    ```
+    - 식별키: source + url
+    - 포함: 전체 본문(content), 요약, 미리보기 등
+    - 예시: GET /api/v1/market-news/detail?source=Reuters&url=https://www.reuters.com/...
     """
     try:
         service = MarketNewsService(db)
@@ -203,32 +198,15 @@ async def get_market_news_detail(
         )
 
 
-@router.get("/sources", summary="뉴스 소스별 통계")
+@router.get("/sources", summary="뉴스 소스별 집계 (개수 기준)")
 async def get_news_sources_stats(
     db: Session = Depends(get_db)
 ):
     """
-    **뉴스 소스별 통계 정보를 조회합니다.**
+    수집된 기사에서 소스별 건수를 집계합니다.
     
-    ### 응답 정보:
-    - 각 소스별 뉴스 개수
-    - 뉴스 개수 기준 내림차순 정렬
-    
-    ### 사용 용도:
-    - 어떤 소스가 많은 뉴스를 제공하는지 파악
-    - 소스 필터링 UI 구성 시 참고 데이터
-    - 데이터 품질 모니터링
-    
-    ### 응답 예시:
-    ```json
-    {
-        "sources": [
-            {"source": "BBC News", "count": 1250},
-            {"source": "Reuters", "count": 980},
-            {"source": "CNN", "count": 750}
-        ]
-    }
-    ```
+    - 용도: 소스 필터 UI, 수집 품질 모니터링
+    - 정렬: 개수 내림차순
     """
     try:
         service = MarketNewsService(db)
@@ -248,36 +226,15 @@ async def get_news_sources_stats(
         )
 
 
-@router.get("/daily-stats", summary="일별 뉴스 발행 통계")
+@router.get("/daily-stats", summary="일별 뉴스 발행량 (최근 N일)")
 async def get_daily_news_stats(
     days: int = Query(30, ge=1, le=365, description="조회할 일수 (최대 1년)"),
     db: Session = Depends(get_db)
 ):
     """
-    **일별 뉴스 발행 통계를 조회합니다.**
+    최근 N일 동안의 일별 기사 건수를 반환합니다.
     
-    ### 특징:
-    - 지정한 일수만큼 과거 데이터 조회
-    - 날짜별 뉴스 발행 개수 집계
-    - 최근 날짜부터 내림차순 정렬
-    
-    ### 사용 용도:
-    - 뉴스 발행 트렌드 분석
-    - 차트 및 대시보드 데이터
-    - 데이터 수집 상태 모니터링
-    
-    ### 응답 예시:
-    ```json
-    {
-        "daily_stats": [
-            {"date": "2025-07-20", "count": 45},
-            {"date": "2025-07-19", "count": 38},
-            {"date": "2025-07-18", "count": 52}
-        ],
-        "period_days": 30,
-        "total_news": 1234
-    }
-    ```
+    - 용도: 발행 트렌드 차트, 수집 상태 모니터링
     """
     try:
         service = MarketNewsService(db)
@@ -302,27 +259,12 @@ async def get_daily_news_stats(
         )
 
 
-@router.get("/health", summary="Market News API 상태 확인")
+@router.get("/health", summary="Market News API 상태")
 async def health_check(db: Session = Depends(get_db)):
     """
-    **Market News API의 상태를 확인합니다.**
+    NewsAPI 기반 수집 데이터의 기본 상태 정보를 반환합니다.
     
-    ### 확인 항목:
-    - 데이터베이스 연결 상태
-    - 최근 뉴스 데이터 존재 여부
-    - 전체 뉴스 개수
-    
-    ### 응답 예시:
-    ```json
-    {
-        "status": "healthy",
-        "database": "connected",
-        "total_news": 15432,
-        "latest_news_date": "2025-07-20T14:30:15",
-        "api_version": "1.0.0",
-        "timestamp": "2025-07-20T15:45:30"
-    }
-    ```
+    - 항목: DB 연결, 전체 개수, 최신 수집 시각 등
     """
     try:
         service = MarketNewsService(db)
