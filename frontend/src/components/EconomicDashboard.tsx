@@ -299,7 +299,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
         const period = formatPeriod(item.date);
         const year = parseInt(period.split('-')[0]);
         
-        const yieldValue = extractNumber(item, ['yield', 'yield_value', 'rate', 'value']);
+        const yieldValue = extractNumber(item, ['yield', 'yield_value', 'yield_rate', 'rate', 'value']);
         
         if (yieldValue !== undefined) {
           if (!monthlyData.has(period)) {
