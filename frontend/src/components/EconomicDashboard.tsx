@@ -84,8 +84,8 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
   const [error, setError] = useState<string | null>(null);
   const [economicData, setEconomicData] = useState<EconomicIndicatorRow[]>([]);
 
-  // API 기본 URL: 프론트 Nginx가 /api/를 백엔드 /api/v1/로 프록시하므로 상대 경로 사용
-  const API_BASE_URL = '/api';
+  // API 기본 URL: 환경변수 우선, 없으면 K8s 프론트 Nginx 프록시(/api) 사용
+  const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE || '/api';
 
   // 숫자 값 추출 함수 (여러 필드명 대응)
   const extractNumber = (item: any, fields: string[]): number | undefined => {
@@ -288,11 +288,11 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
         
         const responseTime = Date.now() - startTime;
         let data;
-        
+        const cloned = response.clone();
         try {
           data = await response.json();
         } catch (parseError) {
-          data = await response.text();
+          data = await cloned.text();
         }
         
         results[i] = {
