@@ -127,7 +127,6 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   const [selectedCategory, setSelectedCategory] = useState<"all" | "crypto" | "forex" | "merger" | "general">("all");
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"recent" | "sentiment" | "relevance">("recent");
-  const [showFilters, setShowFilters] = useState(false);
   
   // 페이징
   const [currentPage, setCurrentPage] = useState(1);
@@ -458,6 +457,34 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
       }
     });
 
+    // 뉴스 타입 섞기 (전체 보기 + 최신순일 때 적용)
+    if (selectedApi === "all" && sortBy === "recent") {
+      const byType: Record<string, NewsItem[]> = {
+        market: [], financial: [], sentiment: []
+      };
+      for (const item of filtered) {
+        if (item.type in byType) byType[item.type].push(item);
+      }
+      // 각 타입은 이미 최신순으로 정렬되어 있음
+      const order: Array<keyof typeof byType> = ["market", "financial", "sentiment"];
+      const indices: Record<string, number> = { market: 0, financial: 0, sentiment: 0 };
+      const totalLen = filtered.length;
+      const interleaved: NewsItem[] = [];
+      let cursor = 0;
+      while (interleaved.length < totalLen && cursor < totalLen * 3) {
+        for (const key of order) {
+          const arr = byType[key];
+          const idx = indices[key];
+          if (arr && idx < arr.length) {
+            interleaved.push(arr[idx]);
+            indices[key] = idx + 1;
+          }
+        }
+        cursor++;
+      }
+      return interleaved;
+    }
+
     return filtered;
   }, [allNews, searchQuery, selectedApi, selectedCategory, selectedSource, sortBy]);
 
@@ -733,28 +760,39 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
         </button>
       </div>
 
-      {/* API 통계 */}
-      <div className="grid grid-cols-5 gap-3">
-        <div className="glass-card p-3 rounded-lg text-center">
+      {/* API 통계 (버튼화) */}
+      <div className="grid grid-cols-4 gap-3">
+        <button
+          onClick={() => setSelectedApi("all")}
+          className={`glass-card p-3 rounded-lg text-center transition-all ${selectedApi === 'all' ? 'ring-2 ring-primary/50 bg-primary/10' : 'hover:glass'}`}
+        >
           <div className="text-lg font-bold text-primary">{apiStats.total}</div>
           <div className="text-xs text-foreground/60">전체</div>
-        </div>
-        <div className="glass-card p-3 rounded-lg text-center">
+        </button>
+        <button
+          onClick={() => setSelectedApi("market")}
+          className={`glass-card p-3 rounded-lg text-center transition-all ${selectedApi === 'market' ? 'ring-2 ring-blue-400/50 bg-blue-500/10' : 'hover:glass'}`}
+        >
           <div className="text-lg font-bold text-blue-400">{apiStats.market}</div>
           <div className="text-xs text-foreground/60">시장뉴스</div>
-        </div>
-        <div className="glass-card p-3 rounded-lg text-center">
+        </button>
+        <button
+          onClick={() => setSelectedApi("financial")}
+          className={`glass-card p-3 rounded-lg text-center transition-all ${selectedApi === 'financial' ? 'ring-2 ring-green-400/50 bg-green-500/10' : 'hover:glass'}`}
+        >
           <div className="text-lg font-bold text-green-400">{apiStats.financial}</div>
           <div className="text-xs text-foreground/60">금융뉴스</div>
-        </div>
-         {/* company 통계 카드 제거 */}
-        <div className="glass-card p-3 rounded-lg text-center">
+        </button>
+        <button
+          onClick={() => setSelectedApi("sentiment")}
+          className={`glass-card p-3 rounded-lg text-center transition-all ${selectedApi === 'sentiment' ? 'ring-2 ring-orange-400/50 bg-orange-500/10' : 'hover:glass'}`}
+        >
           <div className="text-lg font-bold text-orange-400">{apiStats.sentiment}</div>
           <div className="text-xs text-foreground/60">감성분석</div>
-        </div>
+        </button>
       </div>
 
-      {/* 검색 및 필터 */}
+      {/* 검색 */}
       <div className="space-y-3">
         {/* 검색바 */}
         <div className="relative">
@@ -768,97 +806,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
           />
         </div>
 
-        {/* 필터 토글 */}
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center space-x-2 px-3 py-2 glass-card rounded-lg hover:glass transition-all"
-        >
-          <Filter size={16} />
-          <span className="text-sm">필터</span>
-          {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-
-        {/* 필터 패널 */}
-        {showFilters && (
-          <div className="glass-card p-4 rounded-lg space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              {/* API 선택 */}
-              <div>
-                <label className="block text-xs font-medium mb-1">API 타입</label>
-                <select
-                  value={selectedApi}
-                  onChange={(e) => setSelectedApi(e.target.value as typeof selectedApi)}
-                  className="w-full px-3 py-2 rounded-lg glass-card text-sm bg-transparent border-white/20"
-                >
-                  <option value="all">전체</option>
-                  <option value="market">시장뉴스</option>
-                  <option value="financial">금융뉴스</option>
-                   {/* company 타입 제거 */}
-                  <option value="sentiment">감성분석</option>
-                </select>
-              </div>
-
-              {/* 카테고리 선택 */}
-              <div>
-                <label className="block text-xs font-medium mb-1">카테고리</label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value as typeof selectedCategory)}
-                  className="w-full px-3 py-2 rounded-lg glass-card text-sm bg-transparent border-white/20"
-                  disabled={selectedApi !== "all" && selectedApi !== "financial"}
-                >
-                  <option value="all">전체</option>
-                  <option value="crypto">크립토</option>
-                  <option value="forex">외환</option>
-                  <option value="merger">M&A</option>
-                  <option value="general">일반</option>
-                </select>
-              </div>
-
-              {/* 소스 선택 */}
-              <div>
-                <label className="block text-xs font-medium mb-1">뉴스 소스</label>
-                <select
-                  value={selectedSource}
-                  onChange={(e) => setSelectedSource(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg glass-card text-sm bg-transparent border-white/20"
-                >
-                  <option value="all">전체 소스</option>
-                  {availableSources.map(source => (
-                    <option key={source} value={source}>{source}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 정렬 선택 */}
-              <div>
-                <label className="block text-xs font-medium mb-1">정렬</label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                  className="w-full px-3 py-2 rounded-lg glass-card text-sm bg-transparent border-white/20"
-                >
-                  <option value="recent">최신순</option>
-                  <option value="sentiment">감성순</option>
-                  <option value="relevance">연관성순</option>
-                </select>
-              </div>
-            </div>
-
-            {/* 필터 상태 */}
-            <div className="flex items-center justify-between text-sm text-foreground/60">
-              <span>
-                {filteredNews.length}개 뉴스 (전체 {allNews.length}개 중)
-              </span>
-              <div className="flex gap-4 text-xs">
-                <span>시장: {filteredNews.filter(n => n.type === "market").length}</span>
-                <span>금융: {filteredNews.filter(n => n.type === "financial").length}</span>
-                 {/* company 타입 제거 */}
-                <span>감성: {filteredNews.filter(n => n.type === "sentiment").length}</span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 필터 패널 제거: 상단 통계 버튼으로 필터링 */}
       </div>
 
       {/* 에러 표시 */}

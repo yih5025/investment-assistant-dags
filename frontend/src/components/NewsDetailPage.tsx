@@ -274,16 +274,48 @@ export default function ImprovedNewsDetailPage({ newsItem, onBack }: NewsDetailP
       </div>
 
       {/* 히어로 이미지 */}
-      {item.image && (
+      {item.image && item.image.trim() && (
         <div className="glass-card rounded-xl p-4">
-          <img 
-            src={item.image} 
-            alt={item.headline}
-            className="w-full rounded-lg object-cover max-h-64"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
+          <div className="relative">
+            <img 
+              src={item.image} 
+              alt={item.headline || '뉴스 이미지'}
+              className="w-full rounded-lg object-cover max-h-64"
+              onLoad={(e) => {
+                console.log('✅ 이미지 로드 성공:', item.image);
+              }}
+              onError={(e) => {
+                console.error('❌ 이미지 로드 실패:', item.image);
+                const target = e.target as HTMLImageElement;
+                const container = target.closest('.glass-card');
+                if (container) {
+                    (container as HTMLElement).style.display = 'none';
+                  }
+              }}
+            />
+            {/* 이미지 로딩 placeholder */}
+            <div className="absolute inset-0 bg-gray-500/20 rounded-lg animate-pulse opacity-0 group-loading:opacity-100" />
+          </div>
+          
+          {/* 이미지 정보 표시 (개발환경) */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs text-gray-400">
+              <div>이미지 URL: {item.image}</div>
+              <div>has_image: {item.has_image ? 'true' : 'false'}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 이미지가 없거나 로드 실패시 대체 컨텐츠 */}
+      {(!item.image || !item.image.trim()) && (
+        <div className="glass-card rounded-xl p-4 border-2 border-dashed border-gray-500/30">
+          <div className="flex items-center justify-center h-32 text-gray-500">
+            <div className="text-center">
+              <Building size={32} className="mx-auto mb-2 opacity-50" />
+              <p className="text-sm">이미지 없음</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -582,57 +614,59 @@ export default function ImprovedNewsDetailPage({ newsItem, onBack }: NewsDetailP
   };
 
   return (
-    <div className="space-y-4 pb-6">
-      {/* 헤더 - 모바일 최적화 */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-white/10 p-4 -m-4 mb-4">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={onBack}
-            className="flex items-center space-x-2 px-3 py-2 glass-subtle rounded-lg hover:glass transition-all"
-          >
-            <ArrowLeft size={18} />
-            <span className="text-sm">뒤로</span>
-          </button>
-          
-          <button
-            onClick={() => window.open(getUrl(), '_blank')}
-            className="flex items-center space-x-2 px-3 py-2 glass-card rounded-lg hover:glass transition-all"
-          >
-            <ExternalLink size={16} />
-            <span className="text-sm">원문</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 제목 섹션 - 더 임팩트 있게 */}
-      <div className="glass-card rounded-xl p-6">
-        <div className="flex items-start justify-between mb-4">
-          <h1 className="text-xl font-bold leading-tight pr-4 flex-1">{getTitle()}</h1>
-          <span className="px-2 py-1 rounded text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30 flex-shrink-0">
-            {getSourceLabel()}
-          </span>
-        </div>
-      </div>
-
-      {/* 타입별 상세 내용 */}
-      {newsItem.type === "market" && renderMarketNews(newsItem)}
-      {newsItem.type === "financial" && renderFinancialNews(newsItem)}
-      {newsItem.type === "company" && renderCompanyNews(newsItem)}
-      {newsItem.type === "sentiment" && renderSentimentNews(newsItem)}
-
-      {/* 하단 메타 정보 - 간소화 */}
-      <div className="glass-subtle rounded-xl p-4">
-        <div className="grid grid-cols-1 gap-2 text-xs text-foreground/60">
-          <div className="flex justify-between">
-            <span>뉴스 타입:</span>
-            <span className="capitalize font-medium">{newsItem.type}</span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="space-y-4 pb-6">
+        {/* 헤더 - 모바일 최적화 */}
+        <div className="sticky top-0 z-10 bg-slate-900/90 backdrop-blur-sm border-b border-white/10 p-4 -m-4 mb-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onBack}
+              className="flex items-center space-x-2 px-3 py-2 glass-subtle rounded-lg hover:glass transition-all"
+            >
+              <ArrowLeft size={18} />
+              <span className="text-sm">뒤로</span>
+            </button>
+            
+            <button
+              onClick={() => window.open(getUrl(), '_blank')}
+              className="flex items-center space-x-2 px-3 py-2 glass-card rounded-lg hover:glass transition-all"
+            >
+              <ExternalLink size={16} />
+              <span className="text-sm">원문</span>
+            </button>
           </div>
-          {newsItem.type === "sentiment" && newsItem.created_at && (
+        </div>
+
+        {/* 제목 섹션 - 더 임팩트 있게 */}
+        <div className="glass-card rounded-xl p-6">
+          <div className="flex items-start justify-between mb-4">
+            <h1 className="text-xl font-bold leading-tight pr-4 flex-1 text-white">{getTitle()}</h1>
+            <span className="px-2 py-1 rounded text-xs bg-gray-500/20 text-gray-400 border border-gray-500/30 flex-shrink-0">
+              {getSourceLabel()}
+            </span>
+          </div>
+        </div>
+
+        {/* 타입별 상세 내용 */}
+        {newsItem.type === "market" && renderMarketNews(newsItem)}
+        {newsItem.type === "financial" && renderFinancialNews(newsItem)}
+        {newsItem.type === "company" && renderCompanyNews(newsItem)}
+        {newsItem.type === "sentiment" && renderSentimentNews(newsItem)}
+
+        {/* 하단 메타 정보 - 간소화 */}
+        <div className="glass-subtle rounded-xl p-4">
+          <div className="grid grid-cols-1 gap-2 text-xs text-foreground/60">
             <div className="flex justify-between">
-              <span>분석 생성:</span>
-              <span>{formatTimeAgo(newsItem.created_at)}</span>
+              <span>뉴스 타입:</span>
+              <span className="capitalize font-medium">{newsItem.type}</span>
             </div>
-          )}
+            {newsItem.type === "sentiment" && newsItem.created_at && (
+              <div className="flex justify-between">
+                <span>분석 생성:</span>
+                <span>{formatTimeAgo(newsItem.created_at)}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
