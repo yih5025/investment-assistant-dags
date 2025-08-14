@@ -190,6 +190,20 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       .sort((a, b) => a.period.localeCompare(b.period));
   };
 
+  // 안전한 JSON 파서 (HTML/빈 응답 방지)
+  const parseJsonSafe = async (response: Response, url: string) => {
+    try {
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Unexpected content-type for ${url}: ${contentType} (snippet: ${text.slice(0, 120)})`);
+      }
+      return await response.json();
+    } catch (e: any) {
+      throw new Error(e?.message || `Failed to parse JSON from ${url}`);
+    }
+  };
+
   // 백엔드 API에서 데이터 가져오는 함수
   const fetchEconomicData = async () => {
     try {
@@ -198,11 +212,12 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
 
       console.log("📊 경제 데이터 로딩 시작...");
 
+      const noCacheInit: RequestInit = { method: 'GET', cache: 'no-store', headers: { 'Accept': 'application/json' } };
       const [fedResponse, inflationResponse, cpiResponse, treasuryResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/federal-funds-rate/`),
-        fetch(`${API_BASE_URL}/inflation/`),
-        fetch(`${API_BASE_URL}/cpi/`),
-        fetch(`${API_BASE_URL}/treasury-yield/?maturity=10year&size=1000`)
+        fetch(`${API_BASE_URL}/federal-funds-rate/`, noCacheInit),
+        fetch(`${API_BASE_URL}/inflation/`, noCacheInit),
+        fetch(`${API_BASE_URL}/cpi/`, noCacheInit),
+        fetch(`${API_BASE_URL}/treasury-yield/`, noCacheInit)
       ]);
 
       if (!fedResponse.ok) throw new Error(`연방기금금리 API 오류: ${fedResponse.status}`);
@@ -211,10 +226,10 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       if (!treasuryResponse.ok) throw new Error(`국채수익률 API 오류: ${treasuryResponse.status}`);
 
       const [fedData, inflationData, cpiData, treasuryData] = await Promise.all([
-        fedResponse.json() as Promise<APIResponse<FederalFundsRateData>>,
-        inflationResponse.json() as Promise<APIResponse<InflationData>>,
-        cpiResponse.json() as Promise<APIResponse<CPIData>>,
-        treasuryResponse.json() as Promise<APIResponse<TreasuryYieldData>>
+        parseJsonSafe(fedResponse, `${API_BASE_URL}/federal-funds-rate/`) as Promise<APIResponse<FederalFundsRateData>>,
+        parseJsonSafe(inflationResponse, `${API_BASE_URL}/inflation/`) as Promise<APIResponse<InflationData>>,
+        parseJsonSafe(cpiResponse, `${API_BASE_URL}/cpi/`) as Promise<APIResponse<CPIData>>,
+        parseJsonSafe(treasuryResponse, `${API_BASE_URL}/treasury-yield/`) as Promise<APIResponse<TreasuryYieldData>>
       ]);
 
       console.log("✅ API 응답 받음:", {
