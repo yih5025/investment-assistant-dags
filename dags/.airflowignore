@@ -1,9 +1,8 @@
 ^backend-api/
-^backend/
 ^app/
 ^api/
-^manifests/
 ^frontend/
 ^initdb/
 ^sql/
+^manifests/
 .*/endpoints/.*\.py$

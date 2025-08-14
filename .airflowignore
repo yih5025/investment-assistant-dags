@@ -1,0 +1,8 @@
+^dags/backend-api/
+^dags/app/
+^dags/api/
+^dags/frontend/
+^dags/initdb/
+^dags/sql/
+^dags/manifests/
+^dags/.*/endpoints/.*\.py$
