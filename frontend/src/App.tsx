@@ -4,7 +4,8 @@ import { StockBanner } from "./components/StockBanner";
 import { EventCalendar } from "./components/EventCalendar";
 import { SocialFeed } from "./components/SocialFeed";
 import { NewsList } from "./components/NewsList";
-import { IntegratedMarket } from "./components/IntegratedMarket";
+// import { IntegratedMarket } from "./components/IntegratedMarket";
+import MarketPage from "./components/MarketPage";
 import { NewsPage } from "./components/NewsPage";
 import NewsDetailPage, { NewsItem as DetailNewsItem } from "./components/NewsDetailPage";
 import { SNSPage } from "./components/SNSPage";
@@ -408,7 +409,7 @@ export default function App() {
               </div>
             </div>
             
-            <IntegratedMarket isLoggedIn={isLoggedIn} onLoginPrompt={handleLoginClick} />
+            <MarketPage />
           </div>
         );
 
