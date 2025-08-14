@@ -152,6 +152,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
 
   // EconomicDashboard와 동일한 방식으로 API Base URL 결정
   const getAPIBaseURL = () => {
+    // 1) 명시적 환경변수 우선
     if (typeof window !== 'undefined') {
       const envApiBase = (import.meta as any)?.env?.VITE_API_BASE_URL;
       if (envApiBase) {
@@ -160,28 +161,8 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
       }
     }
 
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      console.log("🔍 현재 환경 분석:", { hostname });
-      if (hostname.includes('vercel.app')) {
-        console.log("🌐 Vercel 환경 감지 → 외부 API 사용");
-        return 'https://api.investment-assistant.site/api/v1';
-      }
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        console.log("🌐 로컬 환경 감지 → 로컬 API 사용");
-        return 'http://localhost:8888/api/v1';
-      }
-      if (hostname.includes('192.168.') || hostname.includes('10.') || hostname.includes('172.')) {
-        console.log("🌐 K8s 환경 감지 → 내부 프록시 사용");
-        return '/api/v1';
-      }
-      if (hostname.includes('investment-assistant')) {
-        console.log("🌐 커스텀 도메인 감지 → 내부 프록시 사용");
-        return '/api/v1';
-      }
-    }
-
-    console.log("🌐 기본 외부 API URL 사용");
+    // 2) 기본: 항상 백엔드 도메인 사용 (로컬 포함)
+    console.log("🌐 기본 외부 API URL 사용: https://api.investment-assistant.site/api/v1");
     return 'https://api.investment-assistant.site/api/v1';
   };
 
