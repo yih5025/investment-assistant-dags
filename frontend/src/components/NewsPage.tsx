@@ -150,7 +150,42 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   // API 호출 함수들
   // =========================================================================
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  // EconomicDashboard와 동일한 방식으로 API Base URL 결정
+  const getAPIBaseURL = () => {
+    if (typeof window !== 'undefined') {
+      const envApiBase = (import.meta as any)?.env?.VITE_API_BASE_URL;
+      if (envApiBase) {
+        console.log("🌐 환경변수에서 API URL 사용:", envApiBase);
+        return envApiBase;
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      console.log("🔍 현재 환경 분석:", { hostname });
+      if (hostname.includes('vercel.app')) {
+        console.log("🌐 Vercel 환경 감지 → 외부 API 사용");
+        return 'https://api.investment-assistant.site/api/v1';
+      }
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        console.log("🌐 로컬 환경 감지 → 로컬 API 사용");
+        return 'http://localhost:8888/api/v1';
+      }
+      if (hostname.includes('192.168.') || hostname.includes('10.') || hostname.includes('172.')) {
+        console.log("🌐 K8s 환경 감지 → 내부 프록시 사용");
+        return '/api/v1';
+      }
+      if (hostname.includes('investment-assistant')) {
+        console.log("🌐 커스텀 도메인 감지 → 내부 프록시 사용");
+        return '/api/v1';
+      }
+    }
+
+    console.log("🌐 기본 외부 API URL 사용");
+    return 'https://api.investment-assistant.site/api/v1';
+  };
+
+  const API_BASE_URL = getAPIBaseURL();
 
   // 1. Market News API 호출
   const fetchMarketNews = async (days = 7, limit = 20, offset = 0) => {
@@ -166,7 +201,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
         params.append('sources', selectedSource);
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/market-news/?${params.toString()}`);
+      const response = await fetch(`${API_BASE_URL}/market-news/?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error(`Market News API 오류: ${response.status}`);
@@ -203,7 +238,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
         params.append('sources', selectedSource);
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/financial-news/?${params.toString()}`);
+      const response = await fetch(`${API_BASE_URL}/financial-news/?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error(`Financial News API 오류: ${response.status}`);
@@ -233,7 +268,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
         offset: offset.toString()
       });
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/company-news/trending?${params.toString()}`);
+      const response = await fetch(`${API_BASE_URL}/company-news/trending?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error(`Company News API 오류: ${response.status}`);
@@ -265,7 +300,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
         order: 'desc'
       });
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/market-news-sentiment/?${params.toString()}`);
+      const response = await fetch(`${API_BASE_URL}/market-news-sentiment/?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error(`Sentiment News API 오류: ${response.status}`);
