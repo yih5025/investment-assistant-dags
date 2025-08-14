@@ -598,7 +598,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
   // 렌더링 함수들
   // =========================================================================
 
-  const renderNewsItem = (item: NewsItem) => {
+  const renderNewsItem = (item: NewsItem, index: number) => {
     const getTitle = () => {
       switch (item.type) {
         case "market": return item.title;
@@ -625,9 +625,21 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
       }
     };
 
+    // 안정적인 키 생성을 위해 URL/타임스탬프/인덱스 조합 사용
+    const key = (() => {
+      switch (item.type) {
+        case "market":
+        case "financial":
+        case "sentiment":
+          return `${item.type}-${item.url}-${getTimestamp(item)}-${index}`;
+        default:
+          return `${item.type}-${getTimestamp(item)}-${index}`;
+      }
+    })();
+
     return (
       <article
-        key={`${item.type}-${getTimestamp(item)}`}
+        key={key}
         className="glass-card p-4 rounded-xl cursor-pointer hover:glass transition-all group"
         onClick={() => handleNewsClick(item)}
       >
@@ -853,7 +865,7 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
           </div>
         ) : (
           <>
-            {filteredNews.map((item, index) => renderNewsItem(item))}
+            {filteredNews.map((item, index) => renderNewsItem(item, index))}
 
             {/* 더보기 버튼 */}
             {hasMore && !loading && filteredNews.length > 0 && (
