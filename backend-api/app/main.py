@@ -1,4 +1,4 @@
-# 주석 추가
+# main.py 수정된 CORS 설정
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,18 +54,80 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="투자 도우미 서비스의 데이터 API",
-    docs_url="/docs",          # API 문서 경로: http://localhost:8888/docs
-    redoc_url="/redoc",        # ReDoc 문서 경로: http://localhost:8888/redoc
-    openapi_url="/openapi.json",  # OpenAPI 스키마 경로
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
     lifespan=lifespan
 )
 
-# 상세 API 로깅 미들웨어
+# CORS 디버깅을 위한 미들웨어 (CORS 설정 전에 배치)
+@app.middleware("http")
+async def cors_debug_middleware(request: Request, call_next):
+    """CORS 요청 디버깅을 위한 미들웨어"""
+    
+    # 요청 정보 로깅
+    origin = request.headers.get("origin")
+    method = request.method
+    
+    if origin:
+        logger.info(f"🌍 CORS 요청 감지: {method} {request.url} from {origin}")
+        logger.info(f"📋 요청 헤더: {dict(request.headers)}")
+    
+    # OPTIONS 요청 특별 처리 (Preflight)
+    if method == "OPTIONS":
+        logger.info("✈️ Preflight 요청 처리 중...")
+        
+        # 수동으로 CORS 헤더 설정
+        response = JSONResponse(
+            content={"message": "OK"},
+            status_code=200
+        )
+        
+        # 모든 Vercel 도메인 허용
+        if origin and ".vercel.app" in origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+        elif origin and origin in [
+            "https://investment-assistant.site",
+            "http://localhost:30333",
+            "http://127.0.0.1:30333"
+        ]:
+            response.headers["Access-Control-Allow-Origin"] = origin
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Credentials"] = "false"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        
+        logger.info(f"✅ Preflight 응답: {dict(response.headers)}")
+        return response
+    
+    # 일반 요청 처리
+    response = await call_next(request)
+    
+    # 응답에 CORS 헤더 추가
+    if origin:
+        if ".vercel.app" in origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+        elif origin in [
+            "https://investment-assistant.site",
+            "http://localhost:30333", 
+            "http://127.0.0.1:30333"
+        ]:
+            response.headers["Access-Control-Allow-Origin"] = origin
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            
+        response.headers["Access-Control-Allow-Credentials"] = "false"
+        logger.info(f"✅ CORS 응답 헤더 추가됨: Origin={response.headers.get('Access-Control-Allow-Origin')}")
+    
+    return response
+
+# 상세 API 로깅 미들웨어 (기존 코드와 동일)
 @app.middleware("http")
 async def detailed_logging_middleware(request: Request, call_next):
-    """
-    상세한 API 요청/응답 로깅 미들웨어
-    """
+    """상세한 API 요청/응답 로깅 미들웨어"""
     start_time = time.time()
     
     # 요청 정보 수집
@@ -103,54 +165,51 @@ async def detailed_logging_middleware(request: Request, call_next):
         logger.error(f"💥 {method} {url} - ERROR ({process_time:.3f}s): {str(e)}")
         raise
 
-# CORS 미들웨어 설정
-# 프론트엔드(React, Django)에서 API 호출할 수 있도록 허용
+# 기존 CORS 미들웨어 제거하고 새로운 설정 적용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://investment-assistant.site",
-        "https://api.investment-assistant.site",
         "https://wei-service.vercel.app",
+        "https://wei-service-git-main-ilhan-yus-projects.vercel.app",
+        "https://wei-service-hxigyrhwl-ilhan-yus-projects.vercel.app",
+        "https://investment-assistant.site",
         "http://localhost:30333",
         "http://127.0.0.1:30333",
-        "*"
+        "http://localhost:3000",
+        "http://localhost:5173"
     ],
-    # Vercel 프리뷰 도메인 전체 + 로컬/내부 IP(http/https) 허용
-    allow_origin_regex=r"^(https?:\/\/.*\.vercel\.app|https?:\/\/(localhost|127\.0\.0\.1)(:\\d+)?|https?:\/\/[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?::\\d+)?)$",
-    allow_credentials=True,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",  # 모든 Vercel 도메인 허용
+    allow_credentials=False,  # credentials 비활성화로 CORS 단순화
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
-
-
-# 루트 엔드포인트
+# 루트 엔드포인트 (기존과 동일)
 @app.get("/", tags=["Root"])
 async def root():
-    """
-    루트 경로 - API 기본 정보 제공
-    
-    브라우저에서 http://localhost:8888/ 접속 시 보여지는 페이지
-    """
+    """루트 경로 - API 기본 정보 제공"""
     return {
         "message": f"Welcome to {settings.app_name}!",
         "version": settings.app_version,
         "docs": "/docs",
         "redoc": "/redoc",
         "status": "running",
-        "uvicorn_reload_test": "SUCCESS 2",    # 🔧 테스트 필드
-        "timestamp": "2025-07-30 17:00:00"   # 🔧 시간 업데이트
+        "cors_enabled": True,  # CORS 활성화 표시
+        "allowed_origins": [
+            "https://wei-service.vercel.app",
+            "https://wei-service-git-main-ilhan-yus-projects.vercel.app",
+            "https://wei-service-hxigyrhwl-ilhan-yus-projects.vercel.app",
+            "https://investment-assistant.site"
+        ],
+        "uvicorn_reload_test": "SUCCESS 3",
+        "timestamp": "2025-08-14 15:07:34"
     }
 
-# 헬스체크 엔드포인트
+# 헬스체크 엔드포인트 (기존과 동일)
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """
-    헬스체크 - 서비스 상태 확인
-    
-    로드밸런서나 모니터링 시스템에서 서비스 상태를 확인할 때 사용
-    데이터베이스 연결 상태도 함께 체크
-    """
+    """헬스체크 - 서비스 상태 확인"""
     db_status = "connected" if test_db_connection() else "disconnected"
     
     return {
@@ -158,7 +217,23 @@ async def health_check():
         "app_name": settings.app_name,
         "version": settings.app_version,
         "database": db_status,
-        "debug_mode": settings.debug
+        "debug_mode": settings.debug,
+        "cors_status": "enabled"
+    }
+
+# CORS 테스트 전용 엔드포인트 추가
+@app.get("/cors-test", tags=["Debug"])
+async def cors_test(request: Request):
+    """CORS 테스트 전용 엔드포인트"""
+    origin = request.headers.get("origin", "No Origin")
+    user_agent = request.headers.get("user-agent", "No User-Agent")
+    
+    return {
+        "message": "CORS 테스트 성공!",
+        "origin": origin,
+        "user_agent": user_agent,
+        "headers": dict(request.headers),
+        "timestamp": time.time()
     }
 
 # 상세 헬스체크 엔드포인트 (DB 연결 필수)
