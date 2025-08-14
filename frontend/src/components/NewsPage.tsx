@@ -982,3 +982,6 @@ export default function IntegratedNewsPage({ isLoggedIn, onLoginPrompt, onNewsCl
     </div>
   );
 }
+
+// App.tsx에서 named import 호환을 위해 동일 컴포넌트를 별칭으로도 export
+export const NewsPage = IntegratedNewsPage;
