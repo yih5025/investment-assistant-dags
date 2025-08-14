@@ -6,6 +6,7 @@ import { SocialFeed } from "./components/SocialFeed";
 import { NewsList } from "./components/NewsList";
 import { IntegratedMarket } from "./components/IntegratedMarket";
 import { NewsPage } from "./components/NewsPage";
+import NewsDetailPage, { NewsItem as DetailNewsItem } from "./components/NewsDetailPage";
 import { SNSPage } from "./components/SNSPage";
 import { SNSDetailPage } from "./components/SNSDetailPage";
 import { AIAnalysis } from "./components/AIAnalysis";
@@ -17,7 +18,7 @@ import { NotificationSystem } from "./components/notifications/NotificationSyste
 import { TrendingUp, MessageSquare, Newspaper, Bot, BarChart3, Bell, User, LogIn, ArrowLeft } from "lucide-react";
 
 type AuthState = "guest" | "login" | "signup" | "authenticated";
-type ViewState = "main" | "auth" | "profile" | "sns-detail" | "stock-news";
+type ViewState = "main" | "auth" | "profile" | "sns-detail" | "stock-news" | "news-detail";
 
 interface SNSPost {
   id: string;
@@ -53,6 +54,7 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedSNSPost, setSelectedSNSPost] = useState<SNSPost | null>(null);
   const [selectedStockNews, setSelectedStockNews] = useState<{ news: StockNewsItem[], symbol: string } | null>(null);
+  const [selectedNewsItem, setSelectedNewsItem] = useState<DetailNewsItem | null>(null);
   
   // 모의 사용자 데이터
   const [user] = useState({
@@ -145,6 +147,11 @@ export default function App() {
   const handleStockNewsClick = (stockNews: StockNewsItem[], symbol: string) => {
     setSelectedStockNews({ news: stockNews, symbol });
     setViewState("stock-news");
+  };
+
+  const handleNewsClick = (newsItem: DetailNewsItem) => {
+    setSelectedNewsItem(newsItem);
+    setViewState("news-detail");
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -269,6 +276,23 @@ export default function App() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 뉴스 상세 페이지
+  if (viewState === "news-detail" && selectedNewsItem) {
+    return (
+      <div className="min-h-screen relative z-10">
+        <div className="max-w-md mx-auto px-4 pt-4 pb-20">
+          <NewsDetailPage
+            newsItem={selectedNewsItem}
+            onBack={() => {
+              setViewState("main");
+              setSelectedNewsItem(null);
+            }}
+          />
         </div>
       </div>
     );
@@ -420,7 +444,7 @@ export default function App() {
               </div>
             </div>
             
-            <NewsPage isLoggedIn={isLoggedIn} onLoginPrompt={handleLoginClick} />
+            <NewsPage isLoggedIn={isLoggedIn} onLoginPrompt={handleLoginClick} onNewsClick={handleNewsClick} />
           </div>
         );
 
