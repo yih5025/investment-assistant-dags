@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TrendingUp, TrendingDown, Info, BarChart3, GitCompare, Lock, TestTube, CheckCircle, XCircle, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Info, BarChart3, GitCompare, Lock, TestTube, CheckCircle, XCircle, RefreshCw, Globe, AlertTriangle } from "lucide-react";
 
 interface EconomicDashboardProps {
   isLoggedIn: boolean;
@@ -15,7 +15,7 @@ interface EconomicIndicator {
   inflation: number;
 }
 
-// 백엔드 API 응답 타입 정
+// 백엔드 API 응답 타입 정의
 interface APIResponse<T> {
   total_count?: number;
   items: T[];
@@ -69,10 +69,6 @@ interface EconomicIndicatorRow {
 export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboardProps) {
   const [selectedIndicator, setSelectedIndicator] = useState<string>("treasuryRate");
   const [correlationMode, setCorrelationMode] = useState<boolean>(false);
-  const [correlationPair, setCorrelationPair] = useState<{first: string, second: string}>({
-    first: "fedRate",
-    second: "treasuryRate"
-  });
 
   // API 테스트 관련 상태
   const [showAPITest, setShowAPITest] = useState<boolean>(false);
@@ -83,11 +79,176 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [economicData, setEconomicData] = useState<EconomicIndicatorRow[]>([]);
+  const [apiConnectionStatus, setApiConnectionStatus] = useState<'unknown' | 'checking' | 'success' | 'failed'>('unknown');
 
-  // API 기본 URL: 환경변수 우선, 없으면 K8s 프론트 Nginx 프록시(/api) 사용
-  const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE || '/api';
+  // 🔧 강화된 API URL 설정
+  const getAPIBaseURL = () => {
+    // 1. 환경변수 우선 확인
+    if (typeof window !== 'undefined') {
+      const envApiBase = import.meta.env?.VITE_API_BASE_URL;
+      if (envApiBase) {
+        console.log("🌐 환경변수에서 API URL 사용:", envApiBase);
+        return envApiBase;
+      }
+    }
 
-  // 숫자 값 추출 함수 (여러 필드명 대응)
+    // 2. 현재 도메인 기반 스마트 판단
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      
+      console.log("🔍 현재 환경 분석:", { hostname });
+
+      // Vercel 배포 환경 감지
+      if (hostname.includes('vercel.app')) {
+        console.log("🌐 Vercel 환경 감지 → 외부 API 사용");
+        return 'https://api.investment-assistant.site/api/v1';
+      }
+      
+      // 로컬 개발 환경
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        console.log("🌐 로컬 환경 감지 → 로컬 API 사용");
+        return 'http://localhost:8888/api/v1';
+      }
+      
+      // K8s 내부 환경 (IP 기반)
+      if (hostname.includes('192.168.') || hostname.includes('10.') || hostname.includes('172.')) {
+        console.log("🌐 K8s 환경 감지 → 내부 프록시 사용");
+        return '/api/v1';
+      }
+
+      // 사용자 정의 도메인
+      if (hostname.includes('investment-assistant')) {
+        console.log("🌐 커스텀 도메인 감지 → 내부 프록시 사용");
+        return '/api/v1';
+      }
+    }
+
+    // 3. 안전한 기본값
+    console.log("🌐 기본 외부 API URL 사용");
+    return 'https://api.investment-assistant.site/api/v1';
+  };
+
+  const API_BASE_URL = getAPIBaseURL();
+
+  // 🔧 CORS 문제 해결을 위한 강화된 fetch 함수
+  const fetchWithRetry = async (url: string, options: RequestInit = {}, retries: number = 3): Promise<Response> => {
+    const defaultOptions: RequestInit = {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit', // CORS 단순화
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store'
+    };
+
+    const finalOptions = { ...defaultOptions, ...options };
+    
+    console.log(`🔄 API 요청 시도: ${url}`);
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        console.log(`🎯 시도 ${attempt + 1}/${retries + 1}: ${url}`);
+        
+        const response = await fetch(url, finalOptions);
+        
+        console.log(`📥 응답 받음:`, {
+          status: response.status,
+          statusText: response.statusText,
+          contentType: response.headers.get('content-type'),
+          corsHeaders: {
+            'access-control-allow-origin': response.headers.get('access-control-allow-origin'),
+          }
+        });
+
+        // Content-Type 엄격 검증
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const textResponse = await response.clone().text();
+          
+          console.error(`❌ 예상치 못한 Content-Type: ${contentType}`);
+          console.error(`📄 응답 내용 (첫 500자):`, textResponse.substring(0, 500));
+          
+          // HTML 응답 특별 처리
+          if (contentType.includes('text/html')) {
+            throw new Error(`서버가 HTML 페이지를 반환했습니다. API 엔드포인트가 잘못되었거나 서버에서 요청을 처리하지 못했습니다.`);
+          }
+          
+          // Cloudflare 에러 페이지 감지
+          if (textResponse.includes('cloudflare') || textResponse.includes('error code')) {
+            throw new Error(`Cloudflare에서 요청을 차단했습니다. CORS 설정이나 보안 정책을 확인해주세요.`);
+          }
+          
+          throw new Error(`JSON 응답을 기대했지만 ${contentType}을 받았습니다.`);
+        }
+
+        // HTTP 상태 코드 검증
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ HTTP ${response.status}:`, errorText);
+          
+          switch (response.status) {
+            case 404:
+              throw new Error(`API 엔드포인트를 찾을 수 없습니다 (404)`);
+            case 403:
+              throw new Error(`API 접근이 거부되었습니다 (403). CORS 정책을 확인해주세요.`);
+            case 429:
+              throw new Error(`너무 많은 요청입니다 (429). 잠시 후 다시 시도해주세요.`);
+            case 500:
+              throw new Error(`서버 내부 오류 (500)`);
+            case 502:
+              throw new Error(`Bad Gateway (502). 서버가 일시적으로 불안정합니다.`);
+            case 503:
+              throw new Error(`서비스 일시 중단 (503)`);
+            default:
+              throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+          }
+        }
+
+        console.log(`✅ 요청 성공: ${url}`);
+        return response;
+
+      } catch (error: any) {
+        console.error(`💥 API 요청 실패 (시도 ${attempt + 1}/${retries + 1}):`, error.message);
+        
+        // 마지막 시도가 아니라면 재시도
+        if (attempt < retries) {
+          const delay = Math.min(Math.pow(2, attempt) * 1000, 5000);
+          console.log(`⏳ ${delay}ms 후 재시도...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        throw error;
+      }
+    }
+
+    throw new Error('모든 재시도 실패');
+  };
+
+  // 🔧 안전한 JSON 파서
+  const parseJsonSafe = async (response: Response): Promise<any> => {
+    try {
+      const text = await response.clone().text();
+      
+      if (!text || text.trim() === '') {
+        throw new Error('서버에서 빈 응답을 반환했습니다');
+      }
+      
+      const parsedData = JSON.parse(text);
+      console.log(`✅ JSON 파싱 성공:`, typeof parsedData);
+      return parsedData;
+      
+    } catch (parseError: any) {
+      console.error('❌ JSON 파싱 실패:', parseError);
+      const textResponse = await response.text();
+      console.error('📄 파싱 실패한 원본 응답:', textResponse.substring(0, 1000));
+      throw new Error(`JSON 파싱 실패: ${parseError.message}`);
+    }
+  };
+
+  // 숫자 값 추출 함수
   const extractNumber = (item: any, fields: string[]): number | undefined => {
     for (const field of fields) {
       const value = item[field];
@@ -100,7 +261,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     return undefined;
   };
 
-  // 날짜를 YYYY-MM 형식으로 변환하는 함수
+  // 날짜를 YYYY-MM 형식으로 변환
   const formatPeriod = (dateStr: string): string => {
     const date = new Date(dateStr);
     const year = date.getFullYear();
@@ -108,7 +269,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     return `${year}-${month}`;
   };
 
-  // 여러 API 데이터를 월별로 병합하는 함수
+  // 여러 API 데이터를 월별로 병합
   const combineEconomicData = (
     fedData: FederalFundsRateData[],
     inflationData: InflationData[],
@@ -132,7 +293,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       }
     });
 
-    // 국채수익률 데이터 처리 (10년 국채)
+    // 국채수익률 데이터 처리
     treasuryData.forEach(item => {
       if (item.date) {
         const period = formatPeriod(item.date);
@@ -151,7 +312,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       }
     });
 
-    // 인플레이션 데이터 처리 (연도별 데이터를 월별로 분배)
+    // 인플레이션 데이터 처리
     inflationData.forEach(item => {
       if (item.date && typeof item.inflation_rate === 'number') {
         const date = new Date(item.date);
@@ -190,136 +351,130 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       .sort((a, b) => a.period.localeCompare(b.period));
   };
 
-  // 안전한 JSON 파서 (HTML/빈 응답 방지)
-  const parseJsonSafe = async (response: Response, url: string) => {
-    try {
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        throw new Error(`Unexpected content-type for ${url}: ${contentType} (snippet: ${text.slice(0, 120)})`);
-      }
-      return await response.json();
-    } catch (e: any) {
-      throw new Error(e?.message || `Failed to parse JSON from ${url}`);
-    }
-  };
-
-  // 백엔드 API에서 데이터 가져오는 함수
+  // 🔧 순차적 API 호출로 안정성 확보
   const fetchEconomicData = async () => {
     try {
       setLoading(true);
       setError(null);
+      setApiConnectionStatus('checking');
 
       console.log("📊 경제 데이터 로딩 시작...");
+      console.log("🌐 사용할 API URL:", API_BASE_URL);
 
-      const noCacheInit: RequestInit = { method: 'GET', cache: 'no-store', headers: { 'Accept': 'application/json' } };
-      const [fedResponse, inflationResponse, cpiResponse, treasuryResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/federal-funds-rate/`, noCacheInit),
-        fetch(`${API_BASE_URL}/inflation/`, noCacheInit),
-        fetch(`${API_BASE_URL}/cpi/`, noCacheInit),
-        fetch(`${API_BASE_URL}/treasury-yield/`, noCacheInit)
-      ]);
+      const endpoints = [
+        { name: '연방기금금리', path: '/federal-funds-rate/', key: 'fedData' },
+        { name: '인플레이션', path: '/inflation/', key: 'inflationData' },
+        { name: 'CPI', path: '/cpi/', key: 'cpiData' },
+        { name: '국채수익률', path: '/treasury-yield/?maturity=10year&size=1000', key: 'treasuryData' }
+      ];
 
-      if (!fedResponse.ok) throw new Error(`연방기금금리 API 오류: ${fedResponse.status}`);
-      if (!inflationResponse.ok) throw new Error(`인플레이션 API 오류: ${inflationResponse.status}`);
-      if (!cpiResponse.ok) throw new Error(`CPI API 오류: ${cpiResponse.status}`);
-      if (!treasuryResponse.ok) throw new Error(`국채수익률 API 오류: ${treasuryResponse.status}`);
+      const apiResults: { [key: string]: any } = {};
+      let successCount = 0;
+      const errors: string[] = [];
 
-      const [fedData, inflationData, cpiData, treasuryData] = await Promise.all([
-        parseJsonSafe(fedResponse, `${API_BASE_URL}/federal-funds-rate/`) as Promise<APIResponse<FederalFundsRateData>>,
-        parseJsonSafe(inflationResponse, `${API_BASE_URL}/inflation/`) as Promise<APIResponse<InflationData>>,
-        parseJsonSafe(cpiResponse, `${API_BASE_URL}/cpi/`) as Promise<APIResponse<CPIData>>,
-        parseJsonSafe(treasuryResponse, `${API_BASE_URL}/treasury-yield/`) as Promise<APIResponse<TreasuryYieldData>>
-      ]);
+      // 순차적으로 API 호출
+      for (const endpoint of endpoints) {
+        try {
+          console.log(`🔄 ${endpoint.name} 데이터 요청 중...`);
+          
+          const response = await fetchWithRetry(`${API_BASE_URL}${endpoint.path}`);
+          const data = await parseJsonSafe(response);
+          
+          apiResults[endpoint.key] = data;
+          successCount++;
+          
+          console.log(`✅ ${endpoint.name} 데이터 수신 완료:`, data.items?.length || 0, '개 항목');
+          
+          await new Promise(resolve => setTimeout(resolve, 200));
+          
+        } catch (error: any) {
+          console.error(`❌ ${endpoint.name} 데이터 로딩 실패:`, error);
+          errors.push(`${endpoint.name}: ${error.message}`);
+          apiResults[endpoint.key] = { items: [] };
+        }
+      }
 
-      console.log("✅ API 응답 받음:", {
-        fed: fedData.items?.length || 0,
-        inflation: inflationData.items?.length || 0,
-        cpi: cpiData.items?.length || 0,
-        treasury: treasuryData.items?.length || 0
-      });
+      // 결과 처리
+      if (successCount === 0) {
+        setApiConnectionStatus('failed');
+        throw new Error(`모든 API 요청이 실패했습니다:\n${errors.join('\n')}`);
+      }
 
+      setApiConnectionStatus('success');
+
+      // 데이터 결합
       const combinedData = combineEconomicData(
-        fedData.items || [],
-        inflationData.items || [],
-        cpiData.items || [],
-        treasuryData.items || []
+        apiResults.fedData?.items || [],
+        apiResults.inflationData?.items || [],
+        apiResults.cpiData?.items || [],
+        apiResults.treasuryData?.items || []
       );
 
       console.log("🔄 데이터 변환 완료:", combinedData.length + "개 항목");
       setEconomicData(combinedData);
 
+      if (combinedData.length === 0) {
+        throw new Error('변환된 데이터가 없습니다. API 응답 형식을 확인해주세요.');
+      }
+
+      // 부분적 실패 경고 표시
+      if (errors.length > 0) {
+        setError(`일부 데이터 로딩 실패: ${errors.join(', ')}`);
+        setTimeout(() => setError(null), 3000);
+      }
+
     } catch (err: any) {
       console.error("❌ 경제 데이터 로딩 실패:", err);
-      setError(err.message || '데이터를 불러올 수 없습니다');
+      setApiConnectionStatus('failed');
+      setError(`데이터 로딩 실패: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // API 테스트 함수
+  // 🔧 강화된 API 테스트 함수
   const runAPITest = async () => {
     setIsTestRunning(true);
     setShowAPITest(true);
+    setApiConnectionStatus('checking');
     
     const tests: Omit<APITestResult, 'status'>[] = [
-      {
-        name: "프론트 헬스",
-        url: `/health`
-      },
-      {
-        name: "연방기금금리",
-        url: `${API_BASE_URL}/federal-funds-rate/`
-      },
-      {
-        name: "인플레이션",
-        url: `${API_BASE_URL}/inflation/`
-      },
-      {
-        name: "소비자물가지수",
-        url: `${API_BASE_URL}/cpi/`
-      },
-      {
-        name: "국채수익률",
-        url: `${API_BASE_URL}/treasury-yield/?maturity=10year&size=5`
-      }
+      { name: "🌐 기본 연결", url: `${API_BASE_URL.replace('/api/v1', '')}/health` },
+      { name: "🧪 CORS 테스트", url: `${API_BASE_URL.replace('/api/v1', '')}/cors-test` },
+      { name: "📊 API 정보", url: `${API_BASE_URL}/` },
+      { name: "💰 연방기금금리", url: `${API_BASE_URL}/federal-funds-rate/?limit=3` },
+      { name: "📈 인플레이션", url: `${API_BASE_URL}/inflation/?limit=3` },
+      { name: "🛒 CPI", url: `${API_BASE_URL}/cpi/?limit=3` },
+      { name: "🏛️ 국채수익률", url: `${API_BASE_URL}/treasury-yield/?limit=3` }
     ];
 
     const results: APITestResult[] = tests.map(test => ({ ...test, status: 'loading' }));
     setApiTestResults([...results]);
+
+    let successCount = 0;
 
     for (let i = 0; i < tests.length; i++) {
       const test = tests[i];
       const startTime = Date.now();
       
       try {
-        const response = await fetch(test.url, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        
+        const response = await fetchWithRetry(test.url, {}, 1);
         const responseTime = Date.now() - startTime;
-        let data;
-        const cloned = response.clone();
-        try {
-          data = await response.json();
-        } catch (parseError) {
-          data = await cloned.text();
-        }
+        const data = await parseJsonSafe(response);
         
         results[i] = {
           ...test,
-          status: response.ok ? 'success' : 'error',
+          status: 'success',
           statusCode: response.status,
           data: data,
           responseTime
         };
         
+        successCount++;
+        
       } catch (error: any) {
         const responseTime = Date.now() - startTime;
+        
         results[i] = {
           ...test,
           status: 'error',
@@ -331,19 +486,21 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
       setApiTestResults([...results]);
       
       if (i < tests.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
     
+    setApiConnectionStatus(successCount >= 3 ? 'success' : 'failed');
     setIsTestRunning(false);
   };
 
   // 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
+    console.log("🚀 EconomicDashboard 컴포넌트 마운트됨");
     fetchEconomicData();
   }, []);
 
-  // 선택 지표의 최신값과 전년 동월(YoY) 값 추출
+  // 선택 지표의 최신값과 전년 동월 값 추출
   const getLatestPair = (key: keyof EconomicIndicator): { value?: number; prev?: number } => {
     const available = economicData.filter(r => (r as any)[key] != null && r.period);
     if (available.length === 0) return { value: undefined, prev: undefined };
@@ -399,13 +556,6 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     }
   ];
 
-  const correlationPairs = [
-    { first: "fedRate", second: "treasuryRate", description: "연준 금리와 국채 수익률은 강한 양의 상관관계" },
-    { first: "inflation", second: "fedRate", description: "인플레이션 상승 시 연준이 금리를 올리는 패턴", premium: !isLoggedIn },
-    { first: "cpi", second: "inflation", description: "CPI 변화율이 인플레이션을 직접 반영", premium: !isLoggedIn },
-    { first: "treasuryRate", second: "inflation", description: "인플레이션 기대가 장기 금리에 반영됨", premium: !isLoggedIn }
-  ];
-
   const currentIndicator = indicators.find(ind => ind.key === selectedIndicator);
   const latestPair = getLatestPair(selectedIndicator as keyof EconomicIndicator);
   const currentValue = latestPair.value ?? 0;
@@ -414,7 +564,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
   const change = hasPrev ? currentValue - (previousValue as number) : 0;
   const changePercent = hasPrev && previousValue !== 0 ? ((change / (previousValue as number)) * 100) : 0;
 
-  // 차트 데이터: 선택 지표가 있는 연도만
+  // 차트 데이터
   const chartData = useMemo(() => {
     return economicData
       .filter((r) => (r as any)[selectedIndicator] != null)
@@ -474,7 +624,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
           )}
         </div>
         
-        <div className="text-xs text-foreground/70 mb-1">
+        <div className="text-xs text-foreground/70 mb-1 break-all">
           {result.url}
         </div>
         
@@ -499,27 +649,82 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     );
   };
 
+  // API 연결 상태 표시
+  const renderConnectionStatus = () => {
+    const getStatusColor = () => {
+      switch (apiConnectionStatus) {
+        case 'checking': return 'text-blue-400';
+        case 'success': return 'text-green-400';
+        case 'failed': return 'text-red-400';
+        default: return 'text-gray-400';
+      }
+    };
+
+    const getStatusIcon = () => {
+      switch (apiConnectionStatus) {
+        case 'checking':
+          return <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />;
+        case 'success':
+          return <CheckCircle size={14} className="text-green-400" />;
+        case 'failed':
+          return <XCircle size={14} className="text-red-400" />;
+        default:
+          return <Globe size={14} className="text-gray-400" />;
+      }
+    };
+
+    const getStatusText = () => {
+      switch (apiConnectionStatus) {
+        case 'checking': return '연결 확인 중...';
+        case 'success': return '연결됨';
+        case 'failed': return '연결 실패';
+        default: return '미확인';
+      }
+    };
+
+    return (
+      <div className={`flex items-center space-x-1 text-xs ${getStatusColor()}`}>
+        {getStatusIcon()}
+        <span>{getStatusText()}</span>
+      </div>
+    );
+  };
+
   // 에러 상태 처리
-  if (error) {
+  if (error && economicData.length === 0) {
     return (
       <div className="space-y-6">
         <div className="glass-card rounded-2xl p-6">
           <div className="text-center">
             <XCircle className="mx-auto mb-4 text-red-400" size={48} />
             <h3 className="font-semibold mb-2 text-red-400">데이터 로딩 실패</h3>
-            <p className="text-sm text-foreground/70 mb-4">{error}</p>
+            <p className="text-sm text-foreground/70 mb-4 whitespace-pre-line">{error}</p>
+            
+            <div className="glass rounded-xl p-3 mb-4 text-left">
+              <h4 className="font-medium mb-2 text-blue-400">🔍 연결 정보</h4>
+              <div className="text-xs text-foreground/70 space-y-1">
+                <div>API URL: {API_BASE_URL}</div>
+                <div>도메인: {typeof window !== 'undefined' ? window.location.hostname : 'SSR'}</div>
+                <div className="flex items-center space-x-2">
+                  <span>상태:</span> {renderConnectionStatus()}
+                </div>
+              </div>
+            </div>
+            
             <div className="flex justify-center space-x-3">
               <button 
                 onClick={fetchEconomicData}
-                className="px-4 py-2 bg-primary/20 text-primary rounded-xl hover:bg-primary/30 transition-colors"
+                disabled={loading}
+                className="px-4 py-2 bg-primary/20 text-primary rounded-xl hover:bg-primary/30 transition-colors disabled:opacity-50"
               >
-                다시 시도
+                {loading ? '재시도 중...' : '다시 시도'}
               </button>
               <button 
                 onClick={runAPITest}
-                className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-xl hover:bg-blue-500/30 transition-colors"
+                disabled={isTestRunning}
+                className="px-4 py-2 bg-blue-500/20 text-blue-400 rounded-xl hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
-                🧪 연결 테스트
+                {isTestRunning ? '테스트 중...' : '🧪 연결 진단'}
               </button>
             </div>
           </div>
@@ -529,7 +734,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
           <div className="glass-card rounded-2xl p-6">
             <div className="flex items-center space-x-2 mb-4">
               <TestTube size={20} className="text-blue-400" />
-              <h3 className="font-semibold">API 연결 테스트 결과</h3>
+              <h3 className="font-semibold">API 연결 진단 결과</h3>
               {isTestRunning && <div className="text-sm text-blue-400">진행 중...</div>}
             </div>
             
@@ -537,9 +742,31 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
               {apiTestResults.length > 0 ? (
                 apiTestResults.map(renderAPITestResult)
               ) : (
-                <div className="text-sm text-foreground/60">테스트를 실행하려면 '🧪 연결 테스트' 버튼을 클릭하세요.</div>
+                <div className="text-sm text-foreground/60">진단을 실행하려면 '🧪 연결 진단' 버튼을 클릭하세요.</div>
               )}
             </div>
+            
+            {apiTestResults.length > 0 && !isTestRunning && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="glass rounded-xl p-3">
+                  <h4 className="font-medium mb-2 text-green-400">✅ 성공 시</h4>
+                  <div className="text-xs text-foreground/70 space-y-1">
+                    <div>• API 서버가 정상 응답</div>
+                    <div>• CORS 설정이 올바름</div>
+                    <div>• 데이터 형식이 정확함</div>
+                  </div>
+                </div>
+                <div className="glass rounded-xl p-3">
+                  <h4 className="font-medium mb-2 text-red-400">❌ 실패 시 해결법</h4>
+                  <div className="text-xs text-foreground/70 space-y-1">
+                    <div>• CORS: 서버 설정 확인</div>
+                    <div>• 404: URL 경로 확인</div>
+                    <div>• HTML 응답: Cloudflare 설정</div>
+                    <div>• 네트워크: 방화벽 확인</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -550,11 +777,27 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
     <div className="space-y-6">
       {/* 헤더 */}
       <div className="glass-card rounded-2xl p-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center">
-          <BarChart3 className="mr-2" size={20} />
-          📊 경제 지표 대시보드
-          {loading && <div className="ml-2 text-sm text-blue-400">데이터 로딩 중...</div>}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center">
+            <BarChart3 className="mr-2" size={20} />
+            📊 경제 지표 대시보드
+            {loading && <div className="ml-2 text-sm text-blue-400">데이터 로딩 중...</div>}
+          </h2>
+          {renderConnectionStatus()}
+        </div>
+        
+        {/* 부분적 에러 알림 */}
+        {error && economicData.length > 0 && (
+          <div className="mb-4 p-3 glass rounded-xl border border-yellow-500/30">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="text-yellow-400" size={16} />
+              <div className="text-sm">
+                <span className="font-medium text-yellow-400">부분적 데이터 로딩</span>
+                <p className="text-foreground/70 mt-1">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* API 테스트 및 새로고침 버튼 */}
         <div className="flex items-center space-x-4 mb-4">
@@ -568,7 +811,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
             }`}
           >
             <TestTube size={16} />
-            <span>{isTestRunning ? '테스트 중...' : '🧪 API 연결 테스트'}</span>
+            <span>{isTestRunning ? '진단 중...' : '🧪 API 연결 진단'}</span>
           </button>
 
           <button
@@ -577,7 +820,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
             className="flex items-center space-x-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-xl font-medium hover:bg-green-500/30 transition-colors disabled:opacity-50"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            <span>데이터 새로고침</span>
+            <span>{loading ? '로딩 중...' : '데이터 새로고침'}</span>
           </button>
           
           {showAPITest && (
@@ -585,7 +828,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
               onClick={() => setShowAPITest(false)}
               className="px-3 py-2 text-sm text-foreground/60 hover:text-foreground/80"
             >
-              테스트 결과 숨기기
+              진단 결과 숨기기
             </button>
           )}
         </div>
@@ -617,12 +860,12 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
         )}
       </div>
 
-      {/* API 테스트 결과 */}
+      {/* API 진단 결과 */}
       {showAPITest && (
         <div className="glass-card rounded-2xl p-6">
           <div className="flex items-center space-x-2 mb-4">
             <TestTube size={20} className="text-blue-400" />
-            <h3 className="font-semibold">API 연결 테스트 결과</h3>
+            <h3 className="font-semibold">API 연결 진단 결과</h3>
             {isTestRunning && <div className="text-sm text-blue-400">진행 중...</div>}
           </div>
           
@@ -630,9 +873,31 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
             {apiTestResults.length > 0 ? (
               apiTestResults.map(renderAPITestResult)
             ) : (
-              <div className="text-sm text-foreground/60">테스트를 실행하려면 '🧪 API 연결 테스트' 버튼을 클릭하세요.</div>
+              <div className="text-sm text-foreground/60">진단을 실행하려면 '🧪 API 연결 진단' 버튼을 클릭하세요.</div>
             )}
           </div>
+          
+          {apiTestResults.length > 0 && !isTestRunning && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="glass rounded-xl p-3">
+                <h4 className="font-medium mb-2 text-green-400">✅ 성공 시</h4>
+                <div className="text-xs text-foreground/70 space-y-1">
+                  <div>• API 서버가 정상 응답</div>
+                  <div>• CORS 설정이 올바름</div>
+                  <div>• 데이터 형식이 정확함</div>
+                </div>
+              </div>
+              <div className="glass rounded-xl p-3">
+                <h4 className="font-medium mb-2 text-red-400">❌ 실패 시 해결법</h4>
+                <div className="text-xs text-foreground/70 space-y-1">
+                  <div>• CORS: 서버 설정 확인</div>
+                  <div>• 404: URL 경로 확인</div>
+                  <div>• HTML 응답: Cloudflare 설정</div>
+                  <div>• 네트워크: 방화벽 확인</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -784,9 +1049,7 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
                     dataKey="period" 
                     stroke="rgba(255,255,255,0.6)"
                     fontSize={12}
-                    tickFormatter={(value) => {
-                      return value.replace('-', '.');
-                    }}
+                    tickFormatter={(value) => value.replace('-', '.')}
                   />
                   <YAxis 
                     stroke="rgba(255,255,255,0.6)"
@@ -920,14 +1183,36 @@ export function EconomicDashboard({ isLoggedIn, onLoginPrompt }: EconomicDashboa
               <span>✅ 실시간 연동 완료</span>
               <span>📊 {economicData.length}개 데이터 포인트</span>
               <span>🔄 마지막 업데이트: {new Date().toLocaleTimeString('ko-KR')}</span>
+              {renderConnectionStatus()}
             </div>
             <button
               onClick={fetchEconomicData}
-              className="text-primary hover:text-primary/80 transition-colors"
+              disabled={loading}
+              className="text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
             >
               새로고침
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 디버깅 정보 (개발 환경에서만 표시) */}
+      {typeof window !== 'undefined' && window.location.hostname.includes('localhost') && (
+        <div className="glass-card rounded-xl p-4">
+          <details className="text-sm">
+            <summary className="cursor-pointer text-foreground/60 hover:text-foreground/80">
+              🔧 개발자 디버깅 정보
+            </summary>
+            <div className="mt-2 space-y-2 text-xs text-foreground/70">
+              <div><strong>환경:</strong> {window.location.hostname}</div>
+              <div><strong>API URL:</strong> {API_BASE_URL}</div>
+              <div><strong>연결 상태:</strong> {apiConnectionStatus}</div>
+              <div><strong>로딩 상태:</strong> {loading ? '로딩 중' : '완료'}</div>
+              <div><strong>데이터 개수:</strong> {economicData.length}</div>
+              <div><strong>선택된 지표:</strong> {selectedIndicator}</div>
+              <div><strong>User Agent:</strong> {navigator.userAgent.slice(0, 50)}...</div>
+            </div>
+          </details>
         </div>
       )}
     </div>
