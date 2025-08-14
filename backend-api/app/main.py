@@ -1,4 +1,4 @@
-# main.py 수정된 CORS 설정
+# main.py - K3s 환경을 포함한 수정된 CORS 설정
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,47 +60,45 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS 디버깅을 위한 미들웨어 (CORS 설정 전에 배치)
+# 🔧 K3s 환경을 포함한 강화된 CORS 디버깅 미들웨어
 @app.middleware("http")
 async def cors_debug_middleware(request: Request, call_next):
-    """CORS 요청 디버깅을 위한 미들웨어"""
+    """CORS 요청 디버깅 및 처리"""
     
-    # 요청 정보 로깅
     origin = request.headers.get("origin")
     method = request.method
+    host = request.headers.get("host", "")
     
+    # 요청 정보 상세 로깅
     if origin:
-        logger.info(f"🌍 CORS 요청 감지: {method} {request.url} from {origin}")
-        logger.info(f"📋 요청 헤더: {dict(request.headers)}")
+        logger.info(f"🌍 CORS 요청: {method} {request.url}")
+        logger.info(f"   Origin: {origin}")
+        logger.info(f"   Host: {host}")
+        logger.info(f"   Headers: {dict(request.headers)}")
     
-    # OPTIONS 요청 특별 처리 (Preflight)
+    # OPTIONS 요청 (Preflight) 특별 처리
     if method == "OPTIONS":
         logger.info("✈️ Preflight 요청 처리 중...")
         
-        # 수동으로 CORS 헤더 설정
         response = JSONResponse(
-            content={"message": "OK"},
+            content={"message": "CORS preflight OK"},
             status_code=200
         )
         
-        # 모든 Vercel 도메인 허용
-        if origin and ".vercel.app" in origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-        elif origin and origin in [
-            "https://investment-assistant.site",
-            "http://localhost:30333",
-            "http://127.0.0.1:30333"
-        ]:
+        # 🔧 매우 관대한 CORS 헤더 설정 (K3s 환경 지원)
+        if origin:
+            # 모든 오리진 허용 (개발/테스트 환경)
             response.headers["Access-Control-Allow-Origin"] = origin
         else:
+            # Origin 헤더가 없는 경우 (내부 네트워크)
             response.headers["Access-Control-Allow-Origin"] = "*"
             
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
         response.headers["Access-Control-Allow-Headers"] = "*"
         response.headers["Access-Control-Allow-Credentials"] = "false"
         response.headers["Access-Control-Max-Age"] = "86400"
         
-        logger.info(f"✅ Preflight 응답: {dict(response.headers)}")
+        logger.info(f"✅ Preflight 응답 헤더: {dict(response.headers)}")
         return response
     
     # 일반 요청 처리
@@ -108,23 +106,19 @@ async def cors_debug_middleware(request: Request, call_next):
     
     # 응답에 CORS 헤더 추가
     if origin:
-        if ".vercel.app" in origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-        elif origin in [
-            "https://investment-assistant.site",
-            "http://localhost:30333", 
-            "http://127.0.0.1:30333"
-        ]:
-            response.headers["Access-Control-Allow-Origin"] = origin
-        else:
-            response.headers["Access-Control-Allow-Origin"] = "*"
-            
-        response.headers["Access-Control-Allow-Credentials"] = "false"
-        logger.info(f"✅ CORS 응답 헤더 추가됨: Origin={response.headers.get('Access-Control-Allow-Origin')}")
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        
+    response.headers["Access-Control-Allow-Credentials"] = "false"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    logger.info(f"✅ 응답 CORS 헤더 추가: Origin={response.headers.get('Access-Control-Allow-Origin')}")
     
     return response
 
-# 상세 API 로깅 미들웨어 (기존 코드와 동일)
+# 상세 API 로깅 미들웨어 (기존과 동일)
 @app.middleware("http")
 async def detailed_logging_middleware(request: Request, call_next):
     """상세한 API 요청/응답 로깅 미들웨어"""
@@ -141,8 +135,6 @@ async def detailed_logging_middleware(request: Request, call_next):
     logger.info(f"📥 {method} {url} - IP: {client_ip}")
     if query_params:
         logger.info(f"   Query params: {json.dumps(query_params, ensure_ascii=False)}")
-    if user_agent != "unknown":
-        logger.info(f"   User-Agent: {user_agent}")
     
     # 요청 처리
     try:
@@ -154,7 +146,6 @@ async def detailed_logging_middleware(request: Request, call_next):
             logger.warning(f"❌ {method} {url} - {response.status_code} ({process_time:.3f}s)")
             if response.status_code == 404:
                 logger.warning(f"   🔍 404 상세: 경로 '{request.url.path}'를 찾을 수 없음")
-                logger.warning(f"   💡 사용 가능한 경로 확인: {url.split('?')[0].replace(request.url.path, '')}/docs")
         else:
             logger.info(f"✅ {method} {url} - {response.status_code} ({process_time:.3f}s)")
             
@@ -165,27 +156,45 @@ async def detailed_logging_middleware(request: Request, call_next):
         logger.error(f"💥 {method} {url} - ERROR ({process_time:.3f}s): {str(e)}")
         raise
 
-# 기존 CORS 미들웨어 제거하고 새로운 설정 적용
+# 🔧 매우 관대한 CORS 미들웨어 설정 (모든 환경 지원)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        # Vercel 도메인들
         "https://wei-service.vercel.app",
         "https://wei-service-git-main-ilhan-yus-projects.vercel.app",
         "https://wei-service-hxigyrhwl-ilhan-yus-projects.vercel.app",
+        
+        # 커스텀 도메인
         "https://investment-assistant.site",
+        "https://api.investment-assistant.site",
+        
+        # 로컬 개발 환경
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8888",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8888",
+        
+        # K8s 환경 (일반적인 포트들)
         "http://localhost:30333",
         "http://127.0.0.1:30333",
-        "http://localhost:3000",
-        "http://localhost:5173"
+        "http://192.168.0.27:30333",  # 실제 K8s 노드 IP
+        
+        # 모든 오리진 허용 (마지막 옵션)
+        "*"
     ],
-    allow_origin_regex=r"^https://.*\.vercel\.app$",  # 모든 Vercel 도메인 허용
-    allow_credentials=False,  # credentials 비활성화로 CORS 단순화
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    # 🔧 매우 관대한 정규식 패턴 (모든 환경 허용)
+    allow_origin_regex=r"^(https?://.*\.vercel\.app|https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.1[6-9]\.\d+\.\d+|172\.2[0-9]\.\d+\.\d+|172\.3[0-1]\.\d+\.\d+)(:\d+)?|https?://.*\.investment-assistant\.site)$",
+    
+    allow_credentials=False,  # CORS 단순화
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
 
-# 루트 엔드포인트 (기존과 동일)
+# 루트 엔드포인트
 @app.get("/", tags=["Root"])
 async def root():
     """루트 경로 - API 기본 정보 제공"""
@@ -195,18 +204,18 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc",
         "status": "running",
-        "cors_enabled": True,  # CORS 활성화 표시
-        "allowed_origins": [
-            "https://wei-service.vercel.app",
-            "https://wei-service-git-main-ilhan-yus-projects.vercel.app",
-            "https://wei-service-hxigyrhwl-ilhan-yus-projects.vercel.app",
-            "https://investment-assistant.site"
+        "cors_status": "enabled_for_all_environments",
+        "supported_origins": [
+            "Vercel 도메인 (*.vercel.app)",
+            "로컬 개발 환경 (localhost, 127.0.0.1)",
+            "K8s 내부 네트워크 (192.168.x.x, 10.x.x.x, 172.x.x.x)",
+            "커스텀 도메인 (*.investment-assistant.site)"
         ],
-        "uvicorn_reload_test": "SUCCESS 3",
-        "timestamp": "2025-08-14 15:07:34"
+        "uvicorn_reload_test": "SUCCESS 4",
+        "timestamp": "2025-08-14 16:30:00"
     }
 
-# 헬스체크 엔드포인트 (기존과 동일)
+# 헬스체크 엔드포인트
 @app.get("/health", tags=["Health"])
 async def health_check():
     """헬스체크 - 서비스 상태 확인"""
@@ -218,33 +227,39 @@ async def health_check():
         "version": settings.app_version,
         "database": db_status,
         "debug_mode": settings.debug,
-        "cors_status": "enabled"
+        "cors_status": "enabled_for_all_environments"
     }
 
-# CORS 테스트 전용 엔드포인트 추가
+# 🔧 강화된 CORS 테스트 엔드포인트
 @app.get("/cors-test", tags=["Debug"])
 async def cors_test(request: Request):
     """CORS 테스트 전용 엔드포인트"""
     origin = request.headers.get("origin", "No Origin")
+    host = request.headers.get("host", "No Host")
     user_agent = request.headers.get("user-agent", "No User-Agent")
     
     return {
-        "message": "CORS 테스트 성공!",
-        "origin": origin,
-        "user_agent": user_agent,
-        "headers": dict(request.headers),
+        "message": "CORS 테스트 성공! 🎉",
+        "request_info": {
+            "origin": origin,
+            "host": host,
+            "user_agent": user_agent,
+            "client_ip": request.client.host if request.client else "unknown",
+            "method": request.method,
+            "url": str(request.url)
+        },
+        "cors_info": {
+            "allowed_origins": "모든 환경 허용",
+            "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+            "credentials": False
+        },
         "timestamp": time.time()
     }
 
-# 상세 헬스체크 엔드포인트 (DB 연결 필수)
+# 상세 헬스체크 엔드포인트
 @app.get("/health/detailed", tags=["Health"])
 async def detailed_health_check(_: None = Depends(verify_db_connection)):
-    """
-    상세 헬스체크 - 모든 의존성 서비스 상태 확인
-    
-    데이터베이스 연결이 실패하면 503 에러를 반환합니다.
-    중요한 서비스에서 사용하기 전에 호출하여 상태를 확인할 수 있습니다.
-    """
+    """상세 헬스체크"""
     return {
         "status": "healthy",
         "app_name": settings.app_name,
@@ -252,7 +267,11 @@ async def detailed_health_check(_: None = Depends(verify_db_connection)):
         "database": "connected",
         "services": {
             "postgresql": "connected",
-            "redis": "not_implemented",  # 나중에 Redis 상태 체크 추가
+            "redis": "not_implemented",
+        },
+        "cors": {
+            "status": "enabled",
+            "environments": ["vercel", "k8s", "local", "custom_domain"]
         },
         "debug_mode": settings.debug
     }
@@ -264,16 +283,10 @@ app.include_router(api_router, prefix=settings.api_v1_prefix)
 # 전역 예외 처리기
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """
-    전역 예외 처리기
-    
-    예상하지 못한 에러가 발생했을 때 일관된 에러 응답을 제공합니다.
-    운영 환경에서는 에러 상세 정보를 숨기고, 개발 환경에서는 표시합니다.
-    """
+    """전역 예외 처리기"""
     logger.error(f"예상하지 못한 에러 발생: {str(exc)}", exc_info=True)
     
     if settings.debug:
-        # 개발 환경: 상세 에러 정보 제공
         return JSONResponse(
             status_code=500,
             content={
@@ -283,7 +296,6 @@ async def global_exception_handler(request, exc):
             }
         )
     else:
-        # 운영 환경: 간단한 에러 메시지만 제공
         return JSONResponse(
             status_code=500,
             content={
@@ -292,26 +304,21 @@ async def global_exception_handler(request, exc):
             }
         )
 
-# 개발 환경에서만 사용할 디버그 정보
+# 개발 환경용 디버그 정보
 if settings.debug:
     @app.get("/debug/info", tags=["Debug"])
     async def debug_info():
-        """
-        디버그 정보 - 개발 환경에서만 사용
-        
-        현재 설정값들을 확인할 수 있습니다.
-        운영 환경에서는 보안상 비활성화됩니다.
-        """
+        """디버그 정보"""
         return {
             "settings": {
                 "db_host": settings.db_host,
                 "db_port": settings.db_port,
                 "db_name": settings.db_name,
-                "redis_host": settings.redis_host,
-                "redis_port": settings.redis_port,
                 "debug": settings.debug,
                 "log_level": settings.log_level
             },
-            "database_url": settings.database_url.replace(settings.db_password, "***"),  # 비밀번호 숨김
-            "allowed_origins": settings.allowed_origins
+            "cors": {
+                "status": "enabled_for_all_environments",
+                "note": "모든 Origin 허용됨 (개발 환경)"
+            }
         }
