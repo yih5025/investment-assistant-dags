@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Newspaper, ExternalLink, TrendingUp, TrendingDown, Clock, Target, ArrowRight } from "lucide-react";
 import { Badge } from "./ui/badge";
 
-// 5가지 뉴스 타입 정의
+// 5가지 뉴스 타입 정의d
 interface GeneralNewsItem {
   type: "general";
   source: string;
