@@ -9,7 +9,7 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 
-# 경로 설정
+# 경로 설정s
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
 INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
