@@ -13,7 +13,7 @@ from airflow.models import Variable
 
 # Git-Sync 환경에서 SQL 파일 경로
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
+INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
 # upsert SQL 파일 읽기 (dags/sql/ 폴더에서)
 with open(os.path.join(DAGS_SQL_DIR, "upsert_earnings_calendar.sql"), encoding="utf-8") as f:

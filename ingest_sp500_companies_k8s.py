@@ -12,7 +12,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 # 경로 설정
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
+INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
 # SQL 파일 읽기
 with open(os.path.join(DAGS_SQL_DIR, "upsert_sp500_companies.sql"), encoding="utf-8") as f:

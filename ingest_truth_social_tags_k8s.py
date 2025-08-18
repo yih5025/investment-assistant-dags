@@ -11,7 +11,7 @@ from airflow.models import Variable
 
 # 경로 설정
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
+INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")    
 
 # SQL 파일 읽기
 with open(os.path.join(DAGS_SQL_DIR, "upsert_truth_social_tags.sql"), encoding="utf-8") as f:

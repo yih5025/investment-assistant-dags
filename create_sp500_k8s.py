@@ -7,7 +7,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.operators.python import PythonOperator
 
 # 표준 경로 설정
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
+ㄴINITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
 default_args = {
     'owner': 'investment_assistant',
