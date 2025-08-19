@@ -17,8 +17,6 @@ INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 # SQL 파일 읽기
 with open(os.path.join(DAGS_SQL_DIR, "upsert_x_posts.sql"), encoding="utf-8") as f:
     UPSERT_SQL = f.read()
-with open(os.path.join(INITDB_SQL_DIR, "create_x_posts.sql"), encoding="utf-8") as f:
-    CREATE_TABLE_SQL = f.read()
 
 # DAG 기본 설정
 default_args = {
@@ -446,7 +444,7 @@ with DAG(
     create_table = PostgresOperator(
         task_id='create_x_posts_table_primary',
         postgres_conn_id='postgres_default',
-        sql=CREATE_TABLE_SQL,
+        sql='create_x_posts.sql',
     )
     
     # Rate Limit 준수하여 트윗 수집

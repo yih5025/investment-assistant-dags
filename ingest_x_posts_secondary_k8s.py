@@ -202,7 +202,7 @@ def get_todays_secondary_accounts():
 def call_x_api_with_rate_limit(username, user_id, max_results=10):
     """start_time 없이 최신 트윗만 가져오기"""
     try:
-        bearer_token = Variable.get('X_API_BEARER_TOKEN_2')
+        bearer_token = Variable.get('X_API_BEARER_TOKEN_3')
         
         url = f"https://api.twitter.com/2/users/{user_id}/tweets"
         
