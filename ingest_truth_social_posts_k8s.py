@@ -10,11 +10,14 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 
+# ✅ 모니터링 유틸리티 import
+from monitoring_utils import create_monitor
+
 # 경로 설정
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
 INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
-# SQL 파일 읽기 dag 수정
+# SQL 파일 읽기
 with open(os.path.join(DAGS_SQL_DIR, "upsert_truth_social_posts.sql"), encoding="utf-8") as f:
     UPSERT_POSTS_SQL = f.read()
 
@@ -35,8 +38,8 @@ def run_truthbrush_command(command_args):
     env = os.environ.copy()
     env['TRUTHSOCIAL_USERNAME'] = truth_social_username
     env['TRUTHSOCIAL_PASSWORD'] = truth_social_password
+    
     try:
-        # 명령어에서 --username, --password 제거!
         cmd = ['truthbrush'] + command_args
         
         result = subprocess.run(
@@ -44,7 +47,7 @@ def run_truthbrush_command(command_args):
             capture_output=True, 
             text=True, 
             timeout=120,
-            env=env  # 환경변수 전달
+            env=env
         )
         
         if result.returncode == 0:
@@ -124,20 +127,30 @@ def parse_post_data(raw_post, username):
     }
 
 def fetch_posts_for_account(username, **context):
-    """특정 계정의 포스트 수집"""
-    print(f"🔍 {username} 포스트 수집 중...")
+    """✅ 모니터링이 적용된 특정 계정의 포스트 수집"""
     
-    # 6시간 전 이후 포스트만 수집
-    one_hours_ago = (datetime.now() - timedelta(hours=1)).isoformat()
+    # 1. 모니터 생성
+    monitor = create_monitor(context)
     
     try:
-        output = run_truthbrush_command([
-            'statuses', username, 
-            '--created-after', one_hours_ago,
-            '--no-replies'
-        ])
+        print(f"🔍 {username} 포스트 수집 중...")
         
+        # 1시간 전 이후 포스트만 수집
+        one_hours_ago = (datetime.now() - timedelta(hours=1)).isoformat()
+        
+        # 2. API 호출을 모니터링과 함께
+        with monitor.monitor_api_call():
+            output = run_truthbrush_command([
+                'statuses', username, 
+                '--created-after', one_hours_ago,
+                '--no-replies'
+            ])
+        
+        # 3. 데이터 처리
         posts = []
+        invalid_posts = 0
+        latest_timestamp = None
+        
         for line in output.strip().split('\n'):
             line = line.strip()
             if line and line.startswith('{'):
@@ -145,49 +158,127 @@ def fetch_posts_for_account(username, **context):
                     post_data = json.loads(line)
                     processed_post = parse_post_data(post_data, username)
                     posts.append(processed_post)
-                except json.JSONDecodeError:
+                    
+                    # 최신 타임스탬프 추적
+                    if processed_post.get('created_at'):
+                        if not latest_timestamp or processed_post['created_at'] > latest_timestamp:
+                            latest_timestamp = processed_post['created_at']
+                            
+                except json.JSONDecodeError as e:
+                    print(f"⚠️ JSON 파싱 실패: {line[:50]}... - {e}")
+                    invalid_posts += 1
                     continue
         
-        print(f"✅ {username}: {len(posts)}개 포스트 수집")
+        # 4. 처리 결과 모니터링에 기록
+        total_lines = len([line for line in output.strip().split('\n') if line.strip()])
+        monitor.log_data_processing(
+            fetched=total_lines,
+            processed=len(posts),
+            invalid=invalid_posts
+        )
+        
+        if len(posts) == 0:
+            monitor.set_warning(f"{username}: 최근 1시간 내 새 포스트 없음")
+        
+        print(f"✅ {username}: {len(posts)}개 포스트 수집 완료")
         context['ti'].xcom_push(key=f'{username}_posts', value=posts)
+        
+        # 5. 모니터링 완료
+        monitor.finalize_and_save(latest_timestamp)
         return len(posts)
         
     except Exception as e:
+        # 6. 실패 시 에러 기록
+        monitor.set_error(f"{username} 수집 실패: {str(e)}")
+        monitor.finalize_and_save()
+        
         print(f"❌ {username} 수집 실패: {e}")
         context['ti'].xcom_push(key=f'{username}_posts', value=[])
-        return 0
+        raise
 
 def store_posts_to_db(**context):
-    """수집된 포스트를 DB에 저장"""
-    hook = PostgresHook(postgres_conn_id='postgres_default')
+    """✅ 모니터링이 적용된 포스트 DB 저장"""
     
-    accounts = ['realDonaldTrump', 'WhiteHouse', 'DonaldJTrumpJr']
-    total_success = 0
-    total_error = 0
+    # 1. 모니터 생성
+    monitor = create_monitor(context)
     
-    for username in accounts:
-        posts = context['ti'].xcom_pull(key=f'{username}_posts') or []
+    try:
+        hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        for post in posts:
-            try:
-                hook.run(UPSERT_POSTS_SQL, parameters=post)
-                total_success += 1
-            except Exception as e:
-                print(f"❌ {username} 포스트 저장 실패: {post.get('id', 'Unknown')} - {e}")
-                total_error += 1
-    
-    print(f"✅ 저장 완료: {total_success}개 성공, {total_error}개 실패")
-    return total_success
+        accounts = ['realDonaldTrump', 'WhiteHouse', 'DonaldJTrumpJr']
+        total_posts = 0
+        total_success = 0
+        total_error = 0
+        latest_timestamp = None
+        
+        # 2. 각 계정의 포스트 처리
+        for username in accounts:
+            posts = context['ti'].xcom_pull(key=f'{username}_posts') or []
+            total_posts += len(posts)
+            
+            for post in posts:
+                try:
+                    hook.run(UPSERT_POSTS_SQL, parameters=post)
+                    total_success += 1
+                    
+                    # 최신 타임스탬프 추적
+                    if post.get('created_at'):
+                        if not latest_timestamp or post['created_at'] > latest_timestamp:
+                            latest_timestamp = post['created_at']
+                            
+                except Exception as e:
+                    print(f"❌ {username} 포스트 저장 실패: {post.get('id', 'Unknown')} - {e}")
+                    total_error += 1
+        
+        # 3. 저장 결과 모니터링에 기록
+        monitor.log_data_processing(
+            processed=total_posts,
+            inserted=total_success,
+            skipped=total_error
+        )
+        
+        if total_error > 0:
+            monitor.set_warning(f"{total_error}개 포스트 저장 실패")
+        
+        if total_success == 0 and total_posts > 0:
+            monitor.set_error("모든 포스트 저장 실패")
+        elif total_success == 0:
+            monitor.set_warning("저장할 포스트 없음")
+        
+        print(f"✅ 저장 완료: {total_success}개 성공, {total_error}개 실패")
+        
+        # 4. 모니터링 완료
+        monitor.finalize_and_save(latest_timestamp)
+        return total_success
+        
+    except Exception as e:
+        # 5. 실패 시 에러 기록
+        monitor.set_error(f"DB 저장 실패: {str(e)}")
+        monitor.finalize_and_save()
+        raise
+
+# ✅ 개별 계정 수집 함수들 (모니터링 적용)
+def fetch_trump_posts(**context):
+    """트럼프 포스트 수집 (모니터링 포함)"""
+    return fetch_posts_for_account('realDonaldTrump', **context)
+
+def fetch_whitehouse_posts(**context):
+    """백악관 포스트 수집 (모니터링 포함)"""
+    return fetch_posts_for_account('WhiteHouse', **context)
+
+def fetch_jr_posts(**context):
+    """도널드 트럼프 주니어 포스트 수집 (모니터링 포함)"""
+    return fetch_posts_for_account('DonaldJTrumpJr', **context)
 
 # DAG 정의
 with DAG(
-    dag_id='ingest_truth_social_posts_k8s',
+    dag_id='ingest_truth_social_posts_k8s',  # ✅ 새 이름
     default_args=default_args,
     schedule_interval='0 */1 * * *',  # 1시간마다
     catchup=False,
-    description='트럼프, 백악관, DonaldJTrumpJr Truth Social 포스트 수집',
+    description='트럼프, 백악관, DonaldJTrumpJr Truth Social 포스트 수집 (모니터링 포함)',
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['truth_social', 'posts', 'realtime', 'k8s'],
+    tags=['truth_social', 'posts', 'realtime', 'monitoring', 'k8s'],
 ) as dag:
     
     # 테이블 생성
@@ -197,29 +288,26 @@ with DAG(
         sql='create_truth_social_posts.sql',
     )
     
-    # 각 계정별 포스트 수집 (병렬 실행)
+    # ✅ 각 계정별 포스트 수집 (모니터링 적용, 병렬 실행)
     fetch_trump = PythonOperator(
         task_id='fetch_trump_posts',
-        python_callable=fetch_posts_for_account,
-        op_kwargs={'username': 'realDonaldTrump'},
+        python_callable=fetch_trump_posts,  # 모니터링 적용된 함수
     )
     
     fetch_whitehouse = PythonOperator(
         task_id='fetch_whitehouse_posts',
-        python_callable=fetch_posts_for_account,
-        op_kwargs={'username': 'WhiteHouse'},
+        python_callable=fetch_whitehouse_posts,  # 모니터링 적용된 함수
     )
     
     fetch_jr = PythonOperator(
         task_id='fetch_jr_posts',
-        python_callable=fetch_posts_for_account,
-        op_kwargs={'username': 'DonaldJTrumpJr'},
+        python_callable=fetch_jr_posts,  # 모니터링 적용된 함수
     )
     
-    # DB 저장
+    # ✅ DB 저장 (모니터링 적용)
     store_posts = PythonOperator(
         task_id='store_posts_to_db',
-        python_callable=store_posts_to_db,
+        python_callable=store_posts_to_db,  # 모니터링 적용된 함수
     )
     
     # Task 의존성
