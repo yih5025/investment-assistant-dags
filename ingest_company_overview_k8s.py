@@ -137,8 +137,8 @@ def fetch_company_overview_data(**context):
     
     # API 키 설정 (2개 번갈아 사용)
     api_keys = [
-        Variable.get('ALPHA_VANTAGE_API_KEY'),
-        Variable.get('ALPHA_VANTAGE_API_KEY_2')  # 두 번째 키
+        Variable.get('ALPHA_VANTAGE_API_KEY_3'),
+        Variable.get('ALPHA_VANTAGE_API_KEY_4')  # 두 번째 키
     ]
     
     for key in api_keys:
