@@ -1,5 +1,4 @@
 -- sql/upsert_company_overview.sql
--- Company Overview 데이터 UPSERT (삽입/업데이트)
 
 INSERT INTO company_overview (
     batch_id,
@@ -10,26 +9,11 @@ INSERT INTO company_overview (
     profit_margin, operating_margin_ttm, return_on_assets_ttm, return_on_equity_ttm,
     revenue_ttm, gross_profit_ttm, diluted_eps_ttm,
     quarterly_earnings_growth_yoy, quarterly_revenue_growth_yoy,
-    analyst_target_price = EXCLUDED.analyst_target_price,
-    trailing_pe = EXCLUDED.trailing_pe,
-    forward_pe = EXCLUDED.forward_pe,
-    price_to_sales_ratio_ttm = EXCLUDED.price_to_sales_ratio_ttm,
-    price_to_book_ratio = EXCLUDED.price_to_book_ratio,
-    ev_to_revenue = EXCLUDED.ev_to_revenue,
-    ev_to_ebitda = EXCLUDED.ev_to_ebitda,
-    beta = EXCLUDED.beta,
-    week_52_high = EXCLUDED.week_52_high,
-    week_52_low = EXCLUDED.week_52_low,
-    day_50_moving_average = EXCLUDED.day_50_moving_average,
-    day_200_moving_average = EXCLUDED.day_200_moving_average,
-    shares_outstanding = EXCLUDED.shares_outstanding,
-    dividend_date = EXCLUDED.dividend_date,
-    ex_dividend_date = EXCLUDED.ex_dividend_date,
-    updated_at = NOW();_price, trailing_pe, forward_pe, price_to_sales_ratio_ttm,
+    analyst_target_price, trailing_pe, forward_pe, price_to_sales_ratio_ttm,
     price_to_book_ratio, ev_to_revenue, ev_to_ebitda, beta,
     week_52_high, week_52_low, day_50_moving_average, day_200_moving_average,
     shares_outstanding, dividend_date, ex_dividend_date,
-    created_at, updated_at
+    created_at
 ) VALUES (
     %(batch_id)s,
     %(symbol)s, %(asset_type)s, %(name)s, %(description)s, %(cik)s, %(exchange)s, 
@@ -43,7 +27,7 @@ INSERT INTO company_overview (
     %(price_to_book_ratio)s, %(ev_to_revenue)s, %(ev_to_ebitda)s, %(beta)s,
     %(week_52_high)s, %(week_52_low)s, %(day_50_moving_average)s, %(day_200_moving_average)s,
     %(shares_outstanding)s, %(dividend_date)s, %(ex_dividend_date)s,
-    NOW(), NOW()
+    NOW()
 )
 ON CONFLICT (batch_id, symbol)
 DO UPDATE SET
@@ -78,4 +62,18 @@ DO UPDATE SET
     diluted_eps_ttm = EXCLUDED.diluted_eps_ttm,
     quarterly_earnings_growth_yoy = EXCLUDED.quarterly_earnings_growth_yoy,
     quarterly_revenue_growth_yoy = EXCLUDED.quarterly_revenue_growth_yoy,
-    analyst_target
+    analyst_target_price = EXCLUDED.analyst_target_price,
+    trailing_pe = EXCLUDED.trailing_pe,
+    forward_pe = EXCLUDED.forward_pe,
+    price_to_sales_ratio_ttm = EXCLUDED.price_to_sales_ratio_ttm,
+    price_to_book_ratio = EXCLUDED.price_to_book_ratio,
+    ev_to_revenue = EXCLUDED.ev_to_revenue,
+    ev_to_ebitda = EXCLUDED.ev_to_ebitda,
+    beta = EXCLUDED.beta,
+    week_52_high = EXCLUDED.week_52_high,
+    week_52_low = EXCLUDED.week_52_low,
+    day_50_moving_average = EXCLUDED.day_50_moving_average,
+    day_200_moving_average = EXCLUDED.day_200_moving_average,
+    shares_outstanding = EXCLUDED.shares_outstanding,
+    dividend_date = EXCLUDED.dividend_date,
+    ex_dividend_date = EXCLUDED.ex_dividend_date;
