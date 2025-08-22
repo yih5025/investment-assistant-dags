@@ -81,7 +81,6 @@ CREATE INDEX IF NOT EXISTS idx_company_overview_industry ON company_overview(ind
 CREATE INDEX IF NOT EXISTS idx_company_overview_country ON company_overview(country);
 CREATE INDEX IF NOT EXISTS idx_company_overview_market_cap ON company_overview(market_capitalization);
 CREATE INDEX IF NOT EXISTS idx_company_overview_pe_ratio ON company_overview(pe_ratio);
-CREATE INDEX IF NOT EXISTS idx_company_overview_updated ON company_overview(updated_at);
 
 -- 코멘트 추가
 COMMENT ON TABLE company_overview IS 'SP500 기업 상세 정보 (Alpha Vantage Company Overview API)';
@@ -94,4 +93,3 @@ COMMENT ON COLUMN company_overview.pe_ratio IS 'P/E 비율';
 COMMENT ON COLUMN company_overview.dividend_yield IS '배당 수익률';
 COMMENT ON COLUMN company_overview.beta IS '베타 (시장 대비 변동성)';
 COMMENT ON COLUMN company_overview.created_at IS '레코드 생성 시간';
-COMMENT ON COLUMN company_overview.updated_at IS '레코드 업데이트 시간';
