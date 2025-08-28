@@ -44,7 +44,7 @@ with DAG(
     def fetch_and_upsert_balance_sheet(**context):
         """SP500 기업 배치 재무제표 데이터 수집 및 저장"""
         hook = PostgresHook(postgres_conn_id='postgres_default')
-        api_key = Variable.get('ALPHA_VANTAGE_API_KEY')
+        api_key = Variable.get('ALPHA_VANTAGE_API_KEY_1')
         
         # 🔧 동적으로 총 기업 수 조회
         total_companies_result = hook.get_first("SELECT COUNT(*) FROM sp500_companies")

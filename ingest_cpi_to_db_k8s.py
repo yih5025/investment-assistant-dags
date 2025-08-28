@@ -26,7 +26,7 @@ default_args = {
 
 def fetch_cpi_data(**context):
     """소비자물가지수 데이터 수집"""
-    api_key = Variable.get('ALPHA_VANTAGE_API_KEY')
+    api_key = Variable.get('ALPHA_VANTAGE_API_KEY_1')
     url = 'https://www.alphavantage.co/query'
     
     params = {

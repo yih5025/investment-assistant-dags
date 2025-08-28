@@ -29,7 +29,7 @@ default_args = {
 
 def fetch_federal_funds_rate(**context):
     """연방기금금리 데이터 수집"""
-    api_key = Variable.get('ALPHA_VANTAGE_API_KEY')
+    api_key = Variable.get('ALPHA_VANTAGE_API_KEY_1')
     url = 'https://www.alphavantage.co/query'
     
     params = {

@@ -30,8 +30,8 @@ default_args = {
 def verify_api_keys():
     """API 키 유효성 검증 및 상태 확인"""
     api_keys = [
-        Variable.get('ALPHA_VANTAGE_API_KEY_3', default_var=None),
-        Variable.get('ALPHA_VANTAGE_API_KEY_4', default_var=None)
+        Variable.get('ALPHA_VANTAGE_API_KEY_5', default_var=None),
+        Variable.get('ALPHA_VANTAGE_API_KEY_6', default_var=None)
     ]
     
     valid_keys = []

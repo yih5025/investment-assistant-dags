@@ -46,7 +46,7 @@ with DAG(
     def fetch_calendar(**context):
         """Alpha Vantage API에서 실적 캘린더 데이터 수집"""
         # API 키 가져오기
-        api_key = Variable.get('ALPHA_VANTAGE_API_KEY')
+        api_key = Variable.get('ALPHA_VANTAGE_API_KEY_1')
         
         print(f"🔑 API 키 확인: {api_key[:8]}...")
         
