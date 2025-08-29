@@ -31,7 +31,7 @@ def fetch_top_gainers_data(**context):
     Alpha Vantage API에서 Top Gainers/Losers/Most Active 데이터 수집
     """
     # API 키 가져오기
-    api_key = Variable.get('ALPHA_VANTAGE_API_KEY_1')
+    api_key = Variable.get('ALPHA_VANTAGE_API_KEY_3')
     if not api_key:
         raise ValueError("🔑 ALPHA_VANTAGE_API_KEY가 설정되지 않았습니다")
     
