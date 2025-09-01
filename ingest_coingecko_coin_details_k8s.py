@@ -29,41 +29,37 @@ default_args = {
 
 def get_target_coin_ids(**context):
     """
-    처리할 코인 ID 목록 조회 (상위 100개 + 빗썸 상장 코인)
+    처리할 코인 ID 목록 조회 (시가총액 순서대로 전체)
     """
     hook = PostgresHook(postgres_conn_id='postgres_default')
     
-    # 상위 100개 코인 + 빗썸 상장 코인 (중복 제거)
+    # 시가총액 순서대로 전체 코인 조회 (제한 없음)
     query = """
-    WITH target_coins AS (
-        -- 상위 100개 코인
-        SELECT coingecko_id, symbol, name, market_cap_rank, 'top100' as source
-        FROM coingecko_id_mapping 
-        WHERE market_cap_rank <= 100
-        
-        UNION
-        
-        -- 빗썸 상장 코인 (심볼 매칭)
-        SELECT DISTINCT 
-            cg.coingecko_id, 
-            cg.symbol, 
-            cg.name, 
-            cg.market_cap_rank,
-            'bithumb' as source
-        FROM coingecko_id_mapping cg
-        INNER JOIN market_code_bithumb mb ON UPPER(cg.symbol) = UPPER(REPLACE(mb.market_code, 'KRW-', ''))
-        WHERE cg.market_cap_rank <= 1000  -- 상위 1000개 내에서만
-    )
     SELECT coingecko_id, symbol, name, market_cap_rank
-    FROM target_coins
-    ORDER BY market_cap_rank NULLS LAST, coingecko_id
-    LIMIT 200;  -- 최대 200개
+    FROM coingecko_id_mapping
+    ORDER BY 
+        CASE WHEN market_cap_rank IS NULL THEN 1 ELSE 0 END,  -- NULL을 마지막으로
+        market_cap_rank ASC,
+        coingecko_id ASC;
     """
     
     results = hook.get_records(query)
     coin_list = [{'id': row[0], 'symbol': row[1], 'name': row[2], 'rank': row[3]} for row in results]
     
-    print(f"🎯 처리할 코인 {len(coin_list)}개 조회 완료")
+    print(f"🎯 처리할 코인 {len(coin_list)}개 조회 완료 (시가총액 순서)")
+    
+    # 상위 10개와 하위 10개 코인 로그 출력
+    if len(coin_list) > 0:
+        print("📊 상위 10개 코인:")
+        for i, coin in enumerate(coin_list[:10], 1):
+            rank = coin['rank'] if coin['rank'] else 'N/A'
+            print(f"  {i}. {coin['symbol']} ({coin['name']}) - 순위: {rank}")
+        
+        if len(coin_list) > 20:
+            print("📊 하위 10개 코인:")
+            for i, coin in enumerate(coin_list[-10:], len(coin_list)-9):
+                rank = coin['rank'] if coin['rank'] else 'N/A'
+                print(f"  {i}. {coin['symbol']} ({coin['name']}) - 순위: {rank}")
     
     # XCom에 저장
     context['ti'].xcom_push(key='coin_list', value=coin_list)
@@ -71,13 +67,13 @@ def get_target_coin_ids(**context):
 
 def fetch_coin_details_batch(**context):
     """
-    코인 상세 정보 배치 수집 (Rate Limit 고려)
+    코인 상세 정보 배치 수집 (Rate Limit 고려, 전체 코인 처리)
     """
     # XCom에서 코인 목록 가져오기
     coin_list = context['ti'].xcom_pull(task_ids='get_target_coin_ids', key='coin_list')
     
     if not coin_list:
-        raise ValueError("❌ 처리할 코인 목록이 없습니다")
+        raise ValueError("처리할 코인 목록이 없습니다")
     
     API_BASE_URL = "https://api.coingecko.com/api/v3/coins"
     BATCH_SIZE = 10  # Rate Limit 고려
@@ -98,13 +94,19 @@ def fetch_coin_details_batch(**context):
         print(f"⚠️ API 키가 설정되지 않았습니다. Rate limit이 적용될 수 있습니다")
     
     all_results = []
+    total_batches = (len(coin_list) + BATCH_SIZE - 1) // BATCH_SIZE
+    
+    print(f"전체 {len(coin_list)}개 코인을 {total_batches}개 배치로 처리")
     
     # 배치별 처리
     for i in range(0, len(coin_list), BATCH_SIZE):
         batch = coin_list[i:i + BATCH_SIZE]
         batch_num = (i // BATCH_SIZE) + 1
         
-        print(f"📦 배치 {batch_num} 처리 중 ({len(batch)}개 코인)")
+        print(f"배치 {batch_num}/{total_batches} 처리 중 ({len(batch)}개 코인)")
+        
+        batch_success = 0
+        batch_failed = 0
         
         for coin in batch:
             coin_id = coin['id']
@@ -136,12 +138,12 @@ def fetch_coin_details_batch(**context):
                             'status': 'success',
                             'data': coin_data
                         })
-                        print(f"✅ {coin_id} 수집 성공")
+                        batch_success += 1
                         break
                         
                     elif response.status_code == 429:  # Rate limit
                         wait_time = 60 * (attempt + 1)
-                        print(f"⚠️ Rate limit 도달. {wait_time}초 대기")
+                        print(f"Rate limit 도달. {wait_time}초 대기")
                         if attempt < 2:
                             time.sleep(wait_time)
                             continue
@@ -152,14 +154,14 @@ def fetch_coin_details_batch(**context):
                             'status': 'not_found',
                             'error': f'Coin {coin_id} not found'
                         })
-                        print(f"⚠️ {coin_id} 존재하지 않음")
+                        batch_failed += 1
                         break
                         
                     else:
                         raise ValueError(f"API 오류: {response.status_code}")
                         
                 except requests.RequestException as e:
-                    print(f"❌ {coin_id} 요청 실패 (시도 {attempt + 1}/3): {str(e)}")
+                    print(f"{coin_id} 요청 실패 (시도 {attempt + 1}/3): {str(e)}")
                     if attempt < 2:
                         time.sleep(2)
                         continue
@@ -170,20 +172,23 @@ def fetch_coin_details_batch(**context):
                     'status': 'failed',
                     'error': 'All retries failed'
                 })
+                batch_failed += 1
             
             # Rate Limit 방지
             time.sleep(1)
         
-        # 배치 간 대기
+        print(f"배치 {batch_num} 완료: 성공 {batch_success}개, 실패 {batch_failed}개")
+        
+        # 배치 간 대기 (Rate Limit 방지)
         if i + BATCH_SIZE < len(coin_list):
-            print(f"⏳ 배치 간 대기 (30초)")
+            print(f"배치 간 대기 (30초)")
             time.sleep(30)
     
     # 결과 통계
     success_count = len([r for r in all_results if r['status'] == 'success'])
     failed_count = len([r for r in all_results if r['status'] in ['failed', 'not_found']])
     
-    print(f"📊 배치 수집 완료: 성공 {success_count}개, 실패 {failed_count}개")
+    print(f"전체 수집 완료: 성공 {success_count}개, 실패 {failed_count}개")
     
     # XCom에 저장
     context['ti'].xcom_push(key='batch_results', value=all_results)

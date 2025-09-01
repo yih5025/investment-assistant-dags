@@ -22,27 +22,18 @@ with open(os.path.join(DAGS_SQL_DIR, "upsert_coingecko_id_mapping.sql"), encodin
 default_args = {
     'owner': 'investment_assistant',
     'start_date': datetime(2025, 1, 1),
-    'retries': 2,
+    'retries': None,
     'retry_delay': timedelta(minutes=5),
 }
 
 def fetch_coingecko_markets(**context):
     """
-    CoinGecko Markets API에서 상위 200개 코인 매핑 데이터 수집
+    CoinGecko Markets API에서 전체 코인 매핑 데이터 수집 (페이지네이션)
     """
     API_URL = "https://api.coingecko.com/api/v3/coins/markets"
     
     # Airflow Variable에서 API 키 가져오기
     api_key = Variable.get("coingecko_api_key_1", default_var=None)
-    
-    params = {
-        'vs_currency': 'usd',
-        'order': 'market_cap_desc',
-        'per_page': 250,  # 여유분 포함
-        'page': 1,
-        'sparkline': 'false',
-        'price_change_percentage': '24h'
-    }
     
     # 헤더 설정 (API 키 포함)
     headers = {
@@ -56,52 +47,94 @@ def fetch_coingecko_markets(**context):
     else:
         print(f"⚠️ API 키가 설정되지 않았습니다. Rate limit이 적용될 수 있습니다")
     
-    print(f"🚀 CoinGecko Markets API 요청 시작: {API_URL}")
+    all_coins = []
+    page = 1
+    max_pages = 20  # 최대 20페이지 (5000개 코인) 제한
     
-    # 재시도 로직
-    for attempt in range(3):
-        try:
-            response = requests.get(
-                API_URL,
-                params=params,
-                timeout=30,
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                print(f"✅ 데이터 수집 완료: {len(data)}개 코인")
+    print(f"🚀 CoinGecko Markets API 전체 데이터 수집 시작")
+    
+    while page <= max_pages:
+        params = {
+            'vs_currency': 'usd',
+            'order': 'market_cap_desc',
+            'per_page': 250,  # API 최대치
+            'page': page,
+            'sparkline': 'false',
+            'price_change_percentage': '24h'
+        }
+        
+        print(f"📄 페이지 {page} 처리 중...")
+        
+        # 재시도 로직
+        success = False
+        for attempt in range(3):
+            try:
+                response = requests.get(
+                    API_URL,
+                    params=params,
+                    timeout=30,
+                    headers=headers
+                )
                 
-                # 상위 200개만 반환
-                filtered_data = data[:200]
-                context['ti'].xcom_push(key='market_data', value=filtered_data)
-                
-                return {
-                    'total_coins': len(filtered_data),
-                    'api_response_size': len(data),
-                    'status': 'success'
-                }
-                
-            elif response.status_code == 429:  # Rate limit
-                wait_time = 60 * (attempt + 1)
-                print(f"⚠️ Rate limit 도달. {wait_time}초 대기 후 재시도")
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # 데이터가 없으면 종료
+                    if not data or len(data) == 0:
+                        print(f"📄 페이지 {page}: 데이터 없음, 수집 완료")
+                        break
+                    
+                    all_coins.extend(data)
+                    print(f"📄 페이지 {page}: {len(data)}개 코인 수집 (누적: {len(all_coins)}개)")
+                    success = True
+                    break
+                    
+                elif response.status_code == 429:  # Rate limit
+                    wait_time = 60 * (attempt + 1)
+                    print(f"⚠️ Rate limit 도달. {wait_time}초 대기 후 재시도")
+                    if attempt < 2:
+                        import time
+                        time.sleep(wait_time)
+                        continue
+                    
+                else:
+                    print(f"❌ API 요청 실패: {response.status_code} - {response.text}")
+                    if attempt < 2:
+                        import time
+                        time.sleep(5)
+                        continue
+                    else:
+                        raise ValueError(f"API 요청 실패: {response.status_code}")
+                    
+            except requests.RequestException as e:
+                print(f"❌ 요청 중 오류 발생 (시도 {attempt + 1}/3): {str(e)}")
                 if attempt < 2:
                     import time
-                    time.sleep(wait_time)
+                    time.sleep(5)
                     continue
-                
-            else:
-                raise ValueError(f"❌ API 요청 실패: {response.status_code} - {response.text}")
-                
-        except requests.RequestException as e:
-            print(f"❌ 요청 중 오류 발생 (시도 {attempt + 1}/3): {str(e)}")
-            if attempt < 2:
-                import time
-                time.sleep(2)
-                continue
-            raise e
+                raise e
+        
+        if not success:
+            print(f"❌ 페이지 {page} 처리 실패, 수집 중단")
+            break
+            
+        # 다음 페이지로
+        page += 1
+        
+        # API Rate Limit 방지를 위한 딜레이
+        import time
+        time.sleep(2)
     
-    raise ValueError("❌ 모든 재시도 실패")
+    print(f"✅ 전체 데이터 수집 완료: {len(all_coins)}개 코인")
+    
+    # XCom에 저장
+    context['ti'].xcom_push(key='market_data', value=all_coins)
+    
+    return {
+        'total_coins': len(all_coins),
+        'pages_processed': page - 1,
+        'status': 'success'
+    }
 
 def process_and_store_mapping_data(**context):
     """
