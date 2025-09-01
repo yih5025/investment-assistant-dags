@@ -33,7 +33,7 @@ def fetch_coingecko_markets(**context):
     API_URL = "https://api.coingecko.com/api/v3/coins/markets"
     
     # Airflow Variable에서 API 키 가져오기
-    api_key = Variable.get("coingecko_api_key_1", default_var=None)
+    api_key = Variable.get("COINGECKO_API_KEY_1", default_var=None)
     
     # 헤더 설정 (API 키 포함)
     headers = {

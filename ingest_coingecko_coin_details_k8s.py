@@ -79,7 +79,7 @@ def fetch_coin_details_batch(**context):
     BATCH_SIZE = 10  # Rate Limit 고려
     
     # Airflow Variable에서 API 키 가져오기
-    api_key = Variable.get("coingecko_api_key_1", default_var=None)
+    api_key = Variable.get("COINGECKO_API_KEY_1", default_var=None)
     
     # 헤더 설정 (API 키 포함)
     headers = {
