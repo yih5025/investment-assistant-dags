@@ -1,3 +1,4 @@
+from airflow.models import Variable
 from datetime import datetime, timedelta
 import os
 import requests
@@ -9,7 +10,6 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.models import Variable
 
 # 표준 경로 설정
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
@@ -29,69 +29,98 @@ default_args = {
 
 def get_target_coin_ids(**context):
     """
-    처리할 코인 ID 목록 조회 (시가총액 순서대로 전체)
+    처리할 코인 ID 목록 조회 (점진적 확장 전략)
     """
     hook = PostgresHook(postgres_conn_id='postgres_default')
     
-    # 시가총액 순서대로 전체 코인 조회 (제한 없음)
+    # 설정
+    DAILY_TARGET_COINS = 200  # 하루 처리할 코인 수
+    MAX_TARGET_COINS = 1000   # 최대 목표 코인 수
+    
+    # 이미 coin details 데이터를 수집한 코인들 확인
+    processed_coins = hook.get_first("""
+        SELECT COUNT(DISTINCT coingecko_id) 
+        FROM coingecko_coin_details 
+        WHERE updated_at >= CURRENT_DATE - INTERVAL '30 days';
+    """)
+    
+    processed_count = processed_coins[0] if processed_coins else 0
+    
+    print(f"최근 30일 내 처리된 코인: {processed_count}개")
+    
+    # 목표 달성 여부 확인
+    if processed_count >= MAX_TARGET_COINS:
+        print(f"목표 달성 완료 ({processed_count}/{MAX_TARGET_COINS}개). DAG 종료.")
+        context['ti'].xcom_push(key='coin_list', value=[])
+        return {'status': 'completed', 'processed_count': processed_count}
+    
+    # 미처리 코인 목록 조회 (시총 순)
     query = """
+    WITH unprocessed_coins AS (
+        SELECT 
+            cg.coingecko_id, 
+            cg.symbol, 
+            cg.name, 
+            cg.market_cap_rank
+        FROM coingecko_id_mapping cg
+        LEFT JOIN (
+            SELECT DISTINCT coingecko_id 
+            FROM coingecko_coin_details 
+            WHERE updated_at >= CURRENT_DATE - INTERVAL '30 days'
+        ) processed ON cg.coingecko_id = processed.coingecko_id
+        WHERE processed.coingecko_id IS NULL  -- 미처리만
+        AND cg.market_cap_rank IS NOT NULL   -- 순위가 있는 것만
+        AND cg.market_cap_rank <= %s         -- 상위 N개만
+    )
     SELECT coingecko_id, symbol, name, market_cap_rank
-    FROM coingecko_id_mapping
-    ORDER BY 
-        CASE WHEN market_cap_rank IS NULL THEN 1 ELSE 0 END,  -- NULL을 마지막으로
-        market_cap_rank ASC,
-        coingecko_id ASC;
+    FROM unprocessed_coins
+    ORDER BY market_cap_rank ASC
+    LIMIT %s;
     """
     
-    results = hook.get_records(query)
+    # 남은 목표량에 따라 처리량 결정
+    remaining_target = min(MAX_TARGET_COINS - processed_count, DAILY_TARGET_COINS)
+    
+    results = hook.get_records(query, parameters=(MAX_TARGET_COINS, remaining_target))
     coin_list = [{'id': row[0], 'symbol': row[1], 'name': row[2], 'rank': row[3]} for row in results]
     
-    print(f"🎯 처리할 코인 {len(coin_list)}개 조회 완료 (시가총액 순서)")
+    print(f"오늘 처리할 코인: {len(coin_list)}개")
+    print(f"진행률: {processed_count + len(coin_list)}/{MAX_TARGET_COINS}개 ({((processed_count + len(coin_list))/MAX_TARGET_COINS*100):.1f}%)")
     
-    # 상위 10개와 하위 10개 코인 로그 출력
-    if len(coin_list) > 0:
-        print("📊 상위 10개 코인:")
-        for i, coin in enumerate(coin_list[:10], 1):
-            rank = coin['rank'] if coin['rank'] else 'N/A'
-            print(f"  {i}. {coin['symbol']} ({coin['name']}) - 순위: {rank}")
-        
-        if len(coin_list) > 20:
-            print("📊 하위 10개 코인:")
-            for i, coin in enumerate(coin_list[-10:], len(coin_list)-9):
-                rank = coin['rank'] if coin['rank'] else 'N/A'
-                print(f"  {i}. {coin['symbol']} ({coin['name']}) - 순위: {rank}")
+    # 처리할 코인이 있는 경우 상위 5개 로그 출력
+    if coin_list:
+        print("오늘 처리할 상위 5개 코인:")
+        for coin in coin_list[:5]:
+            print(f"  순위 {coin['rank']}: {coin['symbol']} ({coin['name']})")
     
     # XCom에 저장
     context['ti'].xcom_push(key='coin_list', value=coin_list)
-    return {'total_coins': len(coin_list)}
+    return {
+        'status': 'processing',
+        'target_coins': len(coin_list),
+        'processed_count': processed_count,
+        'progress_percentage': round((processed_count + len(coin_list))/MAX_TARGET_COINS*100, 1)
+    }
 
 def fetch_coin_details_batch(**context):
     """
-    코인 상세 정보 배치 수집 (Rate Limit 고려, 전체 코인 처리)
+    코인 상세 정보 배치 수집 (Rate Limit 고려, API 키 적용)
     """
     # XCom에서 코인 목록 가져오기
     coin_list = context['ti'].xcom_pull(task_ids='get_target_coin_ids', key='coin_list')
     
     if not coin_list:
-        raise ValueError("처리할 코인 목록이 없습니다")
+        print("처리할 코인이 없습니다.")
+        context['ti'].xcom_push(key='batch_results', value=[])
+        return {'total_processed': 0, 'success_count': 0, 'failed_count': 0}
+    
+    # API 키 가져오기
+    api_key = Variable.get('COINGECKO_API_KEY_1')
+    if not api_key:
+        raise ValueError("COINGECKO_API_KEY_1이 설정되지 않았습니다")
     
     API_BASE_URL = "https://api.coingecko.com/api/v3/coins"
-    BATCH_SIZE = 10  # Rate Limit 고려
-    
-    # Airflow Variable에서 API 키 가져오기
-    api_key = Variable.get("COINGECKO_API_KEY_1", default_var=None)
-    
-    # 헤더 설정 (API 키 포함)
-    headers = {
-        'User-Agent': 'Investment-Assistant/1.0',
-        'Accept': 'application/json'
-    }
-    
-    if api_key:
-        headers['x-cg-demo-api-key'] = api_key
-        print(f"🔑 API 키가 설정되었습니다")
-    else:
-        print(f"⚠️ API 키가 설정되지 않았습니다. Rate limit이 적용될 수 있습니다")
+    BATCH_SIZE = 20  # Tickers보다 큰 배치 (단일 API 호출이므로)
     
     all_results = []
     total_batches = (len(coin_list) + BATCH_SIZE - 1) // BATCH_SIZE
@@ -124,12 +153,12 @@ def fetch_coin_details_batch(**context):
                         'sparkline': 'false'
                     }
                     
-                    response = requests.get(
-                        url,
-                        params=params,
-                        timeout=30,
-                        headers=headers
-                    )
+                    headers = {
+                        "accept": "application/json",
+                        "x-cg-demo-api-key": api_key
+                    }
+                    
+                    response = requests.get(url, params=params, headers=headers, timeout=30)
                     
                     if response.status_code == 200:
                         coin_data = response.json()
@@ -175,14 +204,14 @@ def fetch_coin_details_batch(**context):
                 batch_failed += 1
             
             # Rate Limit 방지
-            time.sleep(1)
+            time.sleep(2)  # Tickers보다 긴 대기 시간
         
         print(f"배치 {batch_num} 완료: 성공 {batch_success}개, 실패 {batch_failed}개")
         
         # 배치 간 대기 (Rate Limit 방지)
         if i + BATCH_SIZE < len(coin_list):
-            print(f"배치 간 대기 (30초)")
-            time.sleep(30)
+            print(f"배치 간 대기 (60초)")
+            time.sleep(60)
     
     # 결과 통계
     success_count = len([r for r in all_results if r['status'] == 'success'])
