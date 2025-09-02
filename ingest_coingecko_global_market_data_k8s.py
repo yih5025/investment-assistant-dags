@@ -127,7 +127,8 @@ def process_and_store_global_data(**context):
     # DB 연결
     hook = PostgresHook(postgres_conn_id='postgres_default')
     
-    execution_date = context['execution_date']
+    # execution_date는 deprecated, logical_date 사용
+    execution_date = context['logical_date']
     
     print("Global 암호화폐 데이터 저장 시작")
     
@@ -220,7 +221,7 @@ def process_and_store_global_data(**context):
         
         return {
             'success': True,
-            'execution_time': context['execution_date'].isoformat(),
+            'execution_time': context['logical_date'].isoformat(),
             'records_inserted': 1
         }
         
