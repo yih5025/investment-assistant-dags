@@ -237,7 +237,8 @@ def process_and_store_details(**context):
     batch_results = context['ti'].xcom_pull(task_ids='fetch_coin_details_batch', key='batch_results')
     
     if not batch_results:
-        raise ValueError("❌ 이전 태스크에서 데이터를 받지 못했습니다")
+        print("이전 태스크에서 데이터를 받지 못했습니다")
+        return {'success_count': 0, 'error_count': 0}
     
     # DB 연결
     hook = PostgresHook(postgres_conn_id='postgres_default')
@@ -245,162 +246,180 @@ def process_and_store_details(**context):
     success_count = 0
     error_count = 0
     
-    print(f"🚀 {len(batch_results)}개 코인 데이터 저장 시작")
+    print(f"배치 데이터 저장 시작: {len(batch_results)}개 코인 처리 예정")
     
+    # 안전한 데이터 추출 함수들
+    def safe_get(data, *keys, default=None):
+        """중첩 딕셔너리에서 안전하게 값 추출"""
+        try:
+            current = data
+            for key in keys:
+                if isinstance(current, dict) and key in current:
+                    current = current[key]
+                else:
+                    return default
+            return current
+        except Exception as e:
+            print(f"safe_get 에러: keys={keys}, error={str(e)}")
+            return default
+    
+    def safe_string(value, max_length=None, default=''):
+        """안전하게 문자열로 변환"""
+        if value is None:
+            return default
+        try:
+            str_value = str(value)
+            if max_length and len(str_value) > max_length:
+                return str_value[:max_length]
+            return str_value
+        except Exception as e:
+            print(f"문자열 변환 실패: {str(e)}, 값: {value}")
+            return default
+    
+    def safe_decimal(value, default=None):
+        """안전하게 Decimal로 변환"""
+        if value is None:
+            return default
+        try:
+            return Decimal(str(value))
+        except (TypeError, ValueError, decimal.InvalidOperation) as e:
+            print(f"Decimal 변환 실패: {str(e)}, 값: {value}")
+            return default
+    
+    def safe_int(value, default=None):
+        """안전하게 int로 변환"""
+        if value is None:
+            return default
+        try:
+            return int(float(value)) if isinstance(value, str) else int(value)
+        except (TypeError, ValueError) as e:
+            print(f"Int 변환 실패: {str(e)}, 값: {value}")
+            return default
+    
+    def safe_json_dumps(data):
+        """안전하게 JSON 문자열로 변환"""
+        if data is None:
+            return None
+        try:
+            if not isinstance(data, (dict, list)):
+                return None
+            if not data:  # 빈 dict 또는 list
+                return json.dumps(data)
+            return json.dumps(data, ensure_ascii=False, default=str)
+        except (TypeError, ValueError) as e:
+            print(f"JSON 직렬화 실패: {str(e)}, 데이터 타입: {type(data)}")
+            return None
+    
+    def parse_date(date_str):
+        """날짜 문자열 파싱"""
+        if not date_str:
+            return None
+        try:
+            return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        except Exception as e:
+            print(f"날짜 파싱 실패: {str(e)}, 값: {date_str}")
+            return None
+    
+    def extract_first_url(url_list):
+        """URL 리스트에서 첫 번째 유효한 URL 추출"""
+        if not isinstance(url_list, list) or not url_list:
+            return None
+        try:
+            first_url = str(url_list[0])
+            return first_url[:500] if first_url else None
+        except Exception as e:
+            print(f"URL 추출 실패: {str(e)}, 값: {url_list}")
+            return None
+    
+    # 각 코인 데이터 처리
     for result in batch_results:
-        coin_id = result['coin_id']
+        coin_id = result.get('coin_id', 'unknown')
         
-        if result['status'] != 'success':
+        if result.get('status') != 'success':
             error_count += 1
+            print(f"건너뜀: {coin_id} (상태: {result.get('status')})")
             continue
         
         try:
-            coin_data = result['data']
+            coin_data = result.get('data', {})
+            if not isinstance(coin_data, dict):
+                print(f"잘못된 데이터 형식: {coin_id}")
+                error_count += 1
+                continue
             
-            # 복잡한 중첩 데이터 추출 함수들
-            def safe_get(data, *keys, default=None):
-                """중첩 딕셔너리에서 안전하게 값 추출"""
-                try:
-                    current = data
-                    for key in keys:
-                        if isinstance(current, dict) and key in current:
-                            current = current[key]
-                        else:
-                            return default
-                    return current
-                except Exception as e:
-                    print(f"safe_get 실패: keys={keys}, error={str(e)}")
-                    return default
+            # 주요 섹션 안전하게 추출
+            links = coin_data.get('links') or {}
+            market_data = coin_data.get('market_data') or {}
+            community_data = coin_data.get('community_data') or {}
+            developer_data = coin_data.get('developer_data') or {}
+            image = coin_data.get('image') or {}
+            description = coin_data.get('description') or {}
             
-            def parse_date(date_str):
-                """날짜 문자열 파싱"""
-                if date_str:
-                    try:
-                        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                    except:
-                        return None
-                return None
-            
-            def extract_urls(links_dict, key):
-                """링크 딕셔너리에서 첫 번째 URL 추출"""
-                urls = safe_get(links_dict, key, [])
-                return urls[0] if urls and len(urls) > 0 else None
-            
-            # 데이터 추출
-            links = safe_get(coin_data, 'links', {})
-            market_data = safe_get(coin_data, 'market_data', {})
-            community_data = safe_get(coin_data, 'community_data', {})
-            developer_data = safe_get(coin_data, 'developer_data', {})
-            image = safe_get(coin_data, 'image', {})
-            
-            # 안전한 JSON 직렬화 함수
-            def safe_json_dumps(data):
-                """안전하게 JSON 문자열로 변환"""
-                if data is None:
-                    return None
-                try:
-                    # 데이터 타입 확인 및 로깅
-                    print(f"JSON 직렬화 시도: 타입={type(data)}, 데이터={str(data)[:200]}")
-                    
-                    # 딕셔너리나 리스트가 아닌 경우 빈 값으로 처리
-                    if not isinstance(data, (dict, list)):
-                        print(f"JSON 직렬화 대상이 dict/list가 아님: {type(data)}")
-                        return None
-                    
-                    # 빈 데이터 처리
-                    if not data:
-                        return json.dumps(data, ensure_ascii=False)
-                    
-                    return json.dumps(data, ensure_ascii=False, default=str)
-                except (TypeError, ValueError) as e:
-                    print(f"JSON 직렬화 실패: {str(e)}, 데이터 타입: {type(data)}")
-                    print(f"데이터 샘플: {str(data)[:500]}")
-                    return None
-            
-            # 안전한 Decimal 변환 함수
-            def safe_decimal(value, default=None):
-                """안전하게 Decimal로 변환"""
-                if value is None:
-                    return default
-                try:
-                    return Decimal(str(value))
-                except (TypeError, ValueError, decimal.InvalidOperation) as e:
-                    print(f"Decimal 변환 실패: {str(e)}, 값: {value}")
-                    return default
-            
-            # 안전한 int 변환 함수
-            def safe_int(value, default=None):
-                """안전하게 int로 변환"""
-                if value is None:
-                    return default
-                try:
-                    return int(value)
-                except (TypeError, ValueError) as e:
-                    print(f"Int 변환 실패: {str(e)}, 값: {value}")
-                    return default
-
             # 파라미터 준비
             params = {
-                'coingecko_id': coin_data.get('id'),
-                'symbol': coin_data.get('symbol', '').upper(),
-                'name': coin_data.get('name', '')[:200],
-                'web_slug': coin_data.get('web_slug', '')[:200],
+                # 기본 정보
+                'coingecko_id': safe_string(coin_data.get('id')),
+                'symbol': safe_string(coin_data.get('symbol', ''), 20).upper(),
+                'name': safe_string(coin_data.get('name'), 200),
+                'web_slug': safe_string(coin_data.get('web_slug'), 200),
                 
-                # Tab 1 데이터
-                'description_en': safe_get(coin_data, 'description', 'en', '')[:5000],  # TEXT 제한
+                # Tab 1: 개념 설명 데이터
+                'description_en': safe_string(description.get('en'), 5000),
                 'genesis_date': parse_date(coin_data.get('genesis_date')),
-                'country_origin': coin_data.get('country_origin', '')[:100],
+                'country_origin': safe_string(coin_data.get('country_origin'), 100),
                 
-                # Links
-                'homepage_url': extract_urls(links, 'homepage'),
-                'blockchain_site': extract_urls(links, 'blockchain_site'),
-                'twitter_screen_name': links.get('twitter_screen_name', '')[:100],
-                'facebook_username': links.get('facebook_username', '')[:100],
-                'telegram_channel_identifier': links.get('telegram_channel_identifier', '')[:100],
-                'subreddit_url': links.get('subreddit_url', '')[:500],
-                'github_repos': safe_json_dumps(links.get('repos_url', {})) if links.get('repos_url') else None,
+                # 링크 정보
+                'homepage_url': extract_first_url(links.get('homepage')),
+                'blockchain_site': extract_first_url(links.get('blockchain_site')),
+                'twitter_screen_name': safe_string(links.get('twitter_screen_name'), 100),
+                'facebook_username': safe_string(links.get('facebook_username'), 100),
+                'telegram_channel_identifier': safe_string(links.get('telegram_channel_identifier'), 100),
+                'subreddit_url': safe_string(links.get('subreddit_url'), 500),
+                'github_repos': safe_json_dumps(links.get('repos_url')),
                 
-                # Images
-                'image_thumb': image.get('thumb', '')[:500],
-                'image_small': image.get('small', '')[:500],
-                'image_large': image.get('large', '')[:500],
+                # 이미지 정보
+                'image_thumb': safe_string(image.get('thumb'), 500),
+                'image_small': safe_string(image.get('small'), 500),
+                'image_large': safe_string(image.get('large'), 500),
                 
-                # Categories
-                'categories': safe_json_dumps(coin_data.get('categories', [])),
+                # 카테고리
+                'categories': safe_json_dumps(coin_data.get('categories')),
                 
-                # Market Data (Tab 3)
+                # Tab 3: 시장 데이터
                 'current_price_usd': safe_decimal(safe_get(market_data, 'current_price', 'usd')),
                 'current_price_krw': safe_decimal(safe_get(market_data, 'current_price', 'krw')),
                 'market_cap_usd': safe_int(safe_get(market_data, 'market_cap', 'usd')),
                 'market_cap_rank': safe_int(market_data.get('market_cap_rank')),
                 'total_volume_usd': safe_int(safe_get(market_data, 'total_volume', 'usd')),
                 
-                # ATH/ATL
+                # ATH (All Time High)
                 'ath_usd': safe_decimal(safe_get(market_data, 'ath', 'usd')),
                 'ath_change_percentage': safe_decimal(safe_get(market_data, 'ath_change_percentage', 'usd')),
                 'ath_date': parse_date(safe_get(market_data, 'ath_date', 'usd')),
+                
+                # ATL (All Time Low)
                 'atl_usd': safe_decimal(safe_get(market_data, 'atl', 'usd')),
                 'atl_change_percentage': safe_decimal(safe_get(market_data, 'atl_change_percentage', 'usd')),
                 'atl_date': parse_date(safe_get(market_data, 'atl_date', 'usd')),
                 
-                # Supply Data
+                # 공급량 데이터
                 'total_supply': safe_decimal(market_data.get('total_supply')),
                 'circulating_supply': safe_decimal(market_data.get('circulating_supply')),
                 'max_supply': safe_decimal(market_data.get('max_supply')),
                 
-                # Price Changes
+                # 가격 변동률
                 'price_change_24h_usd': safe_decimal(market_data.get('price_change_24h')),
                 'price_change_percentage_24h': safe_decimal(market_data.get('price_change_percentage_24h')),
                 'price_change_percentage_7d': safe_decimal(market_data.get('price_change_percentage_7d')),
                 'price_change_percentage_30d': safe_decimal(market_data.get('price_change_percentage_30d')),
                 
-                # Community Data (Tab 2)
+                # Tab 2: 커뮤니티 데이터
                 'community_score': safe_decimal(coin_data.get('community_score')),
                 'twitter_followers': safe_int(community_data.get('twitter_followers')),
                 'reddit_subscribers': safe_int(community_data.get('reddit_subscribers')),
                 'telegram_channel_user_count': safe_int(community_data.get('telegram_channel_user_count')),
                 
-                # Developer Data (Tab 2)
+                # Tab 2: 개발자 데이터
                 'developer_score': safe_decimal(coin_data.get('developer_score')),
                 'forks': safe_int(developer_data.get('forks')),
                 'stars': safe_int(developer_data.get('stars')),
@@ -408,11 +427,11 @@ def process_and_store_details(**context):
                 'closed_issues': safe_int(developer_data.get('closed_issues')),
                 'commit_count_4_weeks': safe_int(developer_data.get('commit_count_4_weeks')),
                 
-                # Other Scores
+                # 기타 점수
                 'public_interest_score': safe_decimal(coin_data.get('public_interest_score')),
                 'liquidity_score': safe_decimal(coin_data.get('liquidity_score')),
                 
-                # Timestamps
+                # 타임스탬프
                 'coingecko_last_updated': parse_date(coin_data.get('last_updated'))
             }
             
@@ -420,48 +439,34 @@ def process_and_store_details(**context):
             try:
                 hook.run(UPSERT_SQL, parameters=params)
                 success_count += 1
-                print(f"✅ 코인 {coin_id} 저장 성공")
+                
+                # 진행 상황 로그 (10개마다)
+                if success_count % 10 == 0:
+                    print(f"진행 상황: {success_count}개 코인 저장 완료")
+                    
             except Exception as sql_error:
-                print(f"❌ 코인 {coin_id} SQL 실행 실패: {str(sql_error)}")
-                print(f"문제가 된 파라미터 키들: {list(params.keys())}")
+                print(f"SQL 실행 실패 - {coin_id}: {str(sql_error)}")
+                print(f"파라미터 샘플: coingecko_id={params.get('coingecko_id')}, symbol={params.get('symbol')}")
                 error_count += 1
                 continue
             
         except Exception as e:
-            print(f"❌ 코인 {coin_id} 데이터 처리 실패: {str(e)}")
-            print(f"데이터 구조: {type(result.get('data', {}))}")
-            print(f"에러 타입: {type(e).__name__}")
-            print(f"에러 발생 위치 추적을 위한 상세 정보:")
-            
-            # 에러 발생 지점을 찾기 위한 단계별 실행
-            try:
-                coin_data = result['data']
-                print(f"  1. coin_data 추출 성공")
-                
-                links = safe_get(coin_data, 'links', {})
-                print(f"  2. links 추출 성공: {type(links)}")
-                
-                market_data = safe_get(coin_data, 'market_data', {})
-                print(f"  3. market_data 추출 성공: {type(market_data)}")
-                
-                # 문제가 될 수 있는 JSON 직렬화 테스트
-                categories = coin_data.get('categories', [])
-                print(f"  4. categories 타입: {type(categories)}, 내용: {categories[:3] if isinstance(categories, list) else 'Not a list'}")
-                
-                repos_url = links.get('repos_url', {})
-                print(f"  5. repos_url 타입: {type(repos_url)}, 샘플: {str(repos_url)[:100] if repos_url else 'None'}")
-                
-            except Exception as debug_e:
-                print(f"  디버깅 중 에러: {str(debug_e)}")
-            
+            print(f"데이터 처리 실패 - {coin_id}: {str(e)}")
+            print(f"데이터 타입: {type(result.get('data', 'None'))}")
             error_count += 1
             continue
     
-    print(f"✅ 데이터 저장 완료: {success_count}개 성공, {error_count}개 실패")
+    # 최종 결과 통계
+    print(f"배치 처리 완료:")
+    print(f"  성공: {success_count}개")
+    print(f"  실패: {error_count}개")
+    print(f"  성공률: {(success_count/(success_count+error_count)*100):.1f}%" if (success_count+error_count) > 0 else "N/A")
     
     return {
         'success_count': success_count,
         'error_count': error_count,
+        'total_processed': success_count + error_count,
+        'success_rate': round(success_count/(success_count+error_count)*100, 1) if (success_count+error_count) > 0 else 0,
         'execution_time': context['execution_date'].isoformat()
     }
 
