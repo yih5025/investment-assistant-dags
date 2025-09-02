@@ -260,13 +260,17 @@ def process_and_store_details(**context):
             # 복잡한 중첩 데이터 추출 함수들
             def safe_get(data, *keys, default=None):
                 """중첩 딕셔너리에서 안전하게 값 추출"""
-                current = data
-                for key in keys:
-                    if isinstance(current, dict) and key in current:
-                        current = current[key]
-                    else:
-                        return default
-                return current
+                try:
+                    current = data
+                    for key in keys:
+                        if isinstance(current, dict) and key in current:
+                            current = current[key]
+                        else:
+                            return default
+                    return current
+                except Exception as e:
+                    print(f"safe_get 실패: keys={keys}, error={str(e)}")
+                    return default
             
             def parse_date(date_str):
                 """날짜 문자열 파싱"""
@@ -295,9 +299,22 @@ def process_and_store_details(**context):
                 if data is None:
                     return None
                 try:
-                    return json.dumps(data, ensure_ascii=False)
+                    # 데이터 타입 확인 및 로깅
+                    print(f"JSON 직렬화 시도: 타입={type(data)}, 데이터={str(data)[:200]}")
+                    
+                    # 딕셔너리나 리스트가 아닌 경우 빈 값으로 처리
+                    if not isinstance(data, (dict, list)):
+                        print(f"JSON 직렬화 대상이 dict/list가 아님: {type(data)}")
+                        return None
+                    
+                    # 빈 데이터 처리
+                    if not data:
+                        return json.dumps(data, ensure_ascii=False)
+                    
+                    return json.dumps(data, ensure_ascii=False, default=str)
                 except (TypeError, ValueError) as e:
-                    print(f"JSON 직렬화 실패: {str(e)}, 데이터: {data}")
+                    print(f"JSON 직렬화 실패: {str(e)}, 데이터 타입: {type(data)}")
+                    print(f"데이터 샘플: {str(data)[:500]}")
                     return None
             
             # 안전한 Decimal 변환 함수
@@ -413,6 +430,30 @@ def process_and_store_details(**context):
         except Exception as e:
             print(f"❌ 코인 {coin_id} 데이터 처리 실패: {str(e)}")
             print(f"데이터 구조: {type(result.get('data', {}))}")
+            print(f"에러 타입: {type(e).__name__}")
+            print(f"에러 발생 위치 추적을 위한 상세 정보:")
+            
+            # 에러 발생 지점을 찾기 위한 단계별 실행
+            try:
+                coin_data = result['data']
+                print(f"  1. coin_data 추출 성공")
+                
+                links = safe_get(coin_data, 'links', {})
+                print(f"  2. links 추출 성공: {type(links)}")
+                
+                market_data = safe_get(coin_data, 'market_data', {})
+                print(f"  3. market_data 추출 성공: {type(market_data)}")
+                
+                # 문제가 될 수 있는 JSON 직렬화 테스트
+                categories = coin_data.get('categories', [])
+                print(f"  4. categories 타입: {type(categories)}, 내용: {categories[:3] if isinstance(categories, list) else 'Not a list'}")
+                
+                repos_url = links.get('repos_url', {})
+                print(f"  5. repos_url 타입: {type(repos_url)}, 샘플: {str(repos_url)[:100] if repos_url else 'None'}")
+                
+            except Exception as debug_e:
+                print(f"  디버깅 중 에러: {str(debug_e)}")
+            
             error_count += 1
             continue
     
