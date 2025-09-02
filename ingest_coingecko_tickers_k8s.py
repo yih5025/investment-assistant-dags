@@ -272,6 +272,19 @@ def process_and_store_tickers(**context):
     global_exchange_count = 0
     
     # 안전한 데이터 변환 함수들
+    def safe_string(value, max_length=None, default=''):
+        """안전하게 문자열로 변환하고 길이 제한"""
+        if value is None:
+            return default
+        try:
+            str_value = str(value)
+            if max_length and len(str_value) > max_length:
+                return str_value[:max_length]
+            return str_value
+        except (TypeError, ValueError) as e:
+            print(f"String 변환 실패: {str(e)}, 값: {value}")
+            return default
+    
     def safe_decimal(value, default=None):
         """안전하게 Decimal로 변환"""
         if value is None:
@@ -350,19 +363,19 @@ def process_and_store_tickers(**context):
                     else:
                         global_exchange_count += 1
                     
-                    # 파라미터 준비
+                    # 파라미터 준비 (안전한 변환 함수 사용)
                     params = {
                         'batch_id': batch_id,
                         'coingecko_id': coin_id,
-                        'coin_symbol': coin_info.get('symbol', '').upper(),
-                        'coin_name': coin_info.get('name', ''),
+                        'coin_symbol': safe_string(coin_info.get('symbol', '').upper(), 20),
+                        'coin_name': safe_string(coin_info.get('name'), 100),
                         'market_cap_rank': safe_int(coin_info.get('rank')),
                         
-                        # 거래 정보
-                        'base_symbol': ticker.get('base', '')[:20],
-                        'target_symbol': ticker.get('target', '')[:20],
-                        'market_name': market_name[:100],
-                        'market_identifier': market_identifier[:50],
+                        # 거래 정보 (안전한 문자열 처리)
+                        'base_symbol': safe_string(ticker.get('base'), 20),
+                        'target_symbol': safe_string(ticker.get('target'), 20),
+                        'market_name': safe_string(market_name, 100),
+                        'market_identifier': safe_string(market_identifier, 50),
                         'is_korean_exchange': is_korean_exchange,
                         
                         # 가격 정보
@@ -374,8 +387,8 @@ def process_and_store_tickers(**context):
                         'converted_last_btc': safe_decimal(ticker.get('converted_last', {}).get('btc')),
                         'converted_volume_usd': safe_decimal(ticker.get('converted_volume', {}).get('usd')),
                         
-                        # 거래소 품질 지표
-                        'trust_score': ticker.get('trust_score', '')[:20],
+                        # 거래소 품질 지표 (안전한 문자열 처리)
+                        'trust_score': safe_string(ticker.get('trust_score'), 20),
                         'bid_ask_spread_percentage': safe_decimal(ticker.get('bid_ask_spread_percentage'), 0),
                         'has_trading_incentive': market_info.get('has_trading_incentive', False),
                         
@@ -387,8 +400,8 @@ def process_and_store_tickers(**context):
                         'is_anomaly': ticker.get('is_anomaly', False),
                         'is_stale': ticker.get('is_stale', False),
                         
-                        # URL 정보
-                        'trade_url': ticker.get('trade_url', '')[:500],
+                        # URL 정보 (안전한 문자열 처리)
+                        'trade_url': safe_string(ticker.get('trade_url'), 500),
                         
                         # 시간 정보
                         'timestamp': parse_timestamp(ticker.get('timestamp')),
