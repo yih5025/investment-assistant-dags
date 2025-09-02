@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import os
 import requests
 from decimal import Decimal
+import decimal
 import json
 import time
 
@@ -288,6 +289,39 @@ def process_and_store_details(**context):
             developer_data = safe_get(coin_data, 'developer_data', {})
             image = safe_get(coin_data, 'image', {})
             
+            # 안전한 JSON 직렬화 함수
+            def safe_json_dumps(data):
+                """안전하게 JSON 문자열로 변환"""
+                if data is None:
+                    return None
+                try:
+                    return json.dumps(data, ensure_ascii=False)
+                except (TypeError, ValueError) as e:
+                    print(f"JSON 직렬화 실패: {str(e)}, 데이터: {data}")
+                    return None
+            
+            # 안전한 Decimal 변환 함수
+            def safe_decimal(value, default=None):
+                """안전하게 Decimal로 변환"""
+                if value is None:
+                    return default
+                try:
+                    return Decimal(str(value))
+                except (TypeError, ValueError, decimal.InvalidOperation) as e:
+                    print(f"Decimal 변환 실패: {str(e)}, 값: {value}")
+                    return default
+            
+            # 안전한 int 변환 함수
+            def safe_int(value, default=None):
+                """안전하게 int로 변환"""
+                if value is None:
+                    return default
+                try:
+                    return int(value)
+                except (TypeError, ValueError) as e:
+                    print(f"Int 변환 실패: {str(e)}, 값: {value}")
+                    return default
+
             # 파라미터 준비
             params = {
                 'coingecko_id': coin_data.get('id'),
@@ -307,7 +341,7 @@ def process_and_store_details(**context):
                 'facebook_username': links.get('facebook_username', '')[:100],
                 'telegram_channel_identifier': links.get('telegram_channel_identifier', '')[:100],
                 'subreddit_url': links.get('subreddit_url', '')[:500],
-                'github_repos': json.dumps(links.get('repos_url', {})) if links.get('repos_url') else None,
+                'github_repos': safe_json_dumps(links.get('repos_url', {})) if links.get('repos_url') else None,
                 
                 # Images
                 'image_thumb': image.get('thumb', '')[:500],
@@ -315,62 +349,70 @@ def process_and_store_details(**context):
                 'image_large': image.get('large', '')[:500],
                 
                 # Categories
-                'categories': json.dumps(coin_data.get('categories', [])),
+                'categories': safe_json_dumps(coin_data.get('categories', [])),
                 
                 # Market Data (Tab 3)
-                'current_price_usd': Decimal(str(safe_get(market_data, 'current_price', 'usd', 0))),
-                'current_price_krw': Decimal(str(safe_get(market_data, 'current_price', 'krw', 0))) if safe_get(market_data, 'current_price', 'krw') else None,
-                'market_cap_usd': int(safe_get(market_data, 'market_cap', 'usd', 0)) if safe_get(market_data, 'market_cap', 'usd') else None,
-                'market_cap_rank': market_data.get('market_cap_rank'),
-                'total_volume_usd': int(safe_get(market_data, 'total_volume', 'usd', 0)) if safe_get(market_data, 'total_volume', 'usd') else None,
+                'current_price_usd': safe_decimal(safe_get(market_data, 'current_price', 'usd')),
+                'current_price_krw': safe_decimal(safe_get(market_data, 'current_price', 'krw')),
+                'market_cap_usd': safe_int(safe_get(market_data, 'market_cap', 'usd')),
+                'market_cap_rank': safe_int(market_data.get('market_cap_rank')),
+                'total_volume_usd': safe_int(safe_get(market_data, 'total_volume', 'usd')),
                 
                 # ATH/ATL
-                'ath_usd': Decimal(str(safe_get(market_data, 'ath', 'usd', 0))) if safe_get(market_data, 'ath', 'usd') else None,
-                'ath_change_percentage': Decimal(str(safe_get(market_data, 'ath_change_percentage', 'usd', 0))) if safe_get(market_data, 'ath_change_percentage', 'usd') else None,
+                'ath_usd': safe_decimal(safe_get(market_data, 'ath', 'usd')),
+                'ath_change_percentage': safe_decimal(safe_get(market_data, 'ath_change_percentage', 'usd')),
                 'ath_date': parse_date(safe_get(market_data, 'ath_date', 'usd')),
-                'atl_usd': Decimal(str(safe_get(market_data, 'atl', 'usd', 0))) if safe_get(market_data, 'atl', 'usd') else None,
-                'atl_change_percentage': Decimal(str(safe_get(market_data, 'atl_change_percentage', 'usd', 0))) if safe_get(market_data, 'atl_change_percentage', 'usd') else None,
+                'atl_usd': safe_decimal(safe_get(market_data, 'atl', 'usd')),
+                'atl_change_percentage': safe_decimal(safe_get(market_data, 'atl_change_percentage', 'usd')),
                 'atl_date': parse_date(safe_get(market_data, 'atl_date', 'usd')),
                 
                 # Supply Data
-                'total_supply': Decimal(str(market_data.get('total_supply', 0))) if market_data.get('total_supply') else None,
-                'circulating_supply': Decimal(str(market_data.get('circulating_supply', 0))) if market_data.get('circulating_supply') else None,
-                'max_supply': Decimal(str(market_data.get('max_supply', 0))) if market_data.get('max_supply') else None,
+                'total_supply': safe_decimal(market_data.get('total_supply')),
+                'circulating_supply': safe_decimal(market_data.get('circulating_supply')),
+                'max_supply': safe_decimal(market_data.get('max_supply')),
                 
                 # Price Changes
-                'price_change_24h_usd': Decimal(str(market_data.get('price_change_24h', 0))),
-                'price_change_percentage_24h': Decimal(str(market_data.get('price_change_percentage_24h', 0))),
-                'price_change_percentage_7d': Decimal(str(market_data.get('price_change_percentage_7d', 0))),
-                'price_change_percentage_30d': Decimal(str(market_data.get('price_change_percentage_30d', 0))),
+                'price_change_24h_usd': safe_decimal(market_data.get('price_change_24h')),
+                'price_change_percentage_24h': safe_decimal(market_data.get('price_change_percentage_24h')),
+                'price_change_percentage_7d': safe_decimal(market_data.get('price_change_percentage_7d')),
+                'price_change_percentage_30d': safe_decimal(market_data.get('price_change_percentage_30d')),
                 
                 # Community Data (Tab 2)
-                'community_score': Decimal(str(coin_data.get('community_score', 0))) if coin_data.get('community_score') else None,
-                'twitter_followers': community_data.get('twitter_followers'),
-                'reddit_subscribers': community_data.get('reddit_subscribers'),
-                'telegram_channel_user_count': community_data.get('telegram_channel_user_count'),
+                'community_score': safe_decimal(coin_data.get('community_score')),
+                'twitter_followers': safe_int(community_data.get('twitter_followers')),
+                'reddit_subscribers': safe_int(community_data.get('reddit_subscribers')),
+                'telegram_channel_user_count': safe_int(community_data.get('telegram_channel_user_count')),
                 
                 # Developer Data (Tab 2)
-                'developer_score': Decimal(str(coin_data.get('developer_score', 0))) if coin_data.get('developer_score') else None,
-                'forks': developer_data.get('forks'),
-                'stars': developer_data.get('stars'),
-                'total_issues': developer_data.get('total_issues'),
-                'closed_issues': developer_data.get('closed_issues'),
-                'commit_count_4_weeks': developer_data.get('commit_count_4_weeks'),
+                'developer_score': safe_decimal(coin_data.get('developer_score')),
+                'forks': safe_int(developer_data.get('forks')),
+                'stars': safe_int(developer_data.get('stars')),
+                'total_issues': safe_int(developer_data.get('total_issues')),
+                'closed_issues': safe_int(developer_data.get('closed_issues')),
+                'commit_count_4_weeks': safe_int(developer_data.get('commit_count_4_weeks')),
                 
                 # Other Scores
-                'public_interest_score': Decimal(str(coin_data.get('public_interest_score', 0))) if coin_data.get('public_interest_score') else None,
-                'liquidity_score': Decimal(str(coin_data.get('liquidity_score', 0))) if coin_data.get('liquidity_score') else None,
+                'public_interest_score': safe_decimal(coin_data.get('public_interest_score')),
+                'liquidity_score': safe_decimal(coin_data.get('liquidity_score')),
                 
                 # Timestamps
                 'coingecko_last_updated': parse_date(coin_data.get('last_updated'))
             }
             
             # SQL 실행
-            hook.run(UPSERT_SQL, parameters=params)
-            success_count += 1
+            try:
+                hook.run(UPSERT_SQL, parameters=params)
+                success_count += 1
+                print(f"✅ 코인 {coin_id} 저장 성공")
+            except Exception as sql_error:
+                print(f"❌ 코인 {coin_id} SQL 실행 실패: {str(sql_error)}")
+                print(f"문제가 된 파라미터 키들: {list(params.keys())}")
+                error_count += 1
+                continue
             
         except Exception as e:
-            print(f"❌ 코인 {coin_id} 저장 실패: {str(e)}")
+            print(f"❌ 코인 {coin_id} 데이터 처리 실패: {str(e)}")
+            print(f"데이터 구조: {type(result.get('data', {}))}")
             error_count += 1
             continue
     

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import os
 import requests
 from decimal import Decimal
+import decimal
 import json
 
 from airflow import DAG
@@ -132,6 +133,53 @@ def process_and_store_derivatives(**context):
     
     print(f"전체 파생상품 데이터 처리: {len(data)}개")
     
+    # 안전한 데이터 변환 함수들
+    def safe_decimal(value, default=None):
+        """안전하게 Decimal로 변환"""
+        if value is None:
+            return default
+        try:
+            # 문자열로 변환 후 Decimal 생성
+            return Decimal(str(value))
+        except (TypeError, ValueError, decimal.ConversionSyntax, decimal.InvalidOperation) as e:
+            print(f"Decimal 변환 실패: {str(e)}, 값: {value} (타입: {type(value)})")
+            return default
+    
+    def safe_int(value, default=None):
+        """안전하게 int로 변환"""
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError) as e:
+            print(f"Int 변환 실패: {str(e)}, 값: {value}")
+            return default
+    
+    def parse_timestamp(timestamp):
+        """타임스탬프를 datetime으로 변환"""
+        if timestamp:
+            try:
+                return datetime.fromtimestamp(int(timestamp))
+            except (TypeError, ValueError, OSError) as e:
+                print(f"타임스탬프 변환 실패: {str(e)}, 값: {timestamp}")
+                return None
+        return None
+    
+    def safe_execution_date(context_execution_date):
+        """Airflow execution_date Proxy 객체를 안전한 datetime으로 변환"""
+        try:
+            # Proxy 객체인 경우 실제 값을 추출
+            if hasattr(context_execution_date, '__wrapped__'):
+                return context_execution_date.__wrapped__
+            elif hasattr(context_execution_date, 'datetime'):
+                return context_execution_date.datetime
+            else:
+                # 이미 datetime 객체인 경우
+                return context_execution_date
+        except Exception as e:
+            print(f"execution_date 변환 실패: {str(e)}, 현재 시간으로 대체")
+            return datetime.utcnow()
+
     for item in data:
         try:
             # 데이터 검증
@@ -141,14 +189,8 @@ def process_and_store_derivatives(**context):
                 error_count += 1
                 continue
             
-            # 타임스탬프 변환
-            def parse_timestamp(timestamp):
-                if timestamp:
-                    try:
-                        return datetime.fromtimestamp(int(timestamp))
-                    except:
-                        return None
-                return None
+            # 안전한 execution_date 변환
+            safe_collected_at = safe_execution_date(execution_date)
             
             # 파라미터 준비
             params = {
@@ -156,26 +198,35 @@ def process_and_store_derivatives(**context):
                 'market': item.get('market', '')[:100],  # VARCHAR 제한
                 'symbol': item.get('symbol', '')[:50],
                 'index_id': item.get('index_id', '').upper()[:20],
-                'price': Decimal(str(item.get('price', 0))) if item.get('price') else None,
-                'price_percentage_change_24h': Decimal(str(item.get('price_percentage_change_24h', 0))),
+                'price': safe_decimal(item.get('price')),
+                'price_percentage_change_24h': safe_decimal(item.get('price_percentage_change_24h'), 0),
                 'contract_type': item.get('contract_type', '')[:20],
-                'index_price': Decimal(str(item.get('index', 0))) if item.get('index') else None,
-                'basis': Decimal(str(item.get('basis', 0))),
-                'spread': Decimal(str(item.get('spread', 0))),
-                'funding_rate': Decimal(str(item.get('funding_rate', 0))),
-                'open_interest_usd': Decimal(str(item.get('open_interest', 0))) if item.get('open_interest') else None,
-                'volume_24h_usd': Decimal(str(item.get('volume_24h', 0))) if item.get('volume_24h') else None,
+                'index_price': safe_decimal(item.get('index')),
+                'basis': safe_decimal(item.get('basis'), 0),
+                'spread': safe_decimal(item.get('spread'), 0),
+                'funding_rate': safe_decimal(item.get('funding_rate'), 0),
+                'open_interest_usd': safe_decimal(item.get('open_interest')),
+                'volume_24h_usd': safe_decimal(item.get('volume_24h')),
                 'last_traded_at': parse_timestamp(item.get('last_traded_at')),
-                'expired_at': item.get('expired_at') if item.get('expired_at') != 'null' else None,
-                'collected_at': execution_date
+                'expired_at': safe_int(item.get('expired_at')) if item.get('expired_at') and item.get('expired_at') != 'null' else None,
+                'collected_at': safe_collected_at
             }
             
             # SQL 실행
-            hook.run(UPSERT_SQL, parameters=params)
-            success_count += 1
+            try:
+                hook.run(UPSERT_SQL, parameters=params)
+                success_count += 1
+                if success_count % 50 == 0:  # 50개마다 진행 상황 로그
+                    print(f"진행 상황: {success_count}개 성공 처리됨")
+            except Exception as sql_error:
+                print(f"❌ SQL 실행 실패 - {item.get('symbol', 'Unknown')}: {str(sql_error)}")
+                print(f"문제가 된 파라미터: {params}")
+                error_count += 1
+                continue
             
         except Exception as e:
-            print(f"레코드 저장 실패: {item.get('symbol', 'Unknown')} - {str(e)}")
+            print(f"❌ 데이터 처리 실패 - {item.get('symbol', 'Unknown')}: {str(e)}")
+            print(f"원본 데이터: {item}")
             error_count += 1
             continue
     

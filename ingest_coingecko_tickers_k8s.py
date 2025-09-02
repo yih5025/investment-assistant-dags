@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import os
 import requests
 from decimal import Decimal
+import decimal
 import json
 import time
 
@@ -270,6 +271,55 @@ def process_and_store_tickers(**context):
     korean_exchange_count = 0
     global_exchange_count = 0
     
+    # 안전한 데이터 변환 함수들
+    def safe_decimal(value, default=None):
+        """안전하게 Decimal로 변환"""
+        if value is None:
+            return default
+        try:
+            return Decimal(str(value))
+        except (TypeError, ValueError, decimal.ConversionSyntax, decimal.InvalidOperation) as e:
+            print(f"Decimal 변환 실패: {str(e)}, 값: {value} (타입: {type(value)})")
+            return default
+    
+    def safe_int(value, default=None):
+        """안전하게 int로 변환"""
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError) as e:
+            print(f"Int 변환 실패: {str(e)}, 값: {value}")
+            return default
+    
+    def parse_timestamp(timestamp_str):
+        """타임스탬프 문자열을 datetime으로 변환"""
+        if timestamp_str:
+            try:
+                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            except (TypeError, ValueError) as e:
+                print(f"타임스탬프 변환 실패: {str(e)}, 값: {timestamp_str}")
+                return None
+        return None
+    
+    def safe_execution_date(context_execution_date):
+        """Airflow execution_date Proxy 객체를 안전한 datetime으로 변환"""
+        try:
+            # Proxy 객체인 경우 실제 값을 추출
+            if hasattr(context_execution_date, '__wrapped__'):
+                return context_execution_date.__wrapped__
+            elif hasattr(context_execution_date, 'datetime'):
+                return context_execution_date.datetime
+            else:
+                # 이미 datetime 객체인 경우
+                return context_execution_date
+        except Exception as e:
+            print(f"execution_date 변환 실패: {str(e)}, 현재 시간으로 대체")
+            return datetime.utcnow()
+    
+    # 안전한 execution_date 변환
+    safe_collected_at = safe_execution_date(execution_date)
+    
     for result in batch_results:
         coin_id = result['coin_id']
         coin_info = result['coin_info']
@@ -293,15 +343,6 @@ def process_and_store_tickers(**context):
                     market_name = market_info.get('name', '')
                     market_identifier = market_info.get('identifier', '')
                     
-                    # 타임스탬프 변환
-                    def parse_timestamp(timestamp_str):
-                        if timestamp_str:
-                            try:
-                                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            except:
-                                return None
-                        return None
-                    
                     # 한국/글로벌 거래소 구분
                     is_korean_exchange = market_identifier.lower() in ['upbit', 'bithumb', 'korbit', 'coinone']
                     if is_korean_exchange:
@@ -315,7 +356,7 @@ def process_and_store_tickers(**context):
                         'coingecko_id': coin_id,
                         'coin_symbol': coin_info.get('symbol', '').upper(),
                         'coin_name': coin_info.get('name', ''),
-                        'market_cap_rank': coin_info.get('rank'),
+                        'market_cap_rank': safe_int(coin_info.get('rank')),
                         
                         # 거래 정보
                         'base_symbol': ticker.get('base', '')[:20],
@@ -325,22 +366,22 @@ def process_and_store_tickers(**context):
                         'is_korean_exchange': is_korean_exchange,
                         
                         # 가격 정보
-                        'last_price': Decimal(str(ticker.get('last', 0))) if ticker.get('last') else None,
-                        'volume': Decimal(str(ticker.get('volume', 0))) if ticker.get('volume') else None,
+                        'last_price': safe_decimal(ticker.get('last')),
+                        'volume': safe_decimal(ticker.get('volume')),
                         
                         # 변환된 가격 (USD 기준 - 김치프리미엄 계산용)
-                        'converted_last_usd': Decimal(str(ticker.get('converted_last', {}).get('usd', 0))) if ticker.get('converted_last', {}).get('usd') else None,
-                        'converted_last_btc': Decimal(str(ticker.get('converted_last', {}).get('btc', 0))) if ticker.get('converted_last', {}).get('btc') else None,
-                        'converted_volume_usd': Decimal(str(ticker.get('converted_volume', {}).get('usd', 0))) if ticker.get('converted_volume', {}).get('usd') else None,
+                        'converted_last_usd': safe_decimal(ticker.get('converted_last', {}).get('usd')),
+                        'converted_last_btc': safe_decimal(ticker.get('converted_last', {}).get('btc')),
+                        'converted_volume_usd': safe_decimal(ticker.get('converted_volume', {}).get('usd')),
                         
                         # 거래소 품질 지표
                         'trust_score': ticker.get('trust_score', '')[:20],
-                        'bid_ask_spread_percentage': Decimal(str(ticker.get('bid_ask_spread_percentage', 0))),
+                        'bid_ask_spread_percentage': safe_decimal(ticker.get('bid_ask_spread_percentage'), 0),
                         'has_trading_incentive': market_info.get('has_trading_incentive', False),
                         
                         # 유동성 지표 (depth 데이터가 있는 경우)
-                        'cost_to_move_up_usd': Decimal(str(ticker.get('cost_to_move_up_usd', 0))) if ticker.get('cost_to_move_up_usd') else None,
-                        'cost_to_move_down_usd': Decimal(str(ticker.get('cost_to_move_down_usd', 0))) if ticker.get('cost_to_move_down_usd') else None,
+                        'cost_to_move_up_usd': safe_decimal(ticker.get('cost_to_move_up_usd')),
+                        'cost_to_move_down_usd': safe_decimal(ticker.get('cost_to_move_down_usd')),
                         
                         # 상태 정보
                         'is_anomaly': ticker.get('is_anomaly', False),
@@ -353,15 +394,24 @@ def process_and_store_tickers(**context):
                         'timestamp': parse_timestamp(ticker.get('timestamp')),
                         'last_traded_at': parse_timestamp(ticker.get('last_traded_at')),
                         'last_fetch_at': parse_timestamp(ticker.get('last_fetch_at')),
-                        'collected_at': execution_date
+                        'collected_at': safe_collected_at
                     }
                     
                     # SQL 실행
-                    hook.run(UPSERT_SQL, parameters=params)
-                    success_count += 1
+                    try:
+                        hook.run(UPSERT_SQL, parameters=params)
+                        success_count += 1
+                        if success_count % 100 == 0:  # 100개마다 진행 상황 로그
+                            print(f"진행 상황: {success_count}개 티커 성공 처리됨")
+                    except Exception as sql_error:
+                        print(f"❌ SQL 실행 실패 - {coin_id}/{market_name}: {str(sql_error)}")
+                        print(f"문제가 된 파라미터: {params}")
+                        error_count += 1
+                        continue
                     
                 except Exception as e:
-                    print(f"티커 저장 실패: {coin_id}/{market_name} - {str(e)}")
+                    print(f"❌ 티커 데이터 처리 실패 - {coin_id}/{market_name}: {str(e)}")
+                    print(f"원본 티커 데이터: {ticker}")
                     error_count += 1
                     continue
                     
