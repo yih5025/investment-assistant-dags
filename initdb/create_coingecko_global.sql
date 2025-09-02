@@ -12,14 +12,14 @@ CREATE TABLE IF NOT EXISTS coingecko_global (
     -- 총 시가총액 (주요 통화별)
     total_market_cap_usd DECIMAL(25,2),       -- USD 기준 총 시가총액
     total_market_cap_krw DECIMAL(25,2),       -- KRW 기준 총 시가총액
-    total_market_cap_btc DECIMAL(15,8),       -- BTC 기준 총 시가총액
-    total_market_cap_eth DECIMAL(15,8),       -- ETH 기준 총 시가총액
+    total_market_cap_btc DECIMAL(20,8),       -- BTC 기준 총 시가총액
+    total_market_cap_eth DECIMAL(20,8),       -- ETH 기준 총 시가총액
     
     -- 총 거래량 (주요 통화별)
     total_volume_usd DECIMAL(25,2),           -- USD 기준 총 거래량
     total_volume_krw DECIMAL(25,2),           -- KRW 기준 총 거래량
-    total_volume_btc DECIMAL(15,8),           -- BTC 기준 총 거래량
-    total_volume_eth DECIMAL(15,8),           -- ETH 기준 총 거래량
+    total_volume_btc DECIMAL(20,8),           -- BTC 기준 총 거래량
+    total_volume_eth DECIMAL(20,8),           -- ETH 기준 총 거래량
     
     -- 시장 점유율 (도미넌스) - 주요 코인들
     btc_dominance DECIMAL(8,4) DEFAULT 0,     -- 비트코인 도미넌스 (%)
