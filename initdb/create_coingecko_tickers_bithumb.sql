@@ -185,32 +185,3 @@ ORDER BY
     END DESC;
 
 COMMENT ON VIEW v_kimchi_premium_realtime IS '실시간 김치프리미엄 계산 뷰 - 업비트 vs 바이낸스 가격 비교';
-
--- 데이터 정리용 함수 (선택사항)
-CREATE OR REPLACE FUNCTION cleanup_old_tickers_data() 
-RETURNS INTEGER AS $
-DECLARE
-    deleted_count INTEGER;
-BEGIN
-    -- 7일 이전 데이터 삭제
-    DELETE FROM coingecko_tickers_bithumb 
-    WHERE created_at < CURRENT_DATE - INTERVAL '7 days';
-    
-    GET DIAGNOSTICS deleted_count = ROW_COUNT;
-    
-    -- 통계 정보 업데이트
-    ANALYZE coingecko_tickers_bithumb;
-    
-    RETURN deleted_count;
-END;
-$ LANGUAGE plpgsql;
-
-COMMENT ON FUNCTION cleanup_old_tickers_data() IS '7일 이전의 오래된 티커 데이터 자동 정리';
-
--- 테이블 생성 완료 로그
-DO $ 
-BEGIN 
-    RAISE NOTICE '✅ coingecko_tickers_bithumb 테이블 생성 완료';
-    RAISE NOTICE '📊 인덱스 8개, 김치프리미엄 뷰 1개, 정리 함수 1개 추가됨';
-    RAISE NOTICE '🔄 12시간마다 실행되는 DAG로 빗썸 414개 코인 데이터 수집 예정';
-END $;
