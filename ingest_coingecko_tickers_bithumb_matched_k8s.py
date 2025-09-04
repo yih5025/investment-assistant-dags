@@ -4,6 +4,7 @@
 - API 키 3개 로테이션으로 제한 해결
 - 12시간마다 김치프리미엄 계산용 데이터 수집
 - 확장된 거래소 목록 (19개) 지원
+- UPSERT 방식으로 시계열 데이터 보존 (삭제 없이 누적)
 """
 
 from datetime import datetime, timedelta
@@ -382,7 +383,11 @@ with DAG(
         return results
 
     def store_tickers_to_database(**context):
-        """수집된 티커 데이터를 PostgreSQL에 저장"""
+        """수집된 티커 데이터를 PostgreSQL에 UPSERT 방식으로 저장
+        - 기존 데이터 삭제 없이 누적 저장
+        - 중복 시 최신 데이터로 업데이트 (ON CONFLICT)
+        - 시계열 데이터 보존으로 김치프리미엄 분석 최적화
+        """
         
         results = context['ti'].xcom_pull(task_ids='collect_coingecko_tickers_data')
         if not results:
@@ -390,14 +395,9 @@ with DAG(
         
         hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        # 기존 당일 데이터 삭제 (최신 데이터로 교체)
-        delete_sql = """
-        DELETE FROM coingecko_tickers_bithumb 
-        WHERE DATE(created_at) = CURRENT_DATE
-        """
-        
-        hook.run(delete_sql)
-        logging.info(f"🗑️ 기존 당일 데이터 삭제 완료")
+        # 기존 데이터는 삭제하지 않고 UPSERT 방식으로 저장
+        # 중복 시 최신 데이터로 업데이트, 신규 데이터는 삽입
+        logging.info(f"💾 UPSERT 방식으로 데이터 저장 시작 (기존 데이터 보존)")
         
         insert_count = 0
         failed_inserts = 0
@@ -488,9 +488,9 @@ with DAG(
                     failed_inserts += 1
                     logging.error(f"❌ 데이터 파싱 실패 ({symbol}-{exchange_id}): {e}")
         
-        # 배치 삽입 실행
+        # UPSERT 배치 실행 (중복 시 최신 데이터로 업데이트)
         if insert_data:
-            insert_sql = """
+            upsert_sql = """
             INSERT INTO coingecko_tickers_bithumb (
                 market_code, coingecko_id, symbol, coin_name,
                 base, target, exchange_name, exchange_id,
@@ -498,58 +498,72 @@ with DAG(
                 trust_score, bid_ask_spread_percentage,
                 timestamp, last_traded_at, last_fetch_at,
                 is_anomaly, is_stale, trade_url, coin_mcap_usd,
-                match_method, market_cap_rank
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                match_method, market_cap_rank, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (coingecko_id, exchange_id, timestamp) 
+            DO UPDATE SET
+                market_code = EXCLUDED.market_code,
+                symbol = EXCLUDED.symbol,
+                coin_name = EXCLUDED.coin_name,
+                base = EXCLUDED.base,
+                target = EXCLUDED.target,
+                exchange_name = EXCLUDED.exchange_name,
+                last_price = EXCLUDED.last_price,
+                volume_24h = EXCLUDED.volume_24h,
+                converted_last_usd = EXCLUDED.converted_last_usd,
+                converted_volume_usd = EXCLUDED.converted_volume_usd,
+                trust_score = EXCLUDED.trust_score,
+                bid_ask_spread_percentage = EXCLUDED.bid_ask_spread_percentage,
+                last_traded_at = EXCLUDED.last_traded_at,
+                last_fetch_at = EXCLUDED.last_fetch_at,
+                is_anomaly = EXCLUDED.is_anomaly,
+                is_stale = EXCLUDED.is_stale,
+                trade_url = EXCLUDED.trade_url,
+                coin_mcap_usd = EXCLUDED.coin_mcap_usd,
+                match_method = EXCLUDED.match_method,
+                market_cap_rank = EXCLUDED.market_cap_rank,
+                updated_at = NOW()
             """
             
             try:
-                hook.insert_rows(
-                    table='coingecko_tickers_bithumb',
-                    rows=insert_data,
-                    target_fields=[
-                        'market_code', 'coingecko_id', 'symbol', 'coin_name',
-                        'base', 'target', 'exchange_name', 'exchange_id', 
-                        'last_price', 'volume_24h', 'converted_last_usd', 'converted_volume_usd',
-                        'trust_score', 'bid_ask_spread_percentage',
-                        'timestamp', 'last_traded_at', 'last_fetch_at',
-                        'is_anomaly', 'is_stale', 'trade_url', 'coin_mcap_usd',
-                        'match_method', 'market_cap_rank'
-                    ]
-                )
+                # UPSERT는 raw SQL로 실행 (insert_rows는 ON CONFLICT 지원 안함)
+                for row_data in insert_data:
+                    hook.run(upsert_sql, parameters=row_data)
                 
                 insert_count = len(insert_data)
-                logging.info(f"✅ 배치 삽입 성공: {insert_count:,}개 레코드")
+                logging.info(f"✅ UPSERT 배치 성공: {insert_count:,}개 레코드 (중복 시 업데이트)")
                 
             except Exception as e:
-                logging.error(f"❌ 배치 삽입 실패: {e}")
+                logging.error(f"❌ UPSERT 배치 실패: {e}")
                 failed_inserts += len(insert_data)
         
         # 저장 결과 요약
         logging.info("=" * 80)
-        logging.info("💾 데이터베이스 저장 완료")
+        logging.info("💾 데이터베이스 UPSERT 저장 완료")
         logging.info("-" * 80)
-        logging.info(f"✅ 성공적으로 저장: {insert_count:,}개")
-        logging.info(f"❌ 저장 실패:       {failed_inserts:,}개")
+        logging.info(f"✅ 성공적으로 처리: {insert_count:,}개 (신규 삽입 + 기존 업데이트)")
+        logging.info(f"❌ 처리 실패:       {failed_inserts:,}개")
         
-        # 저장된 데이터 검증
+        # 저장된 데이터 검증 (전체 및 당일)
         verification_query = """
         SELECT 
             COUNT(*) as total_tickers,
             COUNT(DISTINCT coingecko_id) as unique_coins,
             COUNT(DISTINCT exchange_id) as unique_exchanges,
+            COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE OR DATE(updated_at) = CURRENT_DATE) as today_records,
             MIN(created_at) as first_record,
-            MAX(created_at) as last_record
-        FROM coingecko_tickers_bithumb 
-        WHERE DATE(created_at) = CURRENT_DATE
+            MAX(GREATEST(created_at, COALESCE(updated_at, created_at))) as last_record
+        FROM coingecko_tickers_bithumb
         """
         
         verification = hook.get_first(verification_query)
         if verification:
             logging.info(f"📊 저장 검증 결과:")
-            logging.info(f"    총 티커 수:   {verification[0]:,}개")
-            logging.info(f"    고유 코인 수: {verification[1]:,}개") 
-            logging.info(f"    고유 거래소:  {verification[2]:,}개")
-            logging.info(f"    수집 시간:    {verification[3]} ~ {verification[4]}")
+            logging.info(f"    전체 티커 수:   {verification[0]:,}개")
+            logging.info(f"    고유 코인 수:   {verification[1]:,}개") 
+            logging.info(f"    고유 거래소:    {verification[2]:,}개")
+            logging.info(f"    오늘 처리 수:   {verification[3]:,}개")
+            logging.info(f"    데이터 기간:    {verification[4]} ~ {verification[5]}")
         
         logging.info("=" * 80)
         

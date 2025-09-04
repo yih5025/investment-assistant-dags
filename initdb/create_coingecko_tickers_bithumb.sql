@@ -21,14 +21,14 @@ CREATE TABLE coingecko_tickers_bithumb (
     exchange_id TEXT NOT NULL,                    -- binance, upbit, coinbase 등
     
     -- 가격 및 거래량 정보
-    last_price DECIMAL(20,8),                     -- 최근 거래가
-    volume_24h DECIMAL(20,8),                     -- 24시간 거래량 (원본 통화)
-    converted_last_usd DECIMAL(20,8),             -- USD 환산 가격 (김치프리미엄 계산용)
+    last_price DECIMAL(32,8),                     -- 최근 거래가
+    volume_24h DECIMAL(32,8),                     -- 24시간 거래량 (원본 통화)
+    converted_last_usd DECIMAL(32,8),             -- USD 환산 가격 (김치프리미엄 계산용)
     converted_volume_usd BIGINT,                  -- USD 환산 거래량
     
     -- 신뢰성 및 스프레드 정보
     trust_score TEXT,                             -- green, yellow, red (신뢰도)
-    bid_ask_spread_percentage DECIMAL(10,4),      -- 매수/매도 호가 스프레드 (%)
+    bid_ask_spread_percentage DECIMAL(24,4),      -- 매수/매도 호가 스프레드 (%)
     
     -- 시간 정보
     timestamp TIMESTAMP,                          -- 가격 업데이트 시간
@@ -101,6 +101,12 @@ CREATE INDEX idx_coingecko_tickers_trust_score
 CREATE INDEX idx_coingecko_tickers_volume_usd 
     ON coingecko_tickers_bithumb(converted_volume_usd DESC)
     WHERE converted_volume_usd IS NOT NULL;
+
+-- 9. UPSERT를 위한 고유 제약조건 (중복 방지)
+-- 같은 코인, 같은 거래소, 같은 시간대의 데이터는 하나만 유지
+CREATE UNIQUE INDEX idx_coingecko_tickers_unique_record 
+    ON coingecko_tickers_bithumb(coingecko_id, exchange_id, timestamp)
+    WHERE timestamp IS NOT NULL;
 
 -- 테이블 코멘트 추가
 COMMENT ON TABLE coingecko_tickers_bithumb IS '빗썸 매칭 기반 CoinGecko 거래소별 티커 데이터 - 김치프리미엄 계산용';
