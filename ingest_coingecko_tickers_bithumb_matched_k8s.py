@@ -145,8 +145,12 @@ with DAG(
         
         return coins
 
-    def collect_tickers_from_coingecko(coins: List[Dict], **context) -> Dict:
+    def collect_tickers_from_coingecko(**context) -> Dict:
         """CoinGecko Tickers API 호출 및 데이터 수집"""
+
+        coins = context['ti'].xcom_pull(task_ids='get_bithumb_matched_coins')
+        if not coins:
+            raise ValueError("이전 태스크에서 코인 데이터를 받지 못했습니다")
         
         api_keys = get_api_keys()
         logging.info(f"🔑 API 키 개수: {len(api_keys)}개")
@@ -377,8 +381,12 @@ with DAG(
         
         return results
 
-    def store_tickers_to_database(results: Dict, **context):
+    def store_tickers_to_database(**context):
         """수집된 티커 데이터를 PostgreSQL에 저장"""
+        
+        results = context['ti'].xcom_pull(task_ids='collect_coingecko_tickers_data')
+        if not results:
+            raise ValueError("이전 태스크에서 수집된 티커 데이터를 받지 못했습니다")
         
         hook = PostgresHook(postgres_conn_id='postgres_default')
         
@@ -572,14 +580,12 @@ with DAG(
     collect_tickers_task = PythonOperator(
         task_id='collect_coingecko_tickers_data',
         python_callable=collect_tickers_from_coingecko,
-        op_kwargs={'coins': "{{ ti.xcom_pull(task_ids='get_bithumb_matched_coins') }}"},
     )
 
     # Task 4: 데이터베이스 저장
     store_tickers_task = PythonOperator(
         task_id='store_tickers_to_database', 
         python_callable=store_tickers_to_database,
-        op_kwargs={'results': "{{ ti.xcom_pull(task_ids='collect_coingecko_tickers_data') }}"},
     )
 
     # ====================================================================================
