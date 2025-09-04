@@ -5,7 +5,7 @@ INSERT INTO coingecko_tickers_bithumb (
     trust_score, bid_ask_spread_percentage,
     timestamp, last_traded_at, last_fetch_at,
     is_anomaly, is_stale, trade_url, coin_mcap_usd,
-    match_method, market_cap_rank
+    match_method, market_cap_rank, created_at
 ) VALUES (
     %(market_code)s, %(coingecko_id)s, %(symbol)s, %(coin_name)s,
     %(base)s, %(target)s, %(exchange_name)s, %(exchange_id)s,
@@ -13,7 +13,7 @@ INSERT INTO coingecko_tickers_bithumb (
     %(trust_score)s, %(bid_ask_spread_percentage)s,
     %(timestamp)s, %(last_traded_at)s, %(last_fetch_at)s,
     %(is_anomaly)s, %(is_stale)s, %(trade_url)s, %(coin_mcap_usd)s,
-    %(match_method)s, %(market_cap_rank)s
+    %(match_method)s, %(market_cap_rank)s, NOW()
 )
 ON CONFLICT (coingecko_id, exchange_id, COALESCE(timestamp, '1970-01-01'::timestamp))
 DO UPDATE SET

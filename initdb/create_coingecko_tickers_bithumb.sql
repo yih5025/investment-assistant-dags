@@ -101,10 +101,9 @@ CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_volume_usd
     WHERE converted_volume_usd IS NOT NULL;
 
 -- 9. UPSERT를 위한 고유 제약조건 (중복 방지)
--- 같은 코인, 같은 거래소, 같은 시간대의 데이터는 하나만 유지
+-- 같은 코인, 같은 거래소, 같은 시간대의 데이터는 하나만 유지 (NULL 처리 포함)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_coingecko_tickers_unique_record 
-    ON coingecko_tickers_bithumb(coingecko_id, exchange_id, timestamp)
-    WHERE timestamp IS NOT NULL;
+    ON coingecko_tickers_bithumb(coingecko_id, exchange_id, COALESCE(timestamp, '1970-01-01'::timestamp));
 
 -- 테이블 코멘트 추가
 COMMENT ON TABLE coingecko_tickers_bithumb IS '빗썸 매칭 기반 CoinGecko 거래소별 티커 데이터 - 김치프리미엄 계산용';
