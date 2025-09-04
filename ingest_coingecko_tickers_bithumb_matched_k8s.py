@@ -32,9 +32,9 @@ def get_api_keys() -> List[str]:
     """CoinGecko API 키 3개 가져오기"""
     try:
         return [
-            Variable.get('COINGECKO_API_KEY_1'),
-            Variable.get('COINGECKO_API_KEY_2'), 
-            Variable.get('COINGECKO_API_KEY_3')
+            Variable.get('COINGECKO_API_KEY_2'),
+            Variable.get('COINGECKO_API_KEY_3'), 
+            Variable.get('COINGECKO_API_KEY_4')
         ]
     except Exception as e:
         logging.warning(f"API 키 Variable 가져오기 실패: {e}")
