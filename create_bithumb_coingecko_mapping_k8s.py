@@ -21,7 +21,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 # ========================================================================================
 
 # SQL 파일 경로
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
+INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
 # 수동 매칭이 필요한 특수 케이스들 (경험적으로 확인된 매칭)
 MANUAL_MAPPINGS = {

@@ -25,7 +25,7 @@ from airflow.models import Variable
 # ========================================================================================
 
 # SQL 파일 경로
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
+INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
 # API 키 설정 (Airflow Variable에서 가져오기)
 def get_api_keys() -> List[str]:
