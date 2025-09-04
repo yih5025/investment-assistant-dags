@@ -4,7 +4,7 @@
 - API 키 3개 로테이션으로 제한 해결
 - 12시간마다 김치프리미엄 계산용 데이터 수집
 - 확장된 거래소 목록 (19개) 지원
-- UPSERT 방식으로 시계열 데이터 보존 (삭제 없이 누적)
+- UPSERT SQL 파일 사용으로 안정적인 데이터 저장
 """
 
 from datetime import datetime, timedelta
@@ -26,7 +26,12 @@ from airflow.models import Variable
 # ========================================================================================
 
 # SQL 파일 경로
+DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
 INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
+
+# SQL 파일 읽기
+with open(os.path.join(DAGS_SQL_DIR, "upsert_coingecko_tickers_bithumb.sql"), encoding="utf-8") as f:
+    UPSERT_SQL = f.read()
 
 # API 키 설정 (Airflow Variable에서 가져오기)
 def get_api_keys() -> List[str]:
@@ -69,10 +74,7 @@ PRIORITY_EXCHANGES = [
 # DAG 기본 설정
 default_args = {
     'owner': 'investment_assistant',
-    'depends_on_past': False,
     'start_date': datetime(2025, 9, 1),
-    'email_on_failure': False,
-    'email_on_retry': False,
     'retries': None,
     'retry_delay': timedelta(minutes=1),
 }
@@ -138,9 +140,9 @@ with DAG(
         
         logging.info(f"✅ 빗썸 매칭된 코인 수: {len(coins)}개")
         
-        # 상위 20개 코인 로깅 (디버깅용)
-        logging.info("📋 상위 20개 매칭 결과:")
-        for i, coin in enumerate(coins[:20]):
+        # 상위 10개 코인 로깅 (디버깅용)
+        logging.info("📋 상위 10개 매칭 결과:")
+        for i, coin in enumerate(coins[:10]):
             logging.info(f"  {i+1:2d}. {coin['market_code']:12} → {coin['coingecko_id']:25} "
                         f"(Rank: {coin['market_cap_rank'] or 'N/A':>4}, Score: {coin['match_score']})")
         
@@ -383,11 +385,7 @@ with DAG(
         return results
 
     def store_tickers_to_database(**context):
-        """수집된 티커 데이터를 PostgreSQL에 UPSERT 방식으로 저장
-        - 기존 데이터 삭제 없이 누적 저장
-        - 중복 시 최신 데이터로 업데이트 (ON CONFLICT)
-        - 시계열 데이터 보존으로 김치프리미엄 분석 최적화
-        """
+        """수집된 티커 데이터를 PostgreSQL에 UPSERT 방식으로 저장"""
         
         results = context['ti'].xcom_pull(task_ids='collect_coingecko_tickers_data')
         if not results:
@@ -395,15 +393,10 @@ with DAG(
         
         hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        # 기존 데이터는 삭제하지 않고 UPSERT 방식으로 저장
-        # 중복 시 최신 데이터로 업데이트, 신규 데이터는 삽입
-        logging.info(f"💾 UPSERT 방식으로 데이터 저장 시작 (기존 데이터 보존)")
+        logging.info(f"💾 UPSERT SQL 파일을 사용하여 데이터 저장 시작")
         
-        insert_count = 0
-        failed_inserts = 0
-        
-        # 배치 삽입을 위한 데이터 준비
-        insert_data = []
+        success_count = 0
+        error_count = 0
         
         for success in results['success']:
             market_code = success['market_code']
@@ -423,8 +416,13 @@ with DAG(
                     exchange_name = market.get('name', '')
                     exchange_id = market.get('identifier', '')
                     
+                    # 숫자 데이터 안전 처리
                     last_price = ticker.get('last')
                     volume_24h = ticker.get('volume')
+                    
+                    # 거래량이 너무 클 경우 None으로 처리
+                    if volume_24h and volume_24h > 999999999999:  # 10^12 제한
+                        volume_24h = None
                     
                     converted_last = ticker.get('converted_last', {})
                     converted_last_usd = converted_last.get('usd') if converted_last else None
@@ -432,24 +430,23 @@ with DAG(
                     converted_volume = ticker.get('converted_volume', {})
                     converted_volume_usd = converted_volume.get('usd') if converted_volume else None
                     
+                    # 거래량이 너무 클 경우 None으로 처리  
+                    if converted_volume_usd and converted_volume_usd > 999999999999:  # 10^12 제한
+                        converted_volume_usd = None
+                    
                     trust_score = ticker.get('trust_score', '')
                     bid_ask_spread = ticker.get('bid_ask_spread_percentage')
                     
                     # 시간 정보 파싱
-                    timestamp_str = ticker.get('timestamp')
-                    last_traded_str = ticker.get('last_traded_at') 
-                    last_fetch_str = ticker.get('last_fetch_at')
-                    
-                    # ISO 8601 시간 형식 처리
                     def parse_timestamp(ts_str):
                         if ts_str:
                             # 'Z' 시간대를 '+00:00'으로 변환
                             return ts_str.replace('Z', '+00:00') if ts_str.endswith('Z') else ts_str
                         return None
                     
-                    parsed_timestamp = parse_timestamp(timestamp_str)
-                    parsed_last_traded = parse_timestamp(last_traded_str)
-                    parsed_last_fetch = parse_timestamp(last_fetch_str)
+                    parsed_timestamp = parse_timestamp(ticker.get('timestamp'))
+                    parsed_last_traded = parse_timestamp(ticker.get('last_traded_at'))
+                    parsed_last_fetch = parse_timestamp(ticker.get('last_fetch_at'))
                     
                     # 기타 플래그들
                     is_anomaly = ticker.get('is_anomaly', False)
@@ -457,94 +454,53 @@ with DAG(
                     trade_url = ticker.get('trade_url', '')
                     coin_mcap_usd = ticker.get('coin_mcap_usd')
                     
-                    # 삽입 데이터 추가
-                    insert_data.append((
-                        market_code,              # market_code
-                        coingecko_id,             # coingecko_id  
-                        symbol,                   # symbol
-                        coin_name,                # coin_name
-                        base,                     # base
-                        target,                   # target
-                        exchange_name,            # exchange_name
-                        exchange_id,              # exchange_id
-                        last_price,               # last_price
-                        volume_24h,               # volume_24h
-                        converted_last_usd,       # converted_last_usd
-                        converted_volume_usd,     # converted_volume_usd
-                        trust_score,              # trust_score
-                        bid_ask_spread,           # bid_ask_spread_percentage
-                        parsed_timestamp,         # timestamp
-                        parsed_last_traded,       # last_traded_at
-                        parsed_last_fetch,        # last_fetch_at
-                        is_anomaly,              # is_anomaly
-                        is_stale,                # is_stale
-                        trade_url,               # trade_url
-                        coin_mcap_usd,           # coin_mcap_usd
-                        match_method,            # match_method
-                        market_cap_rank          # market_cap_rank
-                    ))
+                    # 파라미터 준비 (named parameters 방식)
+                    params = {
+                        'market_code': market_code,
+                        'coingecko_id': coingecko_id,
+                        'symbol': symbol,
+                        'coin_name': coin_name,
+                        'base': base,
+                        'target': target,
+                        'exchange_name': exchange_name,
+                        'exchange_id': exchange_id,
+                        'last_price': last_price,
+                        'volume_24h': volume_24h,
+                        'converted_last_usd': converted_last_usd,
+                        'converted_volume_usd': converted_volume_usd,
+                        'trust_score': trust_score,
+                        'bid_ask_spread_percentage': bid_ask_spread,
+                        'timestamp': parsed_timestamp,
+                        'last_traded_at': parsed_last_traded,
+                        'last_fetch_at': parsed_last_fetch,
+                        'is_anomaly': is_anomaly,
+                        'is_stale': is_stale,
+                        'trade_url': trade_url,
+                        'coin_mcap_usd': coin_mcap_usd,
+                        'match_method': match_method,
+                        'market_cap_rank': market_cap_rank
+                    }
+                    
+                    # UPSERT SQL 실행
+                    hook.run(UPSERT_SQL, parameters=params)
+                    success_count += 1
                     
                 except Exception as e:
-                    failed_inserts += 1
-                    logging.error(f"❌ 데이터 파싱 실패 ({symbol}-{exchange_id}): {e}")
-        
-        # UPSERT 배치 실행 (중복 시 최신 데이터로 업데이트)
-        if insert_data:
-            upsert_sql = """
-            INSERT INTO coingecko_tickers_bithumb (
-                market_code, coingecko_id, symbol, coin_name,
-                base, target, exchange_name, exchange_id,
-                last_price, volume_24h, converted_last_usd, converted_volume_usd,
-                trust_score, bid_ask_spread_percentage,
-                timestamp, last_traded_at, last_fetch_at,
-                is_anomaly, is_stale, trade_url, coin_mcap_usd,
-                match_method, market_cap_rank, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-            ON CONFLICT (coingecko_id, exchange_id, timestamp) 
-            DO UPDATE SET
-                market_code = EXCLUDED.market_code,
-                symbol = EXCLUDED.symbol,
-                coin_name = EXCLUDED.coin_name,
-                base = EXCLUDED.base,
-                target = EXCLUDED.target,
-                exchange_name = EXCLUDED.exchange_name,
-                last_price = EXCLUDED.last_price,
-                volume_24h = EXCLUDED.volume_24h,
-                converted_last_usd = EXCLUDED.converted_last_usd,
-                converted_volume_usd = EXCLUDED.converted_volume_usd,
-                trust_score = EXCLUDED.trust_score,
-                bid_ask_spread_percentage = EXCLUDED.bid_ask_spread_percentage,
-                last_traded_at = EXCLUDED.last_traded_at,
-                last_fetch_at = EXCLUDED.last_fetch_at,
-                is_anomaly = EXCLUDED.is_anomaly,
-                is_stale = EXCLUDED.is_stale,
-                trade_url = EXCLUDED.trade_url,
-                coin_mcap_usd = EXCLUDED.coin_mcap_usd,
-                match_method = EXCLUDED.match_method,
-                market_cap_rank = EXCLUDED.market_cap_rank,
-                updated_at = NOW()
-            """
-            
-            try:
-                # UPSERT는 raw SQL로 실행 (insert_rows는 ON CONFLICT 지원 안함)
-                for row_data in insert_data:
-                    hook.run(upsert_sql, parameters=row_data)
-                
-                insert_count = len(insert_data)
-                logging.info(f"✅ UPSERT 배치 성공: {insert_count:,}개 레코드 (중복 시 업데이트)")
-                
-            except Exception as e:
-                logging.error(f"❌ UPSERT 배치 실패: {e}")
-                failed_inserts += len(insert_data)
+                    error_count += 1
+                    logging.error(f"❌ 레코드 저장 실패 ({symbol}-{exchange_id}): {str(e)[:100]}")
+                    continue
         
         # 저장 결과 요약
         logging.info("=" * 80)
         logging.info("💾 데이터베이스 UPSERT 저장 완료")
         logging.info("-" * 80)
-        logging.info(f"✅ 성공적으로 처리: {insert_count:,}개 (신규 삽입 + 기존 업데이트)")
-        logging.info(f"❌ 처리 실패:       {failed_inserts:,}개")
+        logging.info(f"✅ 성공적으로 저장: {success_count:,}개")
+        logging.info(f"❌ 저장 실패:       {error_count:,}개")
         
-        # 저장된 데이터 검증 (전체 및 당일)
+        success_rate = (success_count / (success_count + error_count) * 100) if (success_count + error_count) > 0 else 0
+        logging.info(f"📈 저장 성공률:     {success_rate:5.1f}%")
+        
+        # 저장된 데이터 검증
         verification_query = """
         SELECT 
             COUNT(*) as total_tickers,
@@ -568,9 +524,10 @@ with DAG(
         logging.info("=" * 80)
         
         return {
-            'inserted_count': insert_count,
-            'failed_count': failed_inserts,
-            'total_processed': insert_count + failed_inserts
+            'success_count': success_count,
+            'error_count': error_count,
+            'total_processed': success_count + error_count,
+            'execution_time': context['execution_date'].isoformat()
         }
 
     # ====================================================================================
@@ -590,7 +547,7 @@ with DAG(
         python_callable=get_bithumb_matched_coins,
     )
 
-    # Task 3: CoinGecko API 데이터 수집 
+    # Task 3: CoinGecko API 데이터 수집
     collect_tickers_task = PythonOperator(
         task_id='collect_coingecko_tickers_data',
         python_callable=collect_tickers_from_coingecko,
@@ -598,7 +555,7 @@ with DAG(
 
     # Task 4: 데이터베이스 저장
     store_tickers_task = PythonOperator(
-        task_id='store_tickers_to_database', 
+        task_id='store_tickers_to_database',
         python_callable=store_tickers_to_database,
     )
 
