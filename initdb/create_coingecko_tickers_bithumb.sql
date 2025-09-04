@@ -116,9 +116,9 @@ COMMENT ON COLUMN coingecko_tickers_bithumb.trust_score IS 'CoinGecko 신뢰도 
 -- 김치프리미엄 계산용 뷰 생성
 CREATE OR REPLACE VIEW v_kimchi_premium_realtime AS
 SELECT 
-    symbol,
-    coin_name,
-    market_code,
+    coins.symbol,
+    coins.coin_name,
+    coins.market_code,
     
     -- 업비트 가격 (한국 거래소)
     upbit.converted_last_usd as upbit_usd_price,
@@ -141,7 +141,9 @@ SELECT
     (upbit.converted_last_usd - binance.converted_last_usd) as price_difference_usd,
     
     -- 데이터 신선도
-    GREATEST(upbit.created_at, binance.created_at) as data_updated_at,
+    GREATEST(
+        COALESCE(upbit.created_at, '1970-01-01'::timestamp), 
+        COALESCE(binance.created_at, '1970-01-01'::timestamp) ) as data_updated_at,
     
     -- 거래량 합계 (유동성 참고용)
     (COALESCE(upbit.converted_volume_usd, 0) + COALESCE(binance.converted_volume_usd, 0)) as total_volume_usd
