@@ -1,9 +1,7 @@
 -- CoinGecko Tickers (빗썸 매칭) 테이블 생성
 -- 김치프리미엄 계산을 위한 거래소별 가격 데이터 저장
 
-DROP TABLE IF EXISTS coingecko_tickers_bithumb CASCADE;
-
-CREATE TABLE coingecko_tickers_bithumb (
+CREATE TABLE IF NOT EXISTS coingecko_tickers_bithumb (
     id SERIAL PRIMARY KEY,
     
     -- 빗썸 매칭 정보
@@ -54,57 +52,57 @@ CREATE TABLE coingecko_tickers_bithumb (
 
 -- 성능 최적화 인덱스 생성
 -- 1. 기본 검색용 인덱스
-CREATE INDEX idx_coingecko_tickers_market_code 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_market_code 
     ON coingecko_tickers_bithumb(market_code);
 
-CREATE INDEX idx_coingecko_tickers_coingecko_id 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_coingecko_id 
     ON coingecko_tickers_bithumb(coingecko_id);
 
-CREATE INDEX idx_coingecko_tickers_symbol 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_symbol 
     ON coingecko_tickers_bithumb(symbol);
 
 -- 2. 거래소별 검색용 인덱스  
-CREATE INDEX idx_coingecko_tickers_exchange_id 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_exchange_id 
     ON coingecko_tickers_bithumb(exchange_id);
 
-CREATE INDEX idx_coingecko_tickers_exchange_symbol 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_exchange_symbol 
     ON coingecko_tickers_bithumb(exchange_id, symbol);
 
 -- 3. 시간 기반 검색용 인덱스
-CREATE INDEX idx_coingecko_tickers_created_at 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_created_at 
     ON coingecko_tickers_bithumb(created_at DESC);
 
-CREATE INDEX idx_coingecko_tickers_date_created 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_date_created 
     ON coingecko_tickers_bithumb(DATE(created_at));
 
 -- 4. 김치프리미엄 계산용 복합 인덱스
-CREATE INDEX idx_coingecko_tickers_kimchi_premium 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_kimchi_premium 
     ON coingecko_tickers_bithumb(symbol, exchange_id, created_at DESC)
     WHERE converted_last_usd IS NOT NULL;
 
 -- 5. 특정 거래소 조합 (김치프리미엄 핵심)
-CREATE INDEX idx_coingecko_tickers_upbit_binance 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_upbit_binance 
     ON coingecko_tickers_bithumb(symbol, converted_last_usd, created_at DESC)
     WHERE exchange_id IN ('upbit', 'binance');
 
 -- 6. 시가총액 순위별 조회용
-CREATE INDEX idx_coingecko_tickers_market_cap_rank 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_market_cap_rank 
     ON coingecko_tickers_bithumb(market_cap_rank, symbol)
     WHERE market_cap_rank IS NOT NULL;
 
 -- 7. 신뢰도 기반 검색용
-CREATE INDEX idx_coingecko_tickers_trust_score 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_trust_score 
     ON coingecko_tickers_bithumb(trust_score, exchange_id)
     WHERE trust_score = 'green';
 
 -- 8. 거래량 기반 정렬용  
-CREATE INDEX idx_coingecko_tickers_volume_usd 
+CREATE INDEX IF NOT EXISTS idx_coingecko_tickers_volume_usd 
     ON coingecko_tickers_bithumb(converted_volume_usd DESC)
     WHERE converted_volume_usd IS NOT NULL;
 
 -- 9. UPSERT를 위한 고유 제약조건 (중복 방지)
 -- 같은 코인, 같은 거래소, 같은 시간대의 데이터는 하나만 유지
-CREATE UNIQUE INDEX idx_coingecko_tickers_unique_record 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coingecko_tickers_unique_record 
     ON coingecko_tickers_bithumb(coingecko_id, exchange_id, timestamp)
     WHERE timestamp IS NOT NULL;
 
