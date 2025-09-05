@@ -77,7 +77,7 @@ default_args = {
 # ========================================================================================
 
 with DAG(
-    dag_id='ingest_coingecko_tickers_bithumb_matched__k8s',
+    dag_id='ingest_coingecko_tickers_bithumb_matched_korean_major_k8s',
     default_args=default_args,
     description='빗썸 매칭 기반 CoinGecko Tickers 수집 (모든 거래소 데이터 수집)',
     schedule_interval='0 */12 * * *',  # 12시간마다 실행 (00:00, 12:00)
