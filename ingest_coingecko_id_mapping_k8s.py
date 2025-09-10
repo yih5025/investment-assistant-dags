@@ -200,20 +200,13 @@ def process_and_store_mapping_data(**context):
             error_count += 1
             continue
     
-    # 빗썸 매칭 통계
-    bithumb_matches = hook.get_first("""
-        SELECT COUNT(*) 
-        FROM coingecko_id_mapping cg
-        INNER JOIN market_code_bithumb mb ON UPPER(cg.symbol) = UPPER(REPLACE(mb.market_code, 'KRW-', ''))
-    """)
     
     print(f"✅ 데이터 저장 완료: {success_count}개 성공, {error_count}개 실패")
-    print(f"🎯 빗썸 매칭: {bithumb_matches[0]}개")
     
     return {
         'success_count': success_count,
         'error_count': error_count,
-        'bithumb_matches': bithumb_matches[0],
+
         'execution_time': context['execution_date'].isoformat()
     }
 
