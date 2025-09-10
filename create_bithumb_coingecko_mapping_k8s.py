@@ -495,7 +495,7 @@ with DAG(
         logging.info("=== 하드코딩 방식 빗썸-CoinGecko 매칭 시작 ===")
         
         # 기존 매핑 테이블 초기화
-        hook.run("TRUNCATE TABLE coingecko_bithumb_mapping")
+        hook.run("TRUNCATE TABLE bithumb_coingecko_mapping")
         logging.info("기존 매핑 테이블 초기화 완료")
         
         # 1. 빗썸 코인 리스트 조회
