@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime, timedelta, date
+import logging
 from typing import Dict, List, Any
 
 from airflow import DAG
@@ -10,6 +11,9 @@ from airflow.operators.postgres_operator import PostgresOperator
 from airflow.hooks.postgres_hook import PostgresHook
 from airflow.utils.dates import days_ago
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # 기본 설정
 default_args = {
     'owner': 'investment-assistant',
@@ -17,13 +21,13 @@ default_args = {
     'start_date': days_ago(1),
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retries': None,
+    'retry_delay': timedelta(minutes=1),
 }
 
 # 경로 설정
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
+INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
 
 # SQL 파일 읽기
 with open(os.path.join(DAGS_SQL_DIR, "upsert_sp500_earnings_calendar.sql"), encoding="utf-8") as f:
