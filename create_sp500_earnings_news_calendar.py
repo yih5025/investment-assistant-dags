@@ -17,13 +17,13 @@ default_args = {
     'start_date': days_ago(1),
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': None,
-    'retry_delay': timedelta(minutes=1),
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
 }
 
 # 경로 설정
 DAGS_SQL_DIR = os.path.join(os.path.dirname(__file__), "sql")
-INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "initdb")
+INITDB_SQL_DIR = os.path.join(os.path.dirname(__file__), "..", "initdb")
 
 # SQL 파일 읽기
 with open(os.path.join(DAGS_SQL_DIR, "upsert_sp500_earnings_calendar.sql"), encoding="utf-8") as f:
@@ -37,25 +37,25 @@ def check_data_sources(**context):
     
     hook = PostgresHook(postgres_conn_id='postgres_default')
     
-    print("🔍 SP500 실적 캘린더 데이터 소스 점검...")
+    print("데이터 소스 점검...")
     
     # 1. earnings_calendar 테이블 확인
     earnings_count = hook.get_first("SELECT COUNT(*) FROM earnings_calendar")[0]
-    print(f"📊 earnings_calendar: {earnings_count:,}개 레코드")
+    print(f"earnings_calendar: {earnings_count:,}개 레코드")
     
     # 2. sp500_companies 테이블 확인
     sp500_count = hook.get_first("SELECT COUNT(*) FROM sp500_companies")[0] 
-    print(f"🏢 sp500_companies: {sp500_count:,}개 기업")
+    print(f"sp500_companies: {sp500_count:,}개 기업")
     
-    # 3. SP500 기업의 실적 일정 확인
+    # 3. SP500 기업의 실적 일정 확인 (현재부터 30일 후까지)
     sp500_earnings = hook.get_first("""
         SELECT COUNT(*)
         FROM earnings_calendar ec
         INNER JOIN sp500_companies sp ON ec.symbol = sp.symbol
-        WHERE ec.report_date >= CURRENT_DATE - INTERVAL '30 days'
-          AND ec.report_date <= CURRENT_DATE + INTERVAL '365 days'
+        WHERE ec.report_date >= CURRENT_DATE 
+          AND ec.report_date <= CURRENT_DATE + INTERVAL '30 days'
     """)[0]
-    print(f"🎯 SP500 기업 실적 일정: {sp500_earnings:,}개")
+    print(f"SP500 기업 실적 일정 (30일): {sp500_earnings:,}개")
     
     # 4. 뉴스 테이블별 통계
     news_tables = ['earnings_news_finnhub', 'company_news', 'market_news', 'market_news_sentiment']
@@ -65,10 +65,10 @@ def check_data_sources(**context):
         try:
             count = hook.get_first(f"SELECT COUNT(*) FROM {table}")[0]
             news_stats[table] = count
-            print(f"📰 {table}: {count:,}개 뉴스")
+            print(f"{table}: {count:,}개 뉴스")
         except Exception as e:
             news_stats[table] = 0
-            print(f"❌ {table}: 조회 실패 - {e}")
+            print(f"{table}: 조회 실패 - {e}")
     
     context['ti'].xcom_push(key='data_stats', value={
         'earnings_count': earnings_count,
@@ -80,12 +80,13 @@ def check_data_sources(**context):
     return sp500_earnings
 
 def extract_sp500_earnings_schedule(**context):
-    """SP500 기업의 실적 일정 추출"""
+    """SP500 기업의 실적 일정 추출 (현재+30일)"""
     
     hook = PostgresHook(postgres_conn_id='postgres_default')
     
-    print("📋 SP500 기업 실적 일정 추출 중...")
+    print("SP500 기업 실적 일정 추출 중...")
     
+    # 현재부터 30일 후까지의 실적 일정만 조회
     query = """
         SELECT 
             ec.symbol,
@@ -99,17 +100,17 @@ def extract_sp500_earnings_schedule(**context):
             sp.headquarters
         FROM earnings_calendar ec
         INNER JOIN sp500_companies sp ON ec.symbol = sp.symbol
-        WHERE ec.report_date >= CURRENT_DATE - INTERVAL '30 days'
-          AND ec.report_date <= CURRENT_DATE + INTERVAL '365 days'
+        WHERE ec.report_date >= CURRENT_DATE 
+          AND ec.report_date <= CURRENT_DATE + INTERVAL '30 days'
         ORDER BY ec.report_date, ec.symbol
     """
     
     earnings_schedules = hook.get_records(query)
     
-    print(f"📊 추출된 SP500 실적 일정: {len(earnings_schedules)}개")
+    print(f"추출된 SP500 실적 일정: {len(earnings_schedules)}개")
     
     if earnings_schedules:
-        print("\n📋 샘플 실적 일정:")
+        print("\n샘플 실적 일정:")
         for i, schedule in enumerate(earnings_schedules[:5]):
             symbol, report_date, _, estimate, _, company_name, sector, _, _ = schedule
             print(f"   {i+1}. {symbol} ({company_name}): {report_date} - {sector}")
@@ -134,12 +135,13 @@ def extract_sp500_earnings_schedule(**context):
 
 def collect_news_from_table(hook: PostgresHook, table_name: str, symbol: str, company_name: str, 
                            start_date: date, end_date: date, news_section: str, report_date: date) -> List[Dict]:
-    """특정 테이블에서 뉴스 수집"""
+    """특정 테이블에서 뉴스 수집 (테이블 구조에 맞게 수정)"""
     
     news_list = []
     
     try:
         if table_name == 'earnings_news_finnhub':
+            # headline, summary, source, published_at
             query = """
                 SELECT headline, summary, source, published_at, url
                 FROM earnings_news_finnhub 
@@ -152,6 +154,7 @@ def collect_news_from_table(hook: PostgresHook, table_name: str, symbol: str, co
             params = (symbol, start_date, end_date)
             
         elif table_name == 'company_news':
+            # title, description, source, published_at (content도 있지만 description 사용)
             query = """
                 SELECT title, description, source, published_at, url
                 FROM company_news 
@@ -164,10 +167,11 @@ def collect_news_from_table(hook: PostgresHook, table_name: str, symbol: str, co
             params = (symbol, start_date, end_date)
             
         elif table_name == 'market_news':
+            # title, description(또는 content), source, published_at
             query = """
-                SELECT title, description, source, published_at, url
+                SELECT title, COALESCE(description, content), source, published_at, url
                 FROM market_news 
-                WHERE (title ILIKE %s OR title ILIKE %s OR content ILIKE %s OR content ILIKE %s)
+                WHERE (title ILIKE %s OR title ILIKE %s OR description ILIKE %s OR content ILIKE %s)
                   AND published_at BETWEEN %s AND %s
                   AND url IS NOT NULL
                 ORDER BY published_at DESC 
@@ -177,6 +181,7 @@ def collect_news_from_table(hook: PostgresHook, table_name: str, symbol: str, co
                      start_date, end_date)
             
         elif table_name == 'market_news_sentiment':
+            # title, summary, source, time_published (주의: time_published)
             query = """
                 SELECT title, summary, source, time_published, url
                 FROM market_news_sentiment 
@@ -194,8 +199,15 @@ def collect_news_from_table(hook: PostgresHook, table_name: str, symbol: str, co
         results = hook.get_records(query, params)
         
         for row in results:
-            title, content, source, published_at, url = row
+            if len(row) != 5:
+                continue
+                
+            title_or_headline, content_or_summary, source, published_at, url = row
             
+            # 필수 필드 검증
+            if not title_or_headline or not url or not published_at:
+                continue
+                
             if published_at and hasattr(published_at, 'date'):
                 days_diff = (published_at.date() - report_date).days
             else:
@@ -203,17 +215,17 @@ def collect_news_from_table(hook: PostgresHook, table_name: str, symbol: str, co
                 
             news_list.append({
                 'source_table': table_name,
-                'title': title or '',
-                'content': content or '',
-                'source': source or '',
+                'title': str(title_or_headline) if title_or_headline else '',
+                'summary': str(content_or_summary) if content_or_summary else '',
+                'source': str(source) if source else '',
                 'published_at': published_at,
-                'url': url,
+                'url': str(url),
                 'news_section': news_section,
                 'days_from_earnings': days_diff
             })
         
     except Exception as e:
-        print(f"❌ {table_name} 뉴스 수집 실패 ({symbol}): {e}")
+        print(f"뉴스 수집 실패 {table_name} ({symbol}): {e}")
     
     return news_list
 
@@ -225,10 +237,10 @@ def collect_related_news_for_each_schedule(**context):
     earnings_schedules = context['ti'].xcom_pull(key='earnings_schedules', task_ids='extract_sp500_earnings_schedule')
     
     if not earnings_schedules:
-        print("❌ 실적 일정 데이터를 찾을 수 없습니다.")
+        print("실적 일정 데이터를 찾을 수 없습니다.")
         return 0
     
-    print(f"🎯 {len(earnings_schedules)}개 실적 일정에 대한 뉴스 수집 시작...")
+    print(f"{len(earnings_schedules)}개 실적 일정에 대한 뉴스 수집 시작...")
     
     news_tables = ['earnings_news_finnhub', 'company_news', 'market_news', 'market_news_sentiment']
     processed_count = 0
@@ -245,7 +257,7 @@ def collect_related_news_for_each_schedule(**context):
             report_date = datetime.strptime(report_date, '%Y-%m-%d').date()
         
         try:
-            print(f"📊 처리 중 ({i+1}/{len(earnings_schedules)}): {symbol} ({company_name}) - {report_date}")
+            print(f"처리 중 ({i+1}/{len(earnings_schedules)}): {symbol} ({company_name}) - {report_date}")
             
             # 날짜 범위 계산
             forecast_start = report_date - timedelta(days=14)
@@ -282,7 +294,7 @@ def collect_related_news_for_each_schedule(**context):
             total_count = len(unique_news_list)
             total_news_collected += total_count
             
-            # 이벤트 정보 생성
+            # 이벤트 정보 생성 (importance_level 제거)
             event_title = f"{symbol} 실적 발표"
             if schedule.get('estimate'):
                 event_title += f" (예상 EPS: ${schedule['estimate']})"
@@ -290,6 +302,8 @@ def collect_related_news_for_each_schedule(**context):
             event_description = f"{company_name}의 실적 발표 일정입니다."
             if total_count > 0:
                 event_description += f" 관련 뉴스 {total_count}개가 수집되었습니다."
+            else:
+                event_description += " 관련 뉴스가 아직 없습니다."
             
             # 통합 데이터 준비
             consolidated_item = {
@@ -309,20 +323,20 @@ def collect_related_news_for_each_schedule(**context):
             
             forecast_count = sum(1 for n in unique_news_list if n['news_section'] == 'forecast')
             reaction_count = sum(1 for n in unique_news_list if n['news_section'] == 'reaction')
-            print(f"✅ {symbol} 완료: 예상 {forecast_count}개, 반응 {reaction_count}개, 총 {total_count}개")
+            print(f"완료 {symbol}: 예상 {forecast_count}개, 반응 {reaction_count}개, 총 {total_count}개")
             
-            if (i + 1) % 50 == 0:
-                print(f"📈 진행률: {i+1}/{len(earnings_schedules)} ({(i+1)/len(earnings_schedules)*100:.1f}%)")
+            if (i + 1) % 20 == 0:
+                print(f"진행률: {i+1}/{len(earnings_schedules)} ({(i+1)/len(earnings_schedules)*100:.1f}%)")
             
         except Exception as e:
-            print(f"❌ {symbol} 처리 실패: {e}")
+            print(f"처리 실패 {symbol}: {e}")
             continue
     
-    print(f"\n📊 뉴스 수집 완료:")
-    print(f"   ✅ 처리된 실적 일정: {processed_count}/{len(earnings_schedules)}개")
-    print(f"   📰 총 수집된 뉴스: {total_news_collected}개")
+    print(f"\n뉴스 수집 완료:")
+    print(f"   처리된 실적 일정: {processed_count}/{len(earnings_schedules)}개")
+    print(f"   총 수집된 뉴스: {total_news_collected}개")
     if processed_count > 0:
-        print(f"   📈 평균 뉴스/일정: {total_news_collected/processed_count:.1f}개")
+        print(f"   평균 뉴스/일정: {total_news_collected/processed_count:.1f}개")
     
     context['ti'].xcom_push(key='consolidated_data', value=consolidated_data)
     
@@ -336,10 +350,10 @@ def upsert_consolidated_data(**context):
     consolidated_data = context['ti'].xcom_pull(key='consolidated_data', task_ids='collect_related_news_for_each_schedule')
     
     if not consolidated_data:
-        print("❌ 통합 데이터를 찾을 수 없습니다.")
+        print("통합 데이터를 찾을 수 없습니다.")
         return 0
     
-    print(f"💾 {len(consolidated_data)}개 실적 캘린더 데이터 저장 시작...")
+    print(f"{len(consolidated_data)}개 실적 캘린더 데이터 저장 시작...")
     
     calendar_saved = 0
     news_saved = 0
@@ -350,17 +364,17 @@ def upsert_consolidated_data(**context):
         event_info = item['event_info']
         
         try:
-            # 1. 캘린더 데이터 저장
+            # 1. 캘린더 데이터 저장 (importance_level 제거)
             calendar_params = {
                 'symbol': schedule['symbol'],
-                'company_name': schedule['company_name'],
+                'company_name': schedule['company_name'] or '',
                 'report_date': schedule['report_date'],
                 'fiscal_date_ending': schedule['fiscal_date_ending'],
                 'estimate': schedule['estimate'],
-                'currency': schedule['currency'],
-                'gics_sector': schedule['gics_sector'],
-                'gics_sub_industry': schedule['gics_sub_industry'],
-                'headquarters': schedule['headquarters'],
+                'currency': schedule['currency'] or 'USD',
+                'gics_sector': schedule['gics_sector'] or '',
+                'gics_sub_industry': schedule['gics_sub_industry'] or '',
+                'headquarters': schedule['headquarters'] or '',
                 'event_type': 'earnings_report',
                 'event_title': event_info['event_title'],
                 'event_description': event_info['event_description'],
@@ -373,21 +387,32 @@ def upsert_consolidated_data(**context):
             calendar_saved += 1
             
             # 2. calendar_id 조회
-            calendar_id = hook.get_first("""
+            calendar_id_result = hook.get_first("""
                 SELECT id FROM sp500_earnings_calendar 
                 WHERE symbol = %s AND report_date = %s
-            """, (schedule['symbol'], schedule['report_date']))[0]
+            """, (schedule['symbol'], schedule['report_date']))
+            
+            if not calendar_id_result:
+                print(f"calendar_id 조회 실패: {schedule['symbol']}")
+                continue
+                
+            calendar_id = calendar_id_result[0]
             
             # 3. 뉴스 데이터 저장
             for news in news_list:
+                # 필수 필드 재검증
+                if not news.get('title') or not news.get('url') or not news.get('published_at'):
+                    print(f"필수 필드 누락 스킵: {news.get('url', 'NO_URL')}")
+                    continue
+                
                 news_params = {
                     'calendar_id': calendar_id,
                     'source_table': news['source_table'],
-                    'title': news['title'],
+                    'title': news['title'][:500],  # 길이 제한
                     'url': news['url'],
-                    'summary': news['content'],  # content를 summary로 매핑
-                    'content': None,  # content 컬럼은 비워둠
-                    'source': news['source'],
+                    'summary': news['summary'][:1000] if news['summary'] else '',  # 길이 제한
+                    'content': None,  # content 컬럼은 사용하지 않음
+                    'source': news['source'][:100] if news['source'] else '',  # 길이 제한
                     'published_at': news['published_at'],
                     'news_section': news['news_section'],
                     'days_from_earnings': news['days_from_earnings']
@@ -397,18 +422,18 @@ def upsert_consolidated_data(**context):
                     hook.run(UPSERT_NEWS_SQL, parameters=news_params)
                     news_saved += 1
                 except Exception as e:
-                    print(f"⚠️ 뉴스 저장 실패 ({schedule['symbol']}, {news['url']}): {e}")
+                    print(f"뉴스 저장 실패 ({schedule['symbol']}, {news['url'][:50]}...): {e}")
                     continue
             
-            print(f"✅ {schedule['symbol']} 저장 완료: 캘린더 1개, 뉴스 {len(news_list)}개")
+            print(f"저장 완료 {schedule['symbol']}: 캘린더 1개, 뉴스 {len(news_list)}개")
             
         except Exception as e:
-            print(f"❌ {schedule['symbol']} 저장 실패: {e}")
+            print(f"저장 실패 {schedule['symbol']}: {e}")
             continue
     
-    print(f"\n💾 데이터 저장 완료:")
-    print(f"   📅 캘린더: {calendar_saved}개")
-    print(f"   📰 뉴스: {news_saved}개")
+    print(f"\n데이터 저장 완료:")
+    print(f"   캘린더: {calendar_saved}개")
+    print(f"   뉴스: {news_saved}개")
     
     return calendar_saved
 
@@ -416,9 +441,9 @@ def upsert_consolidated_data(**context):
 with DAG(
     dag_id='create_sp500_earnings_calendar',
     default_args=default_args,
-    schedule_interval='@weekly',
+    schedule_interval='@weekly',  # 주 1회 실행
     catchup=False,
-    description='SP500 기업 실적 캘린더 생성 (뉴스 통합)',
+    description='SP500 기업 실적 캘린더 생성 (30일 범위, 뉴스 통합)',
     template_searchpath=[INITDB_SQL_DIR],
     tags=['sp500', 'earnings', 'calendar', 'news'],
 ) as dag:
@@ -436,7 +461,7 @@ with DAG(
         python_callable=check_data_sources,
     )
     
-    # SP500 실적 일정 추출
+    # SP500 실적 일정 추출 (30일 범위)
     extract_schedules = PythonOperator(
         task_id='extract_sp500_earnings_schedule',
         python_callable=extract_sp500_earnings_schedule,
