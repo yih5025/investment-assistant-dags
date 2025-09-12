@@ -1,0 +1,55 @@
+-- dags/sql/upsert_sp500_earnings_calendar.sql
+
+INSERT INTO sp500_earnings_calendar (
+    symbol, 
+    company_name, 
+    report_date, 
+    fiscal_date_ending, 
+    estimate, 
+    currency,
+    gics_sector, 
+    gics_sub_industry, 
+    headquarters,
+    event_type, 
+    event_title, 
+    event_description, 
+    total_news_count, 
+    forecast_news_count, 
+    reaction_news_count,
+    created_at, 
+    updated_at
+) VALUES (
+    %(symbol)s, 
+    %(company_name)s, 
+    %(report_date)s, 
+    %(fiscal_date_ending)s, 
+    %(estimate)s, 
+    %(currency)s, 
+    %(gics_sector)s, 
+    %(gics_sub_industry)s, 
+    %(headquarters)s,
+    %(event_type)s, 
+    %(event_title)s, 
+    %(event_description)s, 
+    %(total_news_count)s, 
+    %(forecast_news_count)s, 
+    %(reaction_news_count)s,
+    NOW(), 
+    NOW()
+)
+ON CONFLICT (symbol, report_date) 
+DO UPDATE SET
+    company_name = EXCLUDED.company_name,
+    fiscal_date_ending = EXCLUDED.fiscal_date_ending,
+    estimate = EXCLUDED.estimate,
+    currency = EXCLUDED.currency,
+    gics_sector = EXCLUDED.gics_sector,
+    gics_sub_industry = EXCLUDED.gics_sub_industry,
+    headquarters = EXCLUDED.headquarters,
+    event_type = EXCLUDED.event_type,
+    event_title = EXCLUDED.event_title,
+    event_description = EXCLUDED.event_description,
+    total_news_count = EXCLUDED.total_news_count,
+    forecast_news_count = EXCLUDED.forecast_news_count,
+    reaction_news_count = EXCLUDED.reaction_news_count,
+    updated_at = NOW();
