@@ -1,4 +1,4 @@
-# dags/create_sp500_earnings_news_calendar.py
+# dags/create_sp500_earnings_calendar.py
 
 import os
 from datetime import datetime, timedelta, date
@@ -141,12 +141,12 @@ def collect_news_from_table(hook: PostgresHook, table_name: str, symbol: str, co
     try:
         if table_name == 'earnings_news_finnhub':
             query = """
-                SELECT headline, summary, source, datetime, url
+                SELECT headline, summary, source, published_at, url
                 FROM earnings_news_finnhub 
                 WHERE symbol = %s 
-                  AND datetime BETWEEN %s AND %s
+                  AND published_at BETWEEN %s AND %s
                   AND url IS NOT NULL
-                ORDER BY datetime DESC 
+                ORDER BY published_at DESC 
                 LIMIT 10
             """
             params = (symbol, start_date, end_date)
@@ -291,6 +291,12 @@ def collect_related_news_for_each_schedule(**context):
             if total_count > 0:
                 event_description += f" 관련 뉴스 {total_count}개가 수집되었습니다."
             
+            # 중요도 계산
+            importance_level = 3
+            if schedule.get('gics_sector') in ['Information Technology', 'Health Care', 'Financials']:
+                importance_level = 4
+            if symbol in ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']:
+                importance_level = 5
             
             # 통합 데이터 준비
             consolidated_item = {
@@ -299,6 +305,7 @@ def collect_related_news_for_each_schedule(**context):
                 'event_info': {
                     'event_title': event_title,
                     'event_description': event_description,
+                    'importance_level': importance_level,
                     'total_news_count': total_count,
                     'forecast_news_count': sum(1 for n in unique_news_list if n['news_section'] == 'forecast'),
                     'reaction_news_count': sum(1 for n in unique_news_list if n['news_section'] == 'reaction')
@@ -365,6 +372,7 @@ def upsert_consolidated_data(**context):
                 'event_type': 'earnings_report',
                 'event_title': event_info['event_title'],
                 'event_description': event_info['event_description'],
+                'importance_level': event_info['importance_level'],
                 'total_news_count': event_info['total_news_count'],
                 'forecast_news_count': event_info['forecast_news_count'],
                 'reaction_news_count': event_info['reaction_news_count']
