@@ -459,7 +459,7 @@ def store_primary_tweets_to_db(**context):
 
 # DAG 정의
 with DAG(
-    dag_id='ingest_x_posts_primary_improved_k8s',
+    dag_id='ingest_x_posts_primary_k8s',
     default_args=default_args,
     schedule_interval='0 1 * * *',  # 매일 새벽 1시 실행 (Secondary와 시간 분리)
     catchup=False,

@@ -590,7 +590,7 @@ def store_secondary_tweets_to_db(**context):
 
 # DAG 정의
 with DAG(
-    dag_id='ingest_x_posts_secondary_improved_k8s',
+    dag_id='ingest_x_posts_secondary_k8s',
     default_args=default_args,
     schedule_interval='0 5 * * *',  # 매일 새벽 5시 실행 (Primary와 4시간 차이)
     catchup=False,
