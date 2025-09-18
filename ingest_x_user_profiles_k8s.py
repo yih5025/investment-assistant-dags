@@ -27,33 +27,16 @@ default_args = {
 
 # 모든 사용자명 (순서대로 처리)
 ALL_USERNAMES = [
-    # Primary Token 계정들
-    ('elonmusk', 'core_investors'),
-    ('RayDalio', 'core_investors'),
-    ('jimcramer', 'core_investors'),
-    ('tim_cook', 'core_investors'),
-    ('satyanadella', 'core_investors'),
-    ('sundarpichai', 'core_investors'),
-    ('SecYellen', 'core_investors'),
-    ('VitalikButerin', 'core_investors'),
-    
-    # Secondary Token 계정들
-    ('saylor', 'crypto'),
-    ('brian_armstrong', 'crypto'),
-    ('CoinbaseAssets', 'crypto'),
-    ('jeffbezos', 'tech_ceo'),
-    ('IBM', 'tech_ceo'),
-    ('CathieDWood', 'institutional'),
-    ('mcuban', 'institutional'),
-    ('chamath', 'institutional'),
-    ('CNBC', 'media'),
-    ('business', 'media'),
-    ('WSJ', 'media'),
-    ('Tesla', 'corporate'),
-    ('nvidia', 'corporate'),
-    ('meta', 'corporate'),
-    ('oracle', 'corporate'),
-    
+    ('Meta', 'corporate'),
+    ('Oracle', 'corporate'),
+    ('Palantir', 'corporate'),
+    ('IonQ', 'corporate'),
+    ('BitCoin', 'crypto'),
+    ('Ethereum', 'crypto'),
+    ('Solana', 'crypto'),
+    ('Dogecoin', 'crypto'),
+    ('Tether', 'crypto'),
+    ('Ripple', 'crypto'),
 ]
 
 def get_next_username_to_process():
@@ -87,7 +70,7 @@ def fetch_single_user_id(**context):
     print(f"🎯 처리 대상: {username} ({category})")
     
     # Bearer Token 가져오기
-    bearer_token = Variable.get('X_API_BEARER_TOKEN_2')
+    bearer_token = Variable.get('X_API_BEARER_TOKEN_1')
     
     # API 호출
     url = f"https://api.twitter.com/2/users/by/username/{username}"
