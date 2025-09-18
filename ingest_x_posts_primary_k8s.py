@@ -51,7 +51,7 @@ PRIMARY_ACCOUNT_SCHEDULE = {
         'max_results': 50,
         'priority': 2
     },
-    'satyanadella': {
+    'oracle': {
         'frequency': 'every_3_days',   # 3일마다 (10회/월)
         'max_results': 50,
         'priority': 2

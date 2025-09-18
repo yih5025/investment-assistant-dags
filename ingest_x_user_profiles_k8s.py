@@ -50,7 +50,10 @@ ALL_USERNAMES = [
     ('business', 'media'),
     ('WSJ', 'media'),
     ('Tesla', 'corporate'),
-    ('nvidia', 'corporate')
+    ('nvidia', 'corporate'),
+    ('meta', 'corporate'),
+    ('oracle', 'corporate'),
+    
 ]
 
 def get_next_username_to_process():

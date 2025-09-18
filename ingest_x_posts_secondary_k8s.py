@@ -57,13 +57,6 @@ SECONDARY_ACCOUNT_SCHEDULE = {
         'priority': 1,
         'category': 'tech_ceo'
     },
-    'sundarpichai': {  # Google CEO (Primary와 다른 스케줄)
-        'frequency': 'twice_weekly',       # 8회/월 (월, 목)
-        'max_results': 50,
-        'priority': 2,
-        'category': 'tech_ceo',
-        'weekly_days': [0, 3]  # 월, 목
-    },
     'IBM': {  # IBM 공식 계정
         'frequency': 'weekly',             # 4회/월 (토요일)
         'max_results': 50,
@@ -132,7 +125,21 @@ SECONDARY_ACCOUNT_SCHEDULE = {
         'priority': 3,
         'category': 'corporate',
         'weekly_day': 3  # 목요일
-    }
+    },
+    'meta': {  # Google CEO (Primary와 다른 스케줄)
+        'frequency': 'weekly',       # 8회/월 (월, 목)
+        'max_results': 50,
+        'priority': 2,
+        'category': 'tech_ceo',
+        'weekly_day': 3  # 목요일
+    },
+    'oracle': {
+        'frequency': 'weekly',             # 4회/월 (목요일)
+        'max_results': 50,
+        'priority': 3,
+        'category': 'corporate',
+        'weekly_day': 3  # 목요일
+    },
 }
 
 def get_user_id_from_db(username):
