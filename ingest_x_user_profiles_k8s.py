@@ -167,7 +167,7 @@ def check_completion_status(**context):
 
 # DAG 정의
 with DAG(
-    dag_id='fetch_user_ids_batch_15min',
+    dag_id='fetch_user_ids_batch_15min_2',
     default_args=default_args,
     schedule_interval='*/16 * * * *',  # 15분마다 실행
     catchup=False,
