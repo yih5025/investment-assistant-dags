@@ -15,7 +15,7 @@ default_args = {
     'owner': 'investment_assistant',
     'depends_on_past': False,
     'start_date': datetime(2025, 1, 1),
-    'retries': 1,
+    'retries': None,
     'retry_delay': timedelta(minutes=2)
 }
 
