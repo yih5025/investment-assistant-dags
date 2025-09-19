@@ -20,7 +20,7 @@ default_args = {
 }
 
 @dag(
-    dag_id='social_media_market_analysis',
+    dag_id='batch_processing_social_media_market_analysis',
     default_args=default_args,
     description='소셜미디어 게시글 시장 영향 분석',
     schedule_interval='0 */2 * * *',  # 2시간마다 실행
@@ -33,7 +33,7 @@ def social_media_analysis_dag():
     @task
     def get_unanalyzed_posts():
         """분석되지 않은 모든 게시글 조회 (X, Truth Social Posts, Truth Social Trends)"""
-        pg_hook = PostgresHook(postgres_conn_id='social_media_db')
+        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
         # X 게시글 - 미분석된 모든 게시글
         x_query = """
