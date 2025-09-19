@@ -12,13 +12,11 @@ from utils.market_data_collector import MarketDataCollector
 logger = logging.getLogger(__name__)
 
 default_args = {
-    'owner': 'data_team',
+    'owner': 'investment_assistant',
     'depends_on_past': False,
     'start_date': datetime(2025, 1, 1),
-    'email_on_failure': True,
-    'email_on_retry': False,
-    'retries': 2,
-    'retry_delay': timedelta(minutes=5)
+    'retries': 1,
+    'retry_delay': timedelta(minutes=2)
 }
 
 @dag(
