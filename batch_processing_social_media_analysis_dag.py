@@ -176,7 +176,7 @@ def social_media_analysis_dag():
             logger.info("No results to save")
             return
         
-        pg_hook = PostgresHook(postgres_conn_id='social_media_db')
+        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
         logger.info(f"Saving {len(analysis_results)} analysis results")
         
