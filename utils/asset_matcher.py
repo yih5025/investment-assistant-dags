@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 class SocialMediaAnalyzer:
     def __init__(self):
-        self.pg_hook = PostgresHook(postgres_conn_id='social_media_db')
+        self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         self.account_mapping_cache = {}
         self.keyword_mapping_cache = {}
         self.market_data_range = None

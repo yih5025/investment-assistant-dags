@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 class MarketDataCollector:
     def __init__(self):
-        self.pg_hook = PostgresHook(postgres_conn_id='social_media_db')
+        self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
     
     def collect_market_data(self, affected_assets, post_timestamp):
         """영향받은 자산들의 시장 데이터 수집"""
