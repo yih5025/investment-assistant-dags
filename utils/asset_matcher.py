@@ -74,30 +74,17 @@ class SocialMediaAnalyzer:
         return sorted(seen_symbols.values(), key=lambda x: x['priority'])
     
     def find_statistical_outlier(self, timestamp):
-        """시장 데이터에서 통계적 변동성 탐지"""
         try:
-            # 모든 timestamp를 UTC timezone-aware로 통일
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=timezone.utc)
             
-            # 시장 데이터 범위 체크도 timezone-aware로 통일
             if not self._has_market_data_for_time(timestamp):
                 return None
                 
-            start_time = timestamp - timedelta(hours=1)
-            end_time = timestamp + timedelta(hours=2)
+            # SP500과 빗썸 다른 범위 적용
+            sp500_outlier = self._analyze_sp500_volatility_extended(timestamp)
+            bithumb_outlier = self._analyze_bithumb_volatility_standard(timestamp)
             
-            # 이제 안전하게 밀리초 변환 가능
-            start_ms = int(start_time.timestamp() * 1000)
-            end_ms = int(end_time.timestamp() * 1000)
-            
-            # SP500 변동성 분석
-            sp500_outlier = self._analyze_sp500_volatility(start_ms, end_ms)
-            
-            # 빗썸 변동성 분석  
-            bithumb_outlier = self._analyze_bithumb_volatility(start_ms, end_ms)
-            
-            # 가장 높은 변동성 반환
             candidates = [x for x in [sp500_outlier, bithumb_outlier] if x]
             if candidates:
                 return max(candidates, key=lambda x: x.get('volatility_score', 0))
@@ -156,24 +143,29 @@ class SocialMediaAnalyzer:
             logger.error(f"Failed to get market data range: {e}")
             return {}
     
-    def _analyze_sp500_volatility(self, start_ms, end_ms):
-        """SP500 데이터에서 변동성 분석"""
+    def _analyze_sp500_volatility_extended(self, timestamp):
+        """SP500 - 5일 범위 (주말/공휴일 고려)"""
         try:
-            # 타임스탬프를 밀리초로 이미 변환 됨
+            # 5일 범위
+            start_time = timestamp - timedelta(days=2)
+            end_time = timestamp + timedelta(days=2)
+            
+            start_ms = int(start_time.timestamp() * 1000)
+            end_ms = int(end_time.timestamp() * 1000)
             
             query = """
             WITH price_changes AS (
                 SELECT symbol,
-                       MIN(price) as min_price,
-                       MAX(price) as max_price,
-                       COUNT(*) as trade_count
+                    MIN(price) as min_price,
+                    MAX(price) as max_price,
+                    COUNT(*) as trade_count
                 FROM sp500_websocket_trades 
                 WHERE timestamp_ms BETWEEN %s AND %s
                 GROUP BY symbol
-                HAVING COUNT(*) >= 5
+                HAVING COUNT(*) >= 5  # 5일 중 최소 5개 거래
             )
             SELECT symbol, 
-                   ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
+                ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
             FROM price_changes
             WHERE min_price > 0
             ORDER BY volatility_pct DESC
@@ -182,7 +174,7 @@ class SocialMediaAnalyzer:
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
             
-            if result and result[1] and result[1] > 2.0:  # 2% 이상 변동시만
+            if result and len(result) >= 2 and result[0] and result[1] and result[1] > 2.0:
                 return {
                     'symbol': result[0],
                     'volatility_score': float(result[1]),
@@ -195,25 +187,33 @@ class SocialMediaAnalyzer:
         except Exception as e:
             logger.error(f"SP500 volatility analysis failed: {e}")
             return None
+
     
-    def _analyze_bithumb_volatility(self, start_ms, end_ms):
-        """빗썸 데이터에서 변동성 분석"""
+    def _analyze_bithumb_volatility_standard(self, timestamp):
+        """빗썸 - 3일 범위 (24시간 거래)"""
         try:
+            # 3일 범위
+            start_time = timestamp - timedelta(days=1)
+            end_time = timestamp + timedelta(days=1)
             
+            start_ms = int(start_time.timestamp() * 1000)
+            end_ms = int(end_time.timestamp() * 1000)
+        
             query = """
             WITH crypto_changes AS (
                 SELECT market,
-                       MIN(CAST(low_price AS DECIMAL)) as min_price,
-                       MAX(CAST(high_price AS DECIMAL)) as max_price
+                    MIN(CAST(trade_price AS DECIMAL)) as min_price,
+                    MAX(CAST(trade_price AS DECIMAL)) as max_price,
+                    COUNT(*) as trade_count
                 FROM bithumb_ticker 
                 WHERE trade_timestamp BETWEEN %s AND %s
-                    AND low_price ~ '^[0-9]+\.?[0-9]*$'
-                    AND high_price ~ '^[0-9]+\.?[0-9]*$'
+                    AND trade_price ~ '^[0-9]+\.?[0-9]*$'
                     AND market LIKE 'KRW-%'
                 GROUP BY market
+                HAVING COUNT(*) >= 10  -- 3일이므로 더 많은 데이터 요구
             )
             SELECT market,
-                   ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
+                ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
             FROM crypto_changes
             WHERE min_price > 0
             ORDER BY volatility_pct DESC
@@ -221,17 +221,16 @@ class SocialMediaAnalyzer:
             """
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
-            print(result)
             
-            if result and result[1] and result[1] > 3.0:  # 3% 이상 변동시만
-                # KRW- 접두사 제거
+            if result and len(result) >= 2 and result[0] and result[1] and result[1] > 5.0:  # 3일 기준이므로 5% 이상
                 symbol = self._convert_bithumb_symbol(result[0])
-                return {
-                    'symbol': symbol,
-                    'volatility_score': float(result[1]),
-                    'source': 'statistical_correlation',
-                    'priority': 3
-                }
+                if symbol:
+                    return {
+                        'symbol': symbol,
+                        'volatility_score': float(result[1]),
+                        'source': 'statistical_correlation',
+                        'priority': 3
+                    }
             
             return None
             
