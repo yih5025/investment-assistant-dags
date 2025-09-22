@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 default_args = {
     'owner': 'investment_assistant',
     'depends_on_past': False,
-    'start_date': datetime(2025, 1, 1),
+    'start_date': datetime(2025, 9, 21),
     'retries': None,
     'retry_delay': timedelta(minutes=2)
 }
@@ -23,7 +23,7 @@ default_args = {
     dag_id='batch_processing_social_media_market_analysis',
     default_args=default_args,
     description='소셜미디어 게시글 시장 영향 분석',
-    schedule_interval='0 */2 * * *',  # 2시간마다 실행
+    schedule_interval='@daily',
     catchup=False,
     max_active_runs=1,
     tags=['social_media', 'market_analysis']
