@@ -126,7 +126,9 @@ def social_media_analysis_dag():
                 affected_assets = analyzer.determine_affected_assets(
                     username=post['username'],
                     content=post['content'],
-                    timestamp=post['post_timestamp']
+                    timestamp=post['post_timestamp'],
+                    post_id=post['post_id'],
+                    post_source=post['source']
                 )
                 
                 # 시장 데이터 수집

@@ -12,15 +12,15 @@ class SocialMediaAnalyzer:
         self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         self.market_data_range = None
     
-    def determine_affected_assets(self, username, content, timestamp):
+    def determine_affected_assets(self, username, content, timestamp, post_id=None, post_source=None):
         """단순화된 2단계 자산 매칭 로직"""
         affected_assets = []
         
-        # 1단계: 범용 키워드 매핑 (최대 5개까지)
-        keyword_assets = self.extract_keyword_assets_v2(content)
+        # 1단계: 범용 키워드 매핑 (키워드 저장 포함)
+        keyword_assets = self.extract_keyword_assets_v2(content, post_id, post_source)
         affected_assets.extend(keyword_assets[:5])
         
-        # 2단계: 통계적 변동성 (키워드 매칭이 5개 미만일 때만)
+        # 2단계: 통계적 변동성
         if len(affected_assets) < 5:
             volatile_asset = self.find_statistical_outlier(timestamp)
             if volatile_asset:
@@ -28,29 +28,68 @@ class SocialMediaAnalyzer:
         
         return self.dedupe_and_rank(affected_assets)
     
-    def extract_keyword_assets_v2(self, content):
-        """새로운 관대한 키워드 매칭"""
+    def extract_keyword_assets_v2(self, content, post_id=None, post_source=None):
+        """새로운 관대한 키워드 매칭 + DB 저장"""
         if not content:
             return []
         
-        # 모든 단어 추출 (영문, 숫자, 하이픈 포함)
         words = re.findall(r'\b[A-Za-z0-9\-]+\b', content.lower())
         
+        extracted_keywords = []
         matched_assets = []
         
         for i, word in enumerate(words):
-            # 심볼 매핑 확인
+            # 키워드 저장 준비
+            extracted_keywords.append({
+                'post_id': post_id,
+                'post_source': post_source,
+                'keyword': word,
+                'keyword_position': i
+            })
+            
+            # 심볼 매칭
             if word in COMPREHENSIVE_SYMBOL_MAPPING:
                 symbol = COMPREHENSIVE_SYMBOL_MAPPING[word]
                 matched_assets.append({
                     'symbol': symbol,
                     'source': 'keyword_mention',
-                    'priority': 1,  # 모든 키워드 매칭을 최고 우선순위로
+                    'priority': 1,
                     'matched_keyword': word,
                     'position': i
                 })
         
+        # 키워드 DB 저장
+        if post_id and post_source:
+            self._save_keywords_to_db(extracted_keywords)
+        
         return self.dedupe_assets(matched_assets)
+
+    def _save_keywords_to_db(self, keywords):
+        """추출된 키워드를 DB에 실제 저장"""
+        if not keywords:
+            return
+        
+        try:
+            insert_query = """
+            INSERT INTO post_keywords (post_id, post_source, keyword, keyword_position)
+            VALUES %s
+            ON CONFLICT DO NOTHING
+            """
+            
+            values = [(k['post_id'], k['post_source'], k['keyword'], k['keyword_position']) 
+                    for k in keywords]
+            
+            # PostgresHook으로 bulk insert
+            conn = self.pg_hook.get_conn()
+            cursor = conn.cursor()
+            from psycopg2.extras import execute_values
+            execute_values(cursor, insert_query, values, template=None, page_size=1000)
+            conn.commit()
+            
+            logger.info(f"Saved {len(keywords)} keywords to DB")
+            
+        except Exception as e:
+            logger.error(f"Failed to save keywords: {e}")
     
     def dedupe_assets(self, matched_assets):
         """자산 중복 제거 (같은 심볼은 한 번만)"""
