@@ -185,7 +185,6 @@ class SocialMediaAnalyzer:
     def _analyze_sp500_volatility_extended(self, timestamp):
         """SP500 - 5일 범위 (주말/공휴일 고려)"""
         try:
-            # 5일 범위
             start_time = timestamp - timedelta(days=2)
             end_time = timestamp + timedelta(days=2)
             
@@ -201,7 +200,7 @@ class SocialMediaAnalyzer:
                 FROM sp500_websocket_trades 
                 WHERE timestamp_ms BETWEEN %s AND %s
                 GROUP BY symbol
-                HAVING COUNT(*) >= 5  # 5일 중 최소 5개 거래
+                HAVING COUNT(*) >= 5  -- 5일 중 최소 5개 거래
             )
             SELECT symbol, 
                 ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
@@ -213,6 +212,9 @@ class SocialMediaAnalyzer:
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
             
+            # 디버깅 로그 추가
+            logger.info(f"SP500 query result: {result}, type: {type(result)}")
+            
             if result and len(result) >= 2 and result[0] and result[1] and result[1] > 2.0:
                 return {
                     'symbol': result[0],
@@ -221,23 +223,22 @@ class SocialMediaAnalyzer:
                     'priority': 3
                 }
             
+            logger.info("SP500 analysis: no qualifying volatility found")
             return None
             
         except Exception as e:
             logger.error(f"SP500 volatility analysis failed: {e}")
             return None
 
-    
     def _analyze_bithumb_volatility_standard(self, timestamp):
         """빗썸 - 3일 범위 (24시간 거래)"""
         try:
-            # 3일 범위
             start_time = timestamp - timedelta(days=1)
             end_time = timestamp + timedelta(days=1)
             
             start_ms = int(start_time.timestamp() * 1000)
             end_ms = int(end_time.timestamp() * 1000)
-        
+            
             query = """
             WITH crypto_changes AS (
                 SELECT market,
@@ -261,7 +262,10 @@ class SocialMediaAnalyzer:
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
             
-            if result and len(result) >= 2 and result[0] and result[1] and result[1] > 5.0:  # 3일 기준이므로 5% 이상
+            # 디버깅 로그 추가
+            logger.info(f"Bithumb query result: {result}, type: {type(result)}")
+            
+            if result and len(result) >= 2 and result[0] and result[1] and result[1] > 5.0:
                 symbol = self._convert_bithumb_symbol(result[0])
                 if symbol:
                     return {
@@ -271,6 +275,7 @@ class SocialMediaAnalyzer:
                         'priority': 3
                     }
             
+            logger.info("Bithumb analysis: no qualifying volatility found")
             return None
             
         except Exception as e:
