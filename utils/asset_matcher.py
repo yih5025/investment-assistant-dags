@@ -1,117 +1,101 @@
 # utils/asset_matcher.py
 from airflow.hooks.postgres_hook import PostgresHook
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
+import re
+from .symbol_mapping import COMPREHENSIVE_SYMBOL_MAPPING
 
 logger = logging.getLogger(__name__)
 
 class SocialMediaAnalyzer:
     def __init__(self):
         self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
-        self.account_mapping_cache = {}
-        self.keyword_mapping_cache = {}
         self.market_data_range = None
     
     def determine_affected_assets(self, username, content, timestamp):
-        """3단계 자산 매칭 로직"""
+        """단순화된 2단계 자산 매칭 로직"""
         affected_assets = []
         
-        # 1단계: 계정별 하드코딩 매핑
-        account_assets = self.get_account_assets(username)
-        affected_assets.extend(account_assets)
+        # 1단계: 범용 키워드 매핑 (최대 5개까지)
+        keyword_assets = self.extract_keyword_assets_v2(content)
+        affected_assets.extend(keyword_assets[:5])
         
-        # 2단계: 키워드 매칭 (최대 5개까지만)
-        if len(affected_assets) < 5:
-            keyword_assets = self.extract_keyword_assets(content)
-            for asset in keyword_assets:
-                if len(affected_assets) >= 5:
-                    break
-                affected_assets.append(asset)
-        
-        # 3단계: 통계적 변동성 (최대 5개까지만)
+        # 2단계: 통계적 변동성 (키워드 매칭이 5개 미만일 때만)
         if len(affected_assets) < 5:
             volatile_asset = self.find_statistical_outlier(timestamp)
             if volatile_asset:
                 affected_assets.append(volatile_asset)
         
-        # 중복 제거 및 우선순위 정렬
         return self.dedupe_and_rank(affected_assets)
     
-    def get_account_assets(self, username):
-        """account_asset_mapping 테이블에서 계정별 자산 조회"""
-        if username not in self.account_mapping_cache:
-            query = """
-            SELECT asset_symbol, priority 
-            FROM account_asset_mapping 
-            WHERE username = %s 
-            ORDER BY priority ASC
-            """
-            results = self.pg_hook.get_records(query, parameters=[username])
-            self.account_mapping_cache[username] = results or []
-        
-        return [{
-            'symbol': row[0],
-            'source': 'verified_account',
-            'priority': row[1]
-        } for row in self.account_mapping_cache[username]]
-    
-    def extract_keyword_assets(self, content):
-        """keyword_asset_mapping 테이블에서 키워드 매칭"""
+    def extract_keyword_assets_v2(self, content):
+        """새로운 관대한 키워드 매칭"""
         if not content:
             return []
         
-        content_lower = content.lower()
-        
-        # 모든 키워드 조회 (캐싱)
-        if not self.keyword_mapping_cache:
-            query = "SELECT keyword, asset_symbol FROM keyword_asset_mapping"
-            results = self.pg_hook.get_records(query)
-            self.keyword_mapping_cache = {row[0]: row[1] for row in results}
+        # 모든 단어 추출 (영문, 숫자, 하이픈 포함)
+        words = re.findall(r'\b[A-Za-z0-9\-]+\b', content.lower())
         
         matched_assets = []
-        for keyword, asset_symbol in self.keyword_mapping_cache.items():
-            if keyword in content_lower:
-                # 금융 맥락인지 간단 체크
-                if self._is_financial_context(content_lower, keyword):
-                    matched_assets.append({
-                        'symbol': asset_symbol,
-                        'source': 'direct_mention',
-                        'priority': 2
-                    })
         
-        return matched_assets
+        for i, word in enumerate(words):
+            # 심볼 매핑 확인
+            if word in COMPREHENSIVE_SYMBOL_MAPPING:
+                symbol = COMPREHENSIVE_SYMBOL_MAPPING[word]
+                matched_assets.append({
+                    'symbol': symbol,
+                    'source': 'keyword_mention',
+                    'priority': 1,  # 모든 키워드 매칭을 최고 우선순위로
+                    'matched_keyword': word,
+                    'position': i
+                })
+        
+        return self.dedupe_assets(matched_assets)
     
-    def _is_financial_context(self, text, keyword):
-        """키워드가 금융/비즈니스 맥락에서 언급되었는지 확인"""
-        financial_terms = [
-            'stock', 'price', 'market', 'trading', 'investment',
-            'buy', 'sell', 'bullish', 'bearish', 'earnings',
-            'revenue', 'profit', 'loss', 'valuation', 'ipo'
-        ]
+    def dedupe_assets(self, matched_assets):
+        """자산 중복 제거 (같은 심볼은 한 번만)"""
+        seen_symbols = {}
+        for asset in matched_assets:
+            symbol = asset['symbol']
+            if symbol not in seen_symbols:
+                seen_symbols[symbol] = asset
         
-        # 키워드 주변 50자 내에서 금융 용어 확인
-        keyword_pos = text.find(keyword)
-        if keyword_pos == -1:
-            return True  # 키워드가 있다면 일단 허용
+        return list(seen_symbols.values())
+    
+    def dedupe_and_rank(self, affected_assets):
+        """최종 중복 제거 및 우선순위 정렬"""
+        seen_symbols = {}
         
-        context = text[max(0, keyword_pos-50):keyword_pos+50]
-        return any(term in context for term in financial_terms) or True  # 일단 관대하게
+        for asset in affected_assets:
+            symbol = asset['symbol']
+            if symbol not in seen_symbols or asset['priority'] < seen_symbols[symbol]['priority']:
+                seen_symbols[symbol] = asset
+        
+        return sorted(seen_symbols.values(), key=lambda x: x['priority'])
     
     def find_statistical_outlier(self, timestamp):
         """시장 데이터에서 통계적 변동성 탐지"""
         try:
-            # 시장 데이터 범위 체크
+            # 모든 timestamp를 UTC timezone-aware로 통일
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            
+            # 시장 데이터 범위 체크도 timezone-aware로 통일
             if not self._has_market_data_for_time(timestamp):
                 return None
-            
+                
             start_time = timestamp - timedelta(hours=1)
             end_time = timestamp + timedelta(hours=2)
             
+            # 이제 안전하게 밀리초 변환 가능
+            start_ms = int(start_time.timestamp() * 1000)
+            end_ms = int(end_time.timestamp() * 1000)
+            
             # SP500 변동성 분석
-            sp500_outlier = self._analyze_sp500_volatility(start_time, end_time)
+            sp500_outlier = self._analyze_sp500_volatility(start_ms, end_ms)
             
             # 빗썸 변동성 분석  
-            bithumb_outlier = self._analyze_bithumb_volatility(start_time, end_time)
+            bithumb_outlier = self._analyze_bithumb_volatility(start_ms, end_ms)
             
             # 가장 높은 변동성 반환
             candidates = [x for x in [sp500_outlier, bithumb_outlier] if x]
@@ -159,25 +143,23 @@ class SocialMediaAnalyzer:
             bithumb_result = self.pg_hook.get_first(bithumb_query)
             
             return {
-                'sp500': {
-                    'start': datetime.fromtimestamp(sp500_result[0]/1000) if sp500_result and sp500_result[0] else None,
-                    'end': datetime.fromtimestamp(sp500_result[1]/1000) if sp500_result and sp500_result[1] else None
-                },
-                'bithumb': {
-                    'start': datetime.fromtimestamp(bithumb_result[0]/1000) if bithumb_result and bithumb_result[0] else None,
-                    'end': datetime.fromtimestamp(bithumb_result[1]/1000) if bithumb_result and bithumb_result[1] else None
-                }
-            }
+                        'sp500': {
+                            'start': datetime.fromtimestamp(sp500_result[0]/1000, tz=timezone.utc) if sp500_result and sp500_result[0] else None,
+                            'end': datetime.fromtimestamp(sp500_result[1]/1000, tz=timezone.utc) if sp500_result and sp500_result[1] else None
+                        },
+                        'bithumb': {
+                            'start': datetime.fromtimestamp(bithumb_result[0]/1000, tz=timezone.utc) if bithumb_result and bithumb_result[0] else None,
+                            'end': datetime.fromtimestamp(bithumb_result[1]/1000, tz=timezone.utc) if bithumb_result and bithumb_result[1] else None
+                        }
+                    }
         except Exception as e:
             logger.error(f"Failed to get market data range: {e}")
             return {}
     
-    def _analyze_sp500_volatility(self, start_time, end_time):
+    def _analyze_sp500_volatility(self, start_ms, end_ms):
         """SP500 데이터에서 변동성 분석"""
         try:
-            # 타임스탬프를 밀리초로 변환
-            start_ms = int(start_time.timestamp() * 1000)
-            end_ms = int(end_time.timestamp() * 1000)
+            # 타임스탬프를 밀리초로 이미 변환 됨
             
             query = """
             WITH price_changes AS (
@@ -214,12 +196,9 @@ class SocialMediaAnalyzer:
             logger.error(f"SP500 volatility analysis failed: {e}")
             return None
     
-    def _analyze_bithumb_volatility(self, start_time, end_time):
+    def _analyze_bithumb_volatility(self, start_ms, end_ms):
         """빗썸 데이터에서 변동성 분석"""
         try:
-            # 타임스탬프를 밀리초로 변환
-            start_ms = int(start_time.timestamp() * 1000)
-            end_ms = int(end_time.timestamp() * 1000)
             
             query = """
             WITH crypto_changes AS (
@@ -242,6 +221,7 @@ class SocialMediaAnalyzer:
             """
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
+            print(result)
             
             if result and result[1] and result[1] > 3.0:  # 3% 이상 변동시만
                 # KRW- 접두사 제거
@@ -268,17 +248,3 @@ class SocialMediaAnalyzer:
             return None
         else:
             return bithumb_market
-    
-    def dedupe_and_rank(self, affected_assets):
-        """중복 제거 및 우선순위 정렬"""
-        seen_symbols = {}
-        
-        for asset in affected_assets:
-            symbol = asset['symbol']
-            
-            # 같은 심볼이 있으면 우선순위가 높은 것 유지
-            if symbol not in seen_symbols or asset['priority'] < seen_symbols[symbol]['priority']:
-                seen_symbols[symbol] = asset
-        
-        # 우선순위 순으로 정렬하여 반환
-        return sorted(seen_symbols.values(), key=lambda x: x['priority'])
