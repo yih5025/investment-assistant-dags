@@ -6,8 +6,14 @@ from datetime import datetime, timedelta
 import json
 import logging
 
-from utils.asset_matcher import SocialMediaAnalyzer
-from utils.market_data_collector import MarketDataCollector
+try:
+    # Try relative import first
+    from utils.asset_matcher import SocialMediaAnalyzer
+    from utils.market_data_collector import MarketDataCollector
+except ImportError:
+    # Fallback to absolute import
+    from dags.utils.asset_matcher import SocialMediaAnalyzer
+    from dags.utils.market_data_collector import MarketDataCollector
 
 logger = logging.getLogger(__name__)
 

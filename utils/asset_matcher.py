@@ -3,7 +3,12 @@ from airflow.hooks.postgres_hook import PostgresHook
 from datetime import datetime, timedelta, timezone
 import logging
 import re
-from .symbol_mapping import COMPREHENSIVE_SYMBOL_MAPPING
+try:
+    # Try relative import first
+    from .symbol_mapping import COMPREHENSIVE_SYMBOL_MAPPING
+except ImportError:
+    # Fallback to absolute import
+    from dags.utils.symbol_mapping import COMPREHENSIVE_SYMBOL_MAPPING
 
 logger = logging.getLogger(__name__)
 
