@@ -220,10 +220,16 @@ def social_media_analysis_dag():
         
         logger.info("Analysis results saved successfully")
     
+    @task
+    def finalize_keywords():
+        analyzer = SocialMediaAnalyzer()
+        analyzer.finalize_keywords()
+
     # DAG 태스크 실행 흐름
     posts = get_unanalyzed_posts()
     analysis_results = analyze_posts_batch(posts)
     save_analysis_results(analysis_results)
+    finalize_keywords()
 
 # DAG 인스턴스 생성
 dag_instance = social_media_analysis_dag()

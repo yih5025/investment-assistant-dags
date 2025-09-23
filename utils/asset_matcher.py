@@ -7,10 +7,55 @@ from .symbol_mapping import COMPREHENSIVE_SYMBOL_MAPPING
 
 logger = logging.getLogger(__name__)
 
+class KeywordBuffer:
+    """메모리 효율적인 키워드 배치 저장"""
+    def __init__(self, pg_hook, buffer_size=50):
+        self.pg_hook = pg_hook
+        self.buffer = []
+        self.buffer_size = buffer_size
+    
+    def add_keywords(self, keywords):
+        self.buffer.extend(keywords)
+        if len(self.buffer) >= self.buffer_size:
+            self.flush_to_db()
+    
+    def flush_to_db(self):
+        if not self.buffer:
+            return
+            
+        try:
+            insert_query = """
+            INSERT INTO post_keywords (post_id, post_source, keyword, keyword_position)
+            VALUES %s
+            ON CONFLICT DO NOTHING
+            """
+            
+            values = [(k['post_id'], k['post_source'], k['keyword'], k['keyword_position']) 
+                     for k in self.buffer]
+            
+            conn = self.pg_hook.get_conn()
+            cursor = conn.cursor()
+            from psycopg2.extras import execute_values
+            execute_values(cursor, insert_query, values, template=None, page_size=100)
+            conn.commit()
+            cursor.close()
+            
+            logger.info(f"Saved {len(self.buffer)} keywords to DB")
+            self.buffer.clear()
+            
+        except Exception as e:
+            logger.error(f"Failed to save keywords: {e}")
+            self.buffer.clear()  # 에러시에도 메모리 정리
+    
+    def __del__(self):
+        # 객체 소멸시 남은 데이터 저장
+        self.flush_to_db()
+
 class SocialMediaAnalyzer:
     def __init__(self):
         self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         self.market_data_range = None
+        self.keyword_buffer = KeywordBuffer(self.pg_hook)
     
     def determine_affected_assets(self, username, content, timestamp, post_id=None, post_source=None):
         """단순화된 2단계 자산 매칭 로직"""
@@ -20,7 +65,7 @@ class SocialMediaAnalyzer:
         keyword_assets = self.extract_keyword_assets_v2(content, post_id, post_source)
         affected_assets.extend(keyword_assets[:5])
         
-        # 2단계: 통계적 변동성
+        # 2단계: 통계적 변동성 (키워드 매칭이 5개 미만일 때만)
         if len(affected_assets) < 5:
             volatile_asset = self.find_statistical_outlier(timestamp)
             if volatile_asset:
@@ -29,25 +74,19 @@ class SocialMediaAnalyzer:
         return self.dedupe_and_rank(affected_assets)
     
     def extract_keyword_assets_v2(self, content, post_id=None, post_source=None):
-        """새로운 관대한 키워드 매칭 + DB 저장"""
+        """메모리 효율적인 키워드 매칭"""
         if not content:
             return []
         
+        # 메모리 절약을 위한 필터링
         words = re.findall(r'\b[A-Za-z0-9\-]+\b', content.lower())
+        words = [w for w in words if 2 <= len(w) <= 20]  # 길이 필터링
         
-        extracted_keywords = []
         matched_assets = []
+        matched_keywords = []
         
         for i, word in enumerate(words):
-            # 키워드 저장 준비
-            extracted_keywords.append({
-                'post_id': post_id,
-                'post_source': post_source,
-                'keyword': word,
-                'keyword_position': i
-            })
-            
-            # 심볼 매칭
+            # 심볼 매칭 확인
             if word in COMPREHENSIVE_SYMBOL_MAPPING:
                 symbol = COMPREHENSIVE_SYMBOL_MAPPING[word]
                 matched_assets.append({
@@ -57,39 +96,21 @@ class SocialMediaAnalyzer:
                     'matched_keyword': word,
                     'position': i
                 })
+                
+                # 매칭된 키워드만 저장 (메모리 절약)
+                if post_id and post_source:
+                    matched_keywords.append({
+                        'post_id': post_id,
+                        'post_source': post_source,
+                        'keyword': word,
+                        'keyword_position': i
+                    })
         
-        # 키워드 DB 저장
-        if post_id and post_source:
-            self._save_keywords_to_db(extracted_keywords)
+        # 배치 저장
+        if matched_keywords:
+            self.keyword_buffer.add_keywords(matched_keywords)
         
         return self.dedupe_assets(matched_assets)
-
-    def _save_keywords_to_db(self, keywords):
-        """추출된 키워드를 DB에 실제 저장"""
-        if not keywords:
-            return
-        
-        try:
-            insert_query = """
-            INSERT INTO post_keywords (post_id, post_source, keyword, keyword_position)
-            VALUES %s
-            ON CONFLICT DO NOTHING
-            """
-            
-            values = [(k['post_id'], k['post_source'], k['keyword'], k['keyword_position']) 
-                    for k in keywords]
-            
-            # PostgresHook으로 bulk insert
-            conn = self.pg_hook.get_conn()
-            cursor = conn.cursor()
-            from psycopg2.extras import execute_values
-            execute_values(cursor, insert_query, values, template=None, page_size=1000)
-            conn.commit()
-            
-            logger.info(f"Saved {len(keywords)} keywords to DB")
-            
-        except Exception as e:
-            logger.error(f"Failed to save keywords: {e}")
     
     def dedupe_assets(self, matched_assets):
         """자산 중복 제거 (같은 심볼은 한 번만)"""
@@ -113,17 +134,21 @@ class SocialMediaAnalyzer:
         return sorted(seen_symbols.values(), key=lambda x: x['priority'])
     
     def find_statistical_outlier(self, timestamp):
+        """시장 데이터에서 통계적 변동성 탐지"""
         try:
+            # 모든 timestamp를 UTC timezone-aware로 통일
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=timezone.utc)
             
+            # 시장 데이터 범위 체크
             if not self._has_market_data_for_time(timestamp):
                 return None
-                
-            # SP500과 빗썸 다른 범위 적용
-            sp500_outlier = self._analyze_sp500_volatility_extended(timestamp)
-            bithumb_outlier = self._analyze_bithumb_volatility_standard(timestamp)
             
+            # SP500과 빗썸 분석
+            sp500_outlier = self._analyze_sp500_volatility(timestamp)
+            bithumb_outlier = self._analyze_bithumb_volatility(timestamp)
+            
+            # 가장 높은 변동성 반환
             candidates = [x for x in [sp500_outlier, bithumb_outlier] if x]
             if candidates:
                 return max(candidates, key=lambda x: x.get('volatility_score', 0))
@@ -169,22 +194,23 @@ class SocialMediaAnalyzer:
             bithumb_result = self.pg_hook.get_first(bithumb_query)
             
             return {
-                        'sp500': {
-                            'start': datetime.fromtimestamp(sp500_result[0]/1000, tz=timezone.utc) if sp500_result and sp500_result[0] else None,
-                            'end': datetime.fromtimestamp(sp500_result[1]/1000, tz=timezone.utc) if sp500_result and sp500_result[1] else None
-                        },
-                        'bithumb': {
-                            'start': datetime.fromtimestamp(bithumb_result[0]/1000, tz=timezone.utc) if bithumb_result and bithumb_result[0] else None,
-                            'end': datetime.fromtimestamp(bithumb_result[1]/1000, tz=timezone.utc) if bithumb_result and bithumb_result[1] else None
-                        }
-                    }
+                'sp500': {
+                    'start': datetime.fromtimestamp(sp500_result[0]/1000, tz=timezone.utc) if sp500_result and sp500_result[0] else None,
+                    'end': datetime.fromtimestamp(sp500_result[1]/1000, tz=timezone.utc) if sp500_result and sp500_result[1] else None
+                },
+                'bithumb': {
+                    'start': datetime.fromtimestamp(bithumb_result[0]/1000, tz=timezone.utc) if bithumb_result and bithumb_result[0] else None,
+                    'end': datetime.fromtimestamp(bithumb_result[1]/1000, tz=timezone.utc) if bithumb_result and bithumb_result[1] else None
+                }
+            }
         except Exception as e:
             logger.error(f"Failed to get market data range: {e}")
             return {}
     
-    def _analyze_sp500_volatility_extended(self, timestamp):
+    def _analyze_sp500_volatility(self, timestamp):
         """SP500 - 5일 범위 (주말/공휴일 고려)"""
         try:
+            # 5일 범위
             start_time = timestamp - timedelta(days=2)
             end_time = timestamp + timedelta(days=2)
             
@@ -194,16 +220,16 @@ class SocialMediaAnalyzer:
             query = """
             WITH price_changes AS (
                 SELECT symbol,
-                    MIN(price) as min_price,
-                    MAX(price) as max_price,
-                    COUNT(*) as trade_count
+                       MIN(price) as min_price,
+                       MAX(price) as max_price,
+                       COUNT(*) as trade_count
                 FROM sp500_websocket_trades 
                 WHERE timestamp_ms BETWEEN %s AND %s
                 GROUP BY symbol
                 HAVING COUNT(*) >= 5  -- 5일 중 최소 5개 거래
             )
             SELECT symbol, 
-                ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
+                   ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
             FROM price_changes
             WHERE min_price > 0
             ORDER BY volatility_pct DESC
@@ -212,10 +238,9 @@ class SocialMediaAnalyzer:
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
             
-            # 디버깅 로그 추가
-            logger.info(f"SP500 query result: {result}, type: {type(result)}")
+            logger.info(f"SP500 query result: {result}")
             
-            if result and len(result) >= 2 and result[0] and result[1] and result[1] > 2.0:
+            if result and len(result) >= 2 and result[0] and result[1] and float(result[1]) > 2.0:
                 return {
                     'symbol': result[0],
                     'volatility_score': float(result[1]),
@@ -223,16 +248,16 @@ class SocialMediaAnalyzer:
                     'priority': 3
                 }
             
-            logger.info("SP500 analysis: no qualifying volatility found")
             return None
             
         except Exception as e:
             logger.error(f"SP500 volatility analysis failed: {e}")
             return None
-
-    def _analyze_bithumb_volatility_standard(self, timestamp):
+    
+    def _analyze_bithumb_volatility(self, timestamp):
         """빗썸 - 3일 범위 (24시간 거래)"""
         try:
+            # 3일 범위
             start_time = timestamp - timedelta(days=1)
             end_time = timestamp + timedelta(days=1)
             
@@ -242,18 +267,18 @@ class SocialMediaAnalyzer:
             query = """
             WITH crypto_changes AS (
                 SELECT market,
-                    MIN(CAST(trade_price AS DECIMAL)) as min_price,
-                    MAX(CAST(trade_price AS DECIMAL)) as max_price,
-                    COUNT(*) as trade_count
+                       MIN(CAST(trade_price AS DECIMAL)) as min_price,
+                       MAX(CAST(trade_price AS DECIMAL)) as max_price,
+                       COUNT(*) as trade_count
                 FROM bithumb_ticker 
                 WHERE trade_timestamp BETWEEN %s AND %s
-                    AND trade_price ~ '^[0-9]+\.?[0-9]*$'
+                    AND trade_price::text ~ '^[0-9]+\.?[0-9]*$'
                     AND market LIKE 'KRW-%'
                 GROUP BY market
-                HAVING COUNT(*) >= 10  -- 3일이므로 더 많은 데이터 요구
+                HAVING COUNT(*) >= 3  -- 3일이므로 조건 완화
             )
             SELECT market,
-                ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
+                   ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
             FROM crypto_changes
             WHERE min_price > 0
             ORDER BY volatility_pct DESC
@@ -262,20 +287,35 @@ class SocialMediaAnalyzer:
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
             
-            # 디버깅 로그 추가
-            logger.info(f"Bithumb query result: {result}, type: {type(result)}")
+            logger.info(f"Bithumb query result: {result}")
             
-            if result and len(result) >= 2 and result[0] and result[1] and result[1] > 5.0:
+            # 안전한 None 체크
+            if result is None:
+                logger.info("Bithumb analysis: query returned None")
+                return None
+                
+            # 빈 튜플 체크
+            if len(result) < 2:
+                logger.info(f"Bithumb analysis: insufficient result length: {len(result)}")
+                return None
+                
+            # 값 체크
+            if not result[0] or not result[1]:
+                logger.info(f"Bithumb analysis: null values in result: {result}")
+                return None
+                
+            volatility = float(result[1])
+            if volatility > 3.0:  # 3% 이상 변동시만
                 symbol = self._convert_bithumb_symbol(result[0])
                 if symbol:
                     return {
                         'symbol': symbol,
-                        'volatility_score': float(result[1]),
+                        'volatility_score': volatility,
                         'source': 'statistical_correlation',
                         'priority': 3
                     }
             
-            logger.info("Bithumb analysis: no qualifying volatility found")
+            logger.info(f"Bithumb analysis: volatility {volatility} below threshold")
             return None
             
         except Exception as e:
@@ -284,10 +324,14 @@ class SocialMediaAnalyzer:
     
     def _convert_bithumb_symbol(self, bithumb_market):
         """빗썸 마켓 형식을 표준 심볼로 변환 (KRW- 접두사 제거)"""
-        if bithumb_market.startswith('KRW-'):
+        if bithumb_market and bithumb_market.startswith('KRW-'):
             return bithumb_market[4:]  # "KRW-ETH" → "ETH"
-        elif bithumb_market.startswith('BTC-'):
-            # BTC 페어는 아직 처리하지 않음 (나중에 필요시 확장)
+        elif bithumb_market and bithumb_market.startswith('BTC-'):
+            # BTC 페어는 아직 처리하지 않음
             return None
         else:
             return bithumb_market
+    
+    def finalize_keywords(self):
+        """DAG 종료시 남은 키워드 저장"""
+        self.keyword_buffer.flush_to_db()

@@ -125,12 +125,13 @@ class MarketDataCollector:
             
             query = """
             SELECT trade_timestamp, 
-                   CAST(trade_price AS DECIMAL) as price,
-                   CAST(trade_volume AS DECIMAL) as volume
+                CAST(trade_price AS DECIMAL) as price,
+                CAST(trade_volume AS DECIMAL) as volume
             FROM bithumb_ticker 
             WHERE market = %s 
                 AND trade_timestamp BETWEEN %s AND %s
-                AND trade_price ~ '^[0-9]+\.?[0-9]*$'
+                -- 타입을 명확히 하여 안전하게 필터링
+                AND trade_price::text ~ '^[0-9]+\.?[0-9]*$'
             ORDER BY trade_timestamp
             LIMIT 3000
             """
