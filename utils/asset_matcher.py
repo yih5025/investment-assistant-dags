@@ -190,6 +190,9 @@ class SocialMediaAnalyzer:
     def determine_affected_assets(self, username, content, timestamp, post_id=None, post_source=None):
         """단순화된 2단계 자산 매칭 로직"""
         affected_assets = []
+
+        account_assets = self.get_account_default_assets(username)
+        affected_assets.extend(account_assets)
         
         # 1단계: 범용 키워드 매핑 (키워드 저장 포함)
         keyword_assets = self.extract_keyword_assets_v2(content, post_id, post_source)
@@ -203,6 +206,148 @@ class SocialMediaAnalyzer:
         
         return self.dedupe_and_rank(affected_assets)
     
+
+    def get_account_default_assets(self, username):
+        """계정별 기본 자산 매핑 (ETF 포함)"""
+        account_mapping = {
+            # === 개인 CEO/임원들 ===
+            'elonmusk': [
+                {'symbol': 'TSLA', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'DOGE', 'source': 'account_default', 'priority': 2}
+            ],
+            'tim_cook': [
+                {'symbol': 'AAPL', 'source': 'account_default', 'priority': 2}
+            ],
+            'satyanadella': [
+                {'symbol': 'MSFT', 'source': 'account_default', 'priority': 2}
+            ],
+            'sundarpichai': [
+                {'symbol': 'GOOGL', 'source': 'account_default', 'priority': 2}
+            ],
+            'jeffbezos': [
+                {'symbol': 'AMZN', 'source': 'account_default', 'priority': 2}
+            ],
+            
+            # === 암호화폐 관련 인물들 ===
+            'VitalikButerin': [
+                {'symbol': 'ETH', 'source': 'account_default', 'priority': 2}
+            ],
+            'saylor': [
+                {'symbol': 'BTC', 'source': 'account_default', 'priority': 2}
+            ],
+            'brian_armstrong': [
+                {'symbol': 'BTC', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'ETH', 'source': 'account_default', 'priority': 2}
+            ],
+            
+            # === 금융/투자 전문가들 (ETF 위주) ===
+            'RayDalio': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'TLT', 'source': 'account_default', 'priority': 2},  # 채권 ETF
+                {'symbol': 'LQD', 'source': 'account_default', 'priority': 2}   # 회사채 ETF
+            ],
+            'jimcramer': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'QQQ', 'source': 'account_default', 'priority': 2}   # 기술주 ETF
+            ],
+            'CathieDWood': [
+                {'symbol': 'ARKK', 'source': 'account_default', 'priority': 2}, # 자신의 ETF
+                {'symbol': 'TSLA', 'source': 'account_default', 'priority': 2}
+            ],
+            'mcuban': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'QQQ', 'source': 'account_default', 'priority': 2}
+            ],
+            'chamath': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'XLK', 'source': 'account_default', 'priority': 2}   # 기술 섹터 ETF
+            ],
+            
+            # === 정부 관련 (거시경제 ETF) ===
+            'SecYellen': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'TLT', 'source': 'account_default', 'priority': 2},  # 국채 ETF
+                {'symbol': 'XLF', 'source': 'account_default', 'priority': 2}   # 금융 섹터 ETF
+            ],
+            
+            # === 미디어/뉴스 계정들 (광범위한 시장 ETF) ===
+            'CNBC': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'QQQ', 'source': 'account_default', 'priority': 2}
+            ],
+            'business': [  # Bloomberg
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'VNQ', 'source': 'account_default', 'priority': 2},  # 부동산 ETF
+                {'symbol': 'XLE', 'source': 'account_default', 'priority': 2}   # 에너지 섹터 ETF
+            ],
+            'WSJ': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'IWM', 'source': 'account_default', 'priority': 2}   # 소형주 ETF
+            ],
+            
+            # === 기업 공식 계정들 (기존과 동일) ===
+            'Tesla': [
+                {'symbol': 'TSLA', 'source': 'account_default', 'priority': 2}
+            ],
+            'nvidia': [
+                {'symbol': 'NVDA', 'source': 'account_default', 'priority': 2}
+            ],
+            'Meta': [
+                {'symbol': 'META', 'source': 'account_default', 'priority': 2}
+            ],
+            'Oracle': [
+                {'symbol': 'ORCL', 'source': 'account_default', 'priority': 2}
+            ],
+            'IBM': [
+                {'symbol': 'IBM', 'source': 'account_default', 'priority': 2}
+            ],
+            'Palantir': [
+                {'symbol': 'PLTR', 'source': 'account_default', 'priority': 2}
+            ],
+            'IonQ': [
+                {'symbol': 'IONQ', 'source': 'account_default', 'priority': 2}
+            ],
+            
+            # === 암호화폐 공식 계정들 ===
+            'BitCoin': [
+                {'symbol': 'BTC', 'source': 'account_default', 'priority': 2}
+            ],
+            'Ethereum': [
+                {'symbol': 'ETH', 'source': 'account_default', 'priority': 2}
+            ],
+            'Solana': [
+                {'symbol': 'SOL', 'source': 'account_default', 'priority': 2}
+            ],
+            'Dogecoin': [
+                {'symbol': 'DOGE', 'source': 'account_default', 'priority': 2}
+            ],
+            'CoinbaseAssets': [
+                {'symbol': 'BTC', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'ETH', 'source': 'account_default', 'priority': 2}
+            ],
+            
+            # === 미디어/뉴스 계정들 ===
+            'CNBC': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'XLF', 'source': 'account_default', 'priority': 2}  # 금융 섹터 (CNBC 특성상)
+            ],
+            'business': [  # Bloomberg
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'TLT', 'source': 'account_default', 'priority': 2},  # 채권 (거시경제 전문)
+                {'symbol': 'VNQ', 'source': 'account_default', 'priority': 2}   # 부동산 (Bloomberg 특성)
+            ],
+            'WSJ': [
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'QQQ', 'source': 'account_default', 'priority': 2}   # 기술주 (WSJ 비즈니스 포커스)
+            ],
+            'realDonaldTrump': [
+                {'symbol': 'DWAC', 'source': 'account_default', 'priority': 2},
+                {'symbol': 'SPY', 'source': 'account_default', 'priority': 2}   # 경제 정책 영향
+            ]
+        }
+        
+        return account_mapping.get(username, [])
+
     def extract_keyword_assets_v2(self, content, post_id=None, post_source=None):
         """메모리 효율적인 키워드 매칭"""
         if not content:
@@ -385,73 +530,55 @@ class SocialMediaAnalyzer:
             return None
     
     def _analyze_bithumb_volatility(self, timestamp):
-        """빗썸 - 3일 범위 (24시간 거래)"""
         try:
-            # 3일 범위
             start_time = timestamp - timedelta(days=1)
             end_time = timestamp + timedelta(days=1)
             
             start_ms = int(start_time.timestamp() * 1000)
             end_ms = int(end_time.timestamp() * 1000)
             
-            query = """
+            # 값을 직접 삽입 (매개변수 사용 안함)
+            query = f"""
             WITH crypto_changes AS (
                 SELECT market,
-                       MIN(CAST(trade_price AS DECIMAL)) as min_price,
-                       MAX(CAST(trade_price AS DECIMAL)) as max_price,
-                       COUNT(*) as trade_count
+                    MIN(CAST(trade_price AS DECIMAL)) as min_price,
+                    MAX(CAST(trade_price AS DECIMAL)) as max_price,
+                    COUNT(*) as trade_count
                 FROM bithumb_ticker 
-                WHERE trade_timestamp BETWEEN %s AND %s
+                WHERE trade_timestamp BETWEEN {start_ms} AND {end_ms}
                     AND trade_price::text ~ '^[0-9]+\.?[0-9]*$'
                     AND market LIKE 'KRW-%'
                 GROUP BY market
-                HAVING COUNT(*) >= 3  -- 3일이므로 조건 완화
+                HAVING COUNT(*) >= 3
             )
             SELECT market,
-                   ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
+                ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
             FROM crypto_changes
             WHERE min_price > 0
             ORDER BY volatility_pct DESC
             LIMIT 1
             """
             
-            result = self.pg_hook.get_first(query, parameters=(start_ms, end_ms))
+            result = self.pg_hook.get_first(query)  # 매개변수 없음
             
-            # 상세 디버깅 로그
-            logger.info(f"Bithumb raw result: {result}")
-            logger.info(f"Result type: {type(result)}")
-            logger.info(f"Result is None: {result is None}")
+            logger.info(f"Bithumb result: {result}")
             
-            if result:
-                logger.info(f"Result length: {len(result)}")
-                for i, item in enumerate(result):
-                    logger.info(f"Result[{i}]: {item} (type: {type(item)})")
-            
-            # PostgresHook.get_first()는 결과가 없으면 None을 반환
-            if not result:
-                logger.info("Bithumb analysis: No results from query")
-                return None
-                
-            # 결과가 있는 경우 처리
-            market, volatility_pct = result
-            logger.info(f"Parsed - market: {market}, volatility: {volatility_pct}")
-            
-            if volatility_pct and float(volatility_pct) > 3.0:
-                symbol = self._convert_bithumb_symbol(market)
-                if symbol:
-                    return {
-                        'symbol': symbol,
-                        'volatility_score': float(volatility_pct),
-                        'source': 'statistical_correlation',
-                        'priority': 3
-                    }
+            if result and len(result) >= 2:
+                market, volatility_pct = result
+                if volatility_pct and float(volatility_pct) > 3.0:
+                    symbol = self._convert_bithumb_symbol(market)
+                    if symbol:
+                        return {
+                            'symbol': symbol,
+                            'volatility_score': float(volatility_pct),
+                            'source': 'statistical_correlation',
+                            'priority': 3
+                        }
             
             return None
             
         except Exception as e:
             logger.error(f"Bithumb volatility analysis failed: {e}")
-            import traceback
-            logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
     
     def _convert_bithumb_symbol(self, bithumb_market):
