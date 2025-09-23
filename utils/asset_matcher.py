@@ -349,43 +349,39 @@ class SocialMediaAnalyzer:
         return account_mapping.get(username, [])
 
     def extract_keyword_assets_v2(self, content, post_id=None, post_source=None):
-        """메모리 효율적인 키워드 매칭"""
-        if not content:
+        if not content or len(content) > 1000:  # 너무 긴 글 제외
             return []
         
-        # 메모리 절약을 위한 필터링
-        words = re.findall(r'\b[A-Za-z0-9\-]+\b', content.lower())
-        words = [w for w in words if 2 <= len(w) <= 20]  # 길이 필터링
+        # 더 제한적인 패턴으로 메모리 절약
+        # 알파벳만, 3-12자, 최대 50개 단어만
+        words = re.findall(r'\b[a-zA-Z]{3,12}\b', content.lower())[:30]
         
         matched_assets = []
-        matched_keywords = []
+        seen_symbols = set()
         
-        for i, word in enumerate(words):
-            # 심볼 매칭 확인
+        # 조기 종료로 불필요한 반복 방지
+        for word in words:
+            if len(seen_symbols) >= 5:  # 최대 5개 심볼만
+                break
+                
             if word in COMPREHENSIVE_SYMBOL_MAPPING:
                 symbol = COMPREHENSIVE_SYMBOL_MAPPING[word]
-                matched_assets.append({
-                    'symbol': symbol,
-                    'source': 'keyword_mention',
-                    'priority': 1,
-                    'matched_keyword': word,
-                    'position': i
-                })
-                
-                # 매칭된 키워드만 저장 (메모리 절약)
-                if post_id and post_source:
-                    matched_keywords.append({
-                        'post_id': post_id,
-                        'post_source': post_source,
-                        'keyword': word,
-                        'keyword_position': i
+                if symbol not in seen_symbols:
+                    seen_symbols.add(symbol)
+                    matched_assets.append({
+                        'symbol': symbol,
+                        'source': 'keyword_mention',
+                        'priority': 1,
+                        'matched_keyword': word
                     })
         
-        # 배치 저장
-        if matched_keywords:
-            self.keyword_buffer.add_keywords(matched_keywords)
+        # 즉시 메모리 해제
+        del words, seen_symbols
         
-        return self.dedupe_assets(matched_assets)
+        # 키워드 저장 비활성화
+        # self.keyword_buffer.add_keywords(matched_keywords)
+        
+        return matched_assets
     
     def dedupe_assets(self, matched_assets):
         """자산 중복 제거 (같은 심볼은 한 번만)"""
