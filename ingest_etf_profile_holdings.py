@@ -25,17 +25,20 @@ default_args = {
 }
 
 def collect_etf_profile_holdings_data(**context):
-    """Alpha Vantage ETF 데이터 수집 (API 응답 그대로 저장)"""
+    """Alpha Vantage ETF 데이터 수집 (디버깅 정보 포함)"""
     import requests
     import time
+    import json
+    import traceback
     
     print("🚀 Alpha Vantage ETF 데이터 수집 시작...")
     
     # API 키 확인
     try:
         api_key = Variable.get('ALPHA_VANTAGE_API_KEY_3')
-        print("🔑 Alpha Vantage API 키 확인 완료")
-    except:
+        print(f"🔑 API 키 확인: {api_key[:8]}...{api_key[-4:] if len(api_key) > 12 else '***'}")
+    except Exception as e:
+        print(f"❌ API 키 로드 실패: {e}")
         raise ValueError("🔑 ALPHA_VANTAGE_API_KEY_3이 설정되지 않았습니다")
     
     # 🔧 수정된 쿼리: 실제 테이블 구조에 맞게 변경
@@ -89,19 +92,53 @@ def collect_etf_profile_holdings_data(**context):
                 'apikey': api_key
             }
             
+            print(f"📤 API 요청: {url}?function=ETF_PROFILE&symbol={symbol}")
+            
             response = requests.get(url, params=params, timeout=30)
-            response.raise_for_status()
+            print(f"📥 HTTP 상태: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"❌ HTTP 에러: {response.status_code}")
+                print(f"❌ 응답 내용: {response.text[:500]}")
+                continue
+            
             data = response.json()
+            
+            # 🚨 전체 API 응답 출력 (처음 3개만 상세 출력)
+            if i <= 3:
+                print("📥 === 전체 API 응답 ===")
+                print(json.dumps(data, indent=2, ensure_ascii=False))
+                print("📥 === 응답 종료 ===")
+            else:
+                print(f"📥 응답 키: {list(data.keys()) if isinstance(data, dict) else f'타입: {type(data)}'}")
             
             # API 에러 체크
             if 'Error Message' in data:
-                print(f"❌ {symbol}: {data['Error Message']}")
+                print(f"❌ API 에러: {data['Error Message']}")
                 continue
             
             if 'Note' in data:
                 print(f"⚠️ API 제한: {data['Note']}")
                 print("⏰ API 제한 도달, 오늘 수집 중단")
                 break
+            
+            if 'Information' in data:
+                print(f"ℹ️ API 정보: {data['Information']}")
+            
+            # 🔍 필드별 상세 확인
+            print(f"🔍 필드별 데이터 상태:")
+            key_fields = ['net_assets', 'net_expense_ratio', 'portfolio_turnover', 
+                         'dividend_yield', 'inception_date', 'leveraged', 'sectors', 'holdings']
+            
+            for field in key_fields:
+                value = data.get(field)
+                value_type = type(value).__name__
+                if isinstance(value, list):
+                    print(f"   {field}: {value_type}[{len(value)}] = {value[:2] if len(value) > 0 else '[]'}...")
+                elif isinstance(value, str) and len(value) > 50:
+                    print(f"   {field}: {value_type} = {value[:50]}...")
+                else:
+                    print(f"   {field}: {value_type} = {value}")
             
             # 📊 API 응답 데이터 구조 확인 및 안전한 변환
             def safe_numeric(value):
@@ -114,6 +151,7 @@ def collect_etf_profile_holdings_data(**context):
                         value = value.replace('%', '')
                     return float(value)
                 except (ValueError, TypeError):
+                    print(f"⚠️ 숫자 변환 실패: {value} ({type(value)})")
                     return None
             
             def safe_int(value):
@@ -123,6 +161,7 @@ def collect_etf_profile_holdings_data(**context):
                 try:
                     return int(float(value))
                 except (ValueError, TypeError):
+                    print(f"⚠️ 정수 변환 실패: {value} ({type(value)})")
                     return None
             
             # API 응답 데이터 그대로 저장
@@ -138,29 +177,53 @@ def collect_etf_profile_holdings_data(**context):
                 'holdings': json.dumps(data.get('holdings', []), ensure_ascii=False)  # JSON으로 저장
             }
             
+            # 📈 저장될 데이터 미리보기
+            print(f"💾 저장될 데이터:")
+            for key, value in etf_data.items():
+                if isinstance(value, str) and len(value) > 100:
+                    print(f"   {key}: {type(value).__name__}[{len(value)}글자] = {value[:100]}...")
+                else:
+                    print(f"   {key}: {value}")
+            
             # 📈 데이터 상세 정보 출력
             holdings_count = len(data.get('holdings', []))
             sectors_count = len(data.get('sectors', []))
             net_assets = etf_data['net_assets']
             
+            print(f"📊 ETF 정보 요약:")
             print(f"   💰 순자산: ${net_assets:,}" if net_assets else "   💰 순자산: N/A")
             print(f"   📊 보유종목: {holdings_count}개")
             print(f"   🏭 섹터: {sectors_count}개")
             print(f"   📅 설정일: {data.get('inception_date', 'N/A')}")
             
             # DB에 저장
-            hook.run(UPSERT_ALPHAVANTAGE_SQL, parameters=etf_data)
-            collected_count += 1
-            
-            print(f"✅ {symbol}: 데이터 저장 완료")
+            try:
+                hook.run(UPSERT_ALPHAVANTAGE_SQL, parameters=etf_data)
+                collected_count += 1
+                print(f"✅ {symbol}: 데이터 저장 완료")
+            except Exception as db_error:
+                print(f"❌ {symbol}: DB 저장 실패")
+                print(f"❌ DB 에러: {db_error}")
+                print(f"❌ DB 에러 상세: {traceback.format_exc()}")
+                continue
             
             # API 제한 준수 (12초 대기)
             if i < len(uncollected_etfs):
                 print(f"⏰ 12초 대기...")
                 time.sleep(12)
             
+        except requests.exceptions.RequestException as req_error:
+            print(f"❌ {symbol} 네트워크 요청 실패: {req_error}")
+            print(f"❌ 요청 상세: {traceback.format_exc()}")
+            continue
+        except json.JSONDecodeError as json_error:
+            print(f"❌ {symbol} JSON 파싱 실패: {json_error}")
+            print(f"❌ 응답 내용: {response.text[:500] if 'response' in locals() else 'N/A'}")
+            continue
         except Exception as e:
-            print(f"❌ {symbol} 수집 실패: {e}")
+            print(f"❌ {symbol} 예상치 못한 오류: {e}")
+            print(f"❌ 전체 에러 상세:")
+            print(traceback.format_exc())
             continue
     
     print(f"\n🎯 수집 완료: {collected_count}/{len(uncollected_etfs)}개 ETF")
