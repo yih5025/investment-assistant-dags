@@ -417,39 +417,41 @@ class SocialMediaAnalyzer:
             
             result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
             
-            logger.info(f"Bithumb query result: {result}")
+            # 상세 디버깅 로그
+            logger.info(f"Bithumb raw result: {result}")
+            logger.info(f"Result type: {type(result)}")
+            logger.info(f"Result is None: {result is None}")
             
-            # 안전한 None 체크
-            if result is None:
-                logger.info("Bithumb analysis: query returned None")
+            if result:
+                logger.info(f"Result length: {len(result)}")
+                for i, item in enumerate(result):
+                    logger.info(f"Result[{i}]: {item} (type: {type(item)})")
+            
+            # PostgresHook.get_first()는 결과가 없으면 None을 반환
+            if not result:
+                logger.info("Bithumb analysis: No results from query")
                 return None
                 
-            # 빈 튜플 체크
-            if len(result) < 2:
-                logger.info(f"Bithumb analysis: insufficient result length: {len(result)}")
-                return None
-                
-            # 값 체크
-            if not result[0] or not result[1]:
-                logger.info(f"Bithumb analysis: null values in result: {result}")
-                return None
-                
-            volatility = float(result[1])
-            if volatility > 3.0:  # 3% 이상 변동시만
-                symbol = self._convert_bithumb_symbol(result[0])
+            # 결과가 있는 경우 처리
+            market, volatility_pct = result
+            logger.info(f"Parsed - market: {market}, volatility: {volatility_pct}")
+            
+            if volatility_pct and float(volatility_pct) > 3.0:
+                symbol = self._convert_bithumb_symbol(market)
                 if symbol:
                     return {
                         'symbol': symbol,
-                        'volatility_score': volatility,
+                        'volatility_score': float(volatility_pct),
                         'source': 'statistical_correlation',
                         'priority': 3
                     }
             
-            logger.info(f"Bithumb analysis: volatility {volatility} below threshold")
             return None
             
         except Exception as e:
             logger.error(f"Bithumb volatility analysis failed: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return None
     
     def _convert_bithumb_symbol(self, bithumb_market):
