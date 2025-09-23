@@ -33,7 +33,7 @@ def collect_etf_profile_holdings_data(**context):
     
     # API 키 확인
     try:
-        api_key = Variable.get('ALPHA_VANTAGE_API_KEY')
+        api_key = Variable.get('ALPHA_VANTAGE_API_KEY_3')
         print("🔑 Alpha Vantage API 키 확인 완료")
     except:
         raise ValueError("🔑 ALPHA_VANTAGE_API_KEY가 설정되지 않았습니다")
