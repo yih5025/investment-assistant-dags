@@ -114,18 +114,28 @@ def collect_etf_profile_holdings_data(**context):
             
             # API 에러 체크
             if 'Error Message' in data:
-                print(f"❌ API 에러: {data['Error Message']}")
+                error_msg = data['Error Message']
+                print(f"❌ API 에러: {error_msg}")
+                if 'Invalid API call' in error_msg or 'invalid API key' in error_msg.lower():
+                    # API 키 문제는 즉시 실패 (데이터 저장 불가)
+                    raise Exception(f"AlphaVantage API 키 에러: {error_msg}")
                 continue
             
             if 'Note' in data:
-                print(f"⚠️ API 제한: {data['Note']}")
-                print("⏰ API 제한 도달, 오늘 수집 중단")
+                print(f"⚠️ API 제한 메시지: {data['Note']}")
+                print("⏰ API Rate Limit 도달, 현재까지 수집된 데이터는 저장하고 중단")
+                # 수집 중단하지만 Exception은 던지지 않음 (이미 저장된 데이터 보존)
                 break
             
             if 'Information' in data:
-                print(f"ℹ️ API 정보: {data['Information']}")
+                info_msg = data['Information']
+                print(f"ℹ️ API 정보: {info_msg}")
+                if '25 requests per day' in info_msg or 'rate limit' in info_msg.lower():
+                    print("⏰ 일일 API 제한 도달, 현재까지 수집된 데이터는 저장하고 중단")
+                    # 수집 중단하지만 Exception은 던지지 않음 (이미 저장된 데이터 보존)
+                    break
             
-            # 🔍 필드별 상세 확인
+            # 🔍 필드별 상세 확인 (디버깅용)
             print(f"🔍 필드별 데이터 상태:")
             key_fields = ['net_assets', 'net_expense_ratio', 'portfolio_turnover', 
                          'dividend_yield', 'inception_date', 'leveraged', 'sectors', 'holdings']
@@ -139,6 +149,8 @@ def collect_etf_profile_holdings_data(**context):
                     print(f"   {field}: {value_type} = {value[:50]}...")
                 else:
                     print(f"   {field}: {value_type} = {value}")
+            
+            # 데이터가 없어도 계속 진행 (정상적인 상황일 수 있음)
             
             # 📊 API 응답 데이터 구조 확인 및 안전한 변환
             def safe_numeric(value):
@@ -226,7 +238,28 @@ def collect_etf_profile_holdings_data(**context):
             print(traceback.format_exc())
             continue
     
+    
     print(f"\n🎯 수집 완료: {collected_count}/{len(uncollected_etfs)}개 ETF")
+    
+    # 최종 결과 평가
+    if collected_count == 0:
+        # 하나도 수집하지 못한 경우만 에러 체크
+        print("⚠️ 수집된 ETF가 없습니다.")
+        
+        # 첫 번째 ETF부터 API 키 에러였다면 실패 처리
+        if len(uncollected_etfs) > 0:
+            print("🔍 첫 번째 ETF에서 API 키 문제가 있었는지 확인이 필요합니다.")
+            print("ℹ️ 로그를 확인하여 'Invalid API call' 또는 'API key' 에러가 있었는지 점검하세요.")
+        
+        print("ℹ️ 가능한 원인: API 제한 이미 도달, 중복 데이터, ETF 지원 안함")
+    
+    success_rate = collected_count / len(uncollected_etfs) * 100 if uncollected_etfs else 0
+    print(f"📊 성공률: {success_rate:.1f}%")
+    
+    # API 제한으로 중단된 경우 정보 메시지
+    if collected_count < len(uncollected_etfs):
+        remaining = len(uncollected_etfs) - collected_count
+        print(f"ℹ️ {remaining}개 ETF가 남았습니다 (내일 또는 API 제한 해제 후 수집 예정)")
 
 def validate_profile_holdings_data(**context):
     """Alpha Vantage 데이터 검증"""
