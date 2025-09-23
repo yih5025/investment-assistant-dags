@@ -415,7 +415,7 @@ class SocialMediaAnalyzer:
             LIMIT 1
             """
             
-            result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
+            result = self.pg_hook.get_first(query, parameters=(start_ms, end_ms))
             
             # 상세 디버깅 로그
             logger.info(f"Bithumb raw result: {result}")
