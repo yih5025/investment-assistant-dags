@@ -430,13 +430,18 @@ class SocialMediaAnalyzer:
             sp500_end_time = time.time()
             logger.info(f"SP500 volatility analysis time: {sp500_end_time - sp500_start_time} seconds")
 
+            etf_start_time = time.time()
+            etf_outlier = self._analyze_etf_volatility(timestamp)
+            etf_end_time = time.time()
+            logger.info(f"ETF volatility analysis time: {etf_end_time - etf_start_time} seconds")
+
             bithumb_start_time = time.time()
             bithumb_outlier = self._analyze_bithumb_volatility(timestamp)
             bithumb_end_time = time.time()
             logger.info(f"Bithumb volatility analysis time: {bithumb_end_time - bithumb_start_time} seconds")
 
             # 가장 높은 변동성 반환
-            candidates = [x for x in [sp500_outlier, bithumb_outlier] if x]
+            candidates = [x for x in [sp500_outlier, etf_outlier, bithumb_outlier] if x]
             if candidates:
                 return max(candidates, key=lambda x: x.get('volatility_score', 0))
             
@@ -455,13 +460,18 @@ class SocialMediaAnalyzer:
             self.market_data_range.get('sp500', {}).get('start', timestamp) <= timestamp <=
             self.market_data_range.get('sp500', {}).get('end', timestamp)
         )
+
+        etf_available = (
+            self.market_data_range.get('etf', {}).get('start', timestamp) <= timestamp <=
+            self.market_data_range.get('etf', {}).get('end', timestamp)
+        )
         
         bithumb_available = (
             self.market_data_range.get('bithumb', {}).get('start', timestamp) <= timestamp <=
             self.market_data_range.get('bithumb', {}).get('end', timestamp)
         )
         
-        return sp500_available or bithumb_available
+        return sp500_available or etf_available or bithumb_available # [수정]
     
     def _get_market_data_range(self):
         """시장 데이터 존재 범위 조회"""
@@ -473,6 +483,12 @@ class SocialMediaAnalyzer:
             """
             sp500_result = self.pg_hook.get_first(sp500_query)
             
+            etf_query = """
+            SELECT MIN(timestamp_ms) as start, MAX(timestamp_ms) as end
+            FROM etf_realtime_prices
+            """
+            etf_result = self.pg_hook.get_first(etf_query)
+
             # 빗썸 데이터 범위
             bithumb_query = """
             SELECT MIN(trade_timestamp) as start, MAX(trade_timestamp) as end  
@@ -484,6 +500,11 @@ class SocialMediaAnalyzer:
                 'sp500': {
                     'start': datetime.fromtimestamp(sp500_result[0]/1000, tz=timezone.utc) if sp500_result and sp500_result[0] else None,
                     'end': datetime.fromtimestamp(sp500_result[1]/1000, tz=timezone.utc) if sp500_result and sp500_result[1] else None
+                },
+                # [추가]
+                'etf': {
+                    'start': datetime.fromtimestamp(etf_result[0]/1000, tz=timezone.utc) if etf_result and etf_result[0] else None,
+                    'end': datetime.fromtimestamp(etf_result[1]/1000, tz=timezone.utc) if etf_result and etf_result[1] else None
                 },
                 'bithumb': {
                     'start': datetime.fromtimestamp(bithumb_result[0]/1000, tz=timezone.utc) if bithumb_result and bithumb_result[0] else None,
@@ -541,6 +562,50 @@ class SocialMediaAnalyzer:
             logger.error(f"SP500 volatility analysis failed: {e}")
             return None
     
+    # [추가] ETF 변동성 분석 함수
+    def _analyze_etf_volatility(self, timestamp):
+        """ETF - S&P500과 동일한 로직"""
+        try:
+            start_time = timestamp - timedelta(days=2)
+            end_time = timestamp + timedelta(days=2)
+            start_ms = int(start_time.timestamp() * 1000)
+            end_ms = int(end_time.timestamp() * 1000)
+            
+            query = """
+            WITH price_changes AS (
+                SELECT symbol,
+                       MIN(price) as min_price,
+                       MAX(price) as max_price,
+                       COUNT(*) as trade_count
+                FROM etf_realtime_prices -- 테이블 이름만 변경
+                WHERE timestamp_ms BETWEEN %s AND %s
+                GROUP BY symbol
+                HAVING COUNT(*) >= 5
+            )
+            SELECT symbol, 
+                   ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
+            FROM price_changes
+            WHERE min_price > 0
+            ORDER BY volatility_pct DESC
+            LIMIT 1
+            """
+            
+            result = self.pg_hook.get_first(query, parameters=[start_ms, end_ms])
+            logger.info(f"ETF query result: {result}")
+            
+            if result and len(result) >= 2 and result[0] and result[1] and float(result[1]) > 2.0:
+                return {
+                    'symbol': result[0],
+                    'volatility_score': float(result[1]),
+                    'source': 'statistical_correlation',
+                    'priority': 3
+                }
+            
+            return None
+        except Exception as e:
+            logger.error(f"ETF volatility analysis failed: {e}")
+            return None
+
     def _analyze_bithumb_volatility(self, timestamp):
         try:
             start_time = timestamp - timedelta(days=1)

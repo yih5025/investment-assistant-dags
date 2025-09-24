@@ -180,6 +180,7 @@ class MarketDataCollector:
         self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         self._sp500_symbols_cache = None
         self._crypto_symbols_cache = None
+        self._etf_symbols_cache = None # [추가] ETF 심볼 캐시 변수
     
     def collect_market_data(self, affected_assets, post_timestamp):
         """영향받은 자산들의 시장 데이터 수집"""
@@ -216,6 +217,12 @@ class MarketDataCollector:
             end_time = post_timestamp + timedelta(days=2)
             return self._get_sp500_timeline(symbol, start_time, end_time)
         
+        # [추가] ETF인지 확인
+        elif self.is_etf_symbol(symbol):
+            start_time = post_timestamp - timedelta(days=2)
+            end_time = post_timestamp + timedelta(days=2)
+            return self._get_etf_timeline(symbol, start_time, end_time)
+
         # 암호화폐인지 확인 (3일 범위)
         elif self.is_crypto_symbol(symbol):
             start_time = post_timestamp - timedelta(days=1)
@@ -237,6 +244,20 @@ class MarketDataCollector:
                 self._sp500_symbols_cache = set()
         
         return symbol in self._sp500_symbols_cache
+    # [추가] ETF 심볼 확인 로직
+    def is_etf_symbol(self, symbol):
+        """ETF 심볼인지 확인 - DB에서 동적 조회"""
+        if self._etf_symbols_cache is None:
+            try:
+                query = "SELECT DISTINCT symbol FROM etf_realtime_prices LIMIT 1000"
+                results = self.pg_hook.get_records(query)
+                self._etf_symbols_cache = {row[0] for row in results}
+                logger.info(f"Loaded {len(self._etf_symbols_cache)} ETF symbols from DB")
+            except Exception as e:
+                logger.error(f"Failed to load ETF symbols: {e}")
+                self._etf_symbols_cache = set()
+        return symbol in self._etf_symbols_cache
+    
     
     def is_crypto_symbol(self, symbol):
         """암호화폐 심볼인지 확인 - DB에서 동적 조회"""
@@ -284,6 +305,28 @@ class MarketDataCollector:
         except Exception as e:
             logger.error(f"Failed to get SP500 timeline for {symbol}: {e}")
             return []
+    def _get_etf_timeline(self, symbol, start_time, end_time):
+        """ETF 가격 타임라인 - S&P500과 동일한 로직"""
+        try:
+            start_ms = int(start_time.timestamp() * 1000)
+            end_ms = int(end_time.timestamp() * 1000)
+            query = """
+            SELECT timestamp_ms, price, volume
+            FROM etf_realtime_prices -- 테이블 이름만 변경
+            WHERE symbol = %s 
+                AND timestamp_ms BETWEEN %s AND %s
+            ORDER BY timestamp_ms
+            LIMIT 5000
+            """
+            results = self.pg_hook.get_records(query, parameters=[symbol, start_ms, end_ms])
+            return [{
+                'timestamp': datetime.fromtimestamp(row[0]/1000).isoformat(),
+                'price': float(row[1]),
+                'volume': int(row[2]) if row[2] else 0
+            } for row in results]
+        except Exception as e:
+            logger.error(f"Failed to get ETF timeline for {symbol}: {e}")
+            return []
     
     def _get_crypto_timeline(self, symbol, start_time, end_time):
         """암호화폐 가격 타임라인 - 3일 범위"""
@@ -324,6 +367,8 @@ class MarketDataCollector:
         """데이터 소스 식별"""
         if self._is_sp500_symbol(symbol):
             return 'sp500_realtime'
+        elif self.is_etf_symbol(symbol): # [추가]
+            return 'etf_realtime'
         elif self.is_crypto_symbol(symbol):
             return 'bithumb_realtime'
         return 'unknown'
