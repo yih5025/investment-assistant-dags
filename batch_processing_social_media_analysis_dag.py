@@ -26,7 +26,7 @@ default_args = {
 @dag(
     dag_id='batch_processing_social_media_market_analysis',
     default_args=default_args,
-    description='소셜미디어 게시글 시장 영향 분석 - 100개씩 제한 처리',
+    description='소셜미디어 게시글 시장 영향 분석 - 50개씩 제한 처리',
     schedule_interval='0 */2 * * *',  # 2시간마다 실행
     catchup=False,
     max_active_runs=1,
@@ -36,13 +36,13 @@ def social_media_analysis_dag():
     
     @task
     def get_unanalyzed_posts_limited():
-        """분석되지 않은 게시글 100개씩만 조회"""
+        """분석되지 않은 게시글 50개씩만 조회"""
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        # 각 소스별로 최대 100개씩만 (총 300개 제한)
-        LIMIT_PER_SOURCE = 100
+        # 각 소스별로 최대 50개씩만 (총 150개 제한)
+        LIMIT_PER_SOURCE = 50
         
-        # X 게시글 - 100개만
+        # X 게시글 - 50개만
         x_query = """
         SELECT tweet_id as post_id, 'x' as source, username, 
                text as content, created_at as post_timestamp
@@ -54,7 +54,7 @@ def social_media_analysis_dag():
         LIMIT %s
         """
         
-        # Truth Social 게시글 - 100개만
+        # Truth Social 게시글 - 50개만
         truth_posts_query = """
         SELECT id as post_id, 'truth_social_posts' as source, username,
                clean_content as content, created_at as post_timestamp
@@ -66,7 +66,7 @@ def social_media_analysis_dag():
         LIMIT %s
         """
         
-        # Truth Social 트렌드 - 100개만
+        # Truth Social 트렌드 - 50개만
         truth_trends_query = """
         SELECT id as post_id, 'truth_social_trends' as source, username,
                clean_content as content, created_at as post_timestamp
@@ -122,22 +122,23 @@ def social_media_analysis_dag():
     
     @task
     def analyze_posts_batch(posts):
-        """게시글 배치 분석 - 기존 로직 그대로 사용"""
+        """게시글 배치 분석 + 시장 분석 추가"""
         if not posts:
             logger.info("처리할 게시글이 없습니다.")
             return []
         
         analyzer = SocialMediaAnalyzer()
         collector = MarketDataCollector()
+        market_analyzer = MarketAnalyzer(collector.pg_hook)  # 새로 추가된 분석기
         results = []
         
-        logger.info(f"🚀 {len(posts)}개 게시글 분석 시작")
+        logger.info(f"🚀 {len(posts)}개 게시글 분석 시작 (시장 분석 포함)")
         
         for i, post in enumerate(posts):
             try:
-                logger.info(f"게시글 분석 중 {i+1}/{len(posts)}: {post['post_id']} from {post['source']}")
+                logger.info(f"게시글 분석 중 {i+1}/{len(posts)}: {post['post_id']}")
                 
-                # 3단계 자산 매칭 (기존 로직 그대로)
+                # 1. 기존 자산 매칭
                 affected_assets = analyzer.determine_affected_assets(
                     username=post['username'],
                     content=post['content'],
@@ -146,16 +147,34 @@ def social_media_analysis_dag():
                     post_source=post['source']
                 )
                 
-                # 시장 데이터 수집 (기존 로직 그대로)
+                # 2. 기존 시장 데이터 수집
                 market_data = collector.collect_market_data(
                     affected_assets, post['post_timestamp']
                 )
                 
+                # 3. 새로운 시장 분석 추가
+                price_analysis = {}
+                volume_analysis = {}
+                
+                for asset in affected_assets:
+                    symbol = asset['symbol']
+                    if symbol in market_data:
+                        # 가격 변화 분석
+                        price_changes = market_analyzer.calculate_price_changes(
+                            symbol, post['post_timestamp'], market_data[symbol]
+                        )
+                        if price_changes:
+                            price_analysis[symbol] = price_changes
+                        
+                        # 거래량 변화 분석
+                        volume_changes = market_analyzer.calculate_volume_changes(
+                            symbol, post['post_timestamp'], market_data[symbol]
+                        )
+                        if volume_changes:
+                            volume_analysis[symbol] = volume_changes
+                
                 # 분석 상태 결정
-                if affected_assets:
-                    analysis_status = 'complete'
-                else:
-                    analysis_status = 'partial'
+                analysis_status = 'complete' if affected_assets else 'partial'
                 
                 result = {
                     'post_id': post['post_id'],
@@ -164,11 +183,13 @@ def social_media_analysis_dag():
                     'author_username': post['username'],
                     'affected_assets': affected_assets,
                     'market_data': market_data,
+                    'price_analysis': price_analysis,  # 새로 추가
+                    'volume_analysis': volume_analysis,  # 새로 추가
                     'analysis_status': analysis_status
                 }
                 
                 results.append(result)
-                logger.info(f"✅ 분석 완료 {post['post_id']} - {len(affected_assets)}개 자산 발견")
+                logger.info(f"✅ 분석 완료 {post['post_id']} - {len(affected_assets)}개 자산, {len(price_analysis)}개 가격분석")
                 
             except Exception as e:
                 logger.error(f"❌ 분석 실패 {post['post_id']}: {e}")
@@ -179,6 +200,8 @@ def social_media_analysis_dag():
                     'author_username': post['username'],
                     'affected_assets': [],
                     'market_data': {},
+                    'price_analysis': {},
+                    'volume_analysis': {},
                     'analysis_status': 'failed',
                     'error': str(e)
                 })
@@ -188,7 +211,7 @@ def social_media_analysis_dag():
     
     @task
     def save_analysis_results(analysis_results):
-        """분석 결과를 캐시 테이블에 저장 - 기존 로직 그대로"""
+        """강화된 분석 결과 저장"""
         if not analysis_results:
             logger.info("저장할 결과가 없습니다.")
             return
@@ -202,14 +225,18 @@ def social_media_analysis_dag():
                 upsert_query = """
                 INSERT INTO post_analysis_cache 
                 (post_id, post_source, post_timestamp, author_username, 
-                 affected_assets, market_data, analysis_status, error_message)
+                affected_assets, market_data, price_analysis, volume_analysis, 
+                analysis_status, error_message)
                 VALUES (%(post_id)s, %(post_source)s, %(post_timestamp)s, 
                         %(author_username)s, %(affected_assets)s, %(market_data)s, 
+                        %(price_analysis)s, %(volume_analysis)s,
                         %(analysis_status)s, %(error_message)s)
                 ON CONFLICT (post_id, post_source) 
                 DO UPDATE SET 
                     affected_assets = EXCLUDED.affected_assets,
                     market_data = EXCLUDED.market_data,
+                    price_analysis = EXCLUDED.price_analysis,
+                    volume_analysis = EXCLUDED.volume_analysis,
                     analysis_status = EXCLUDED.analysis_status,
                     error_message = EXCLUDED.error_message,
                     updated_at = NOW()
@@ -222,6 +249,8 @@ def social_media_analysis_dag():
                     'author_username': result['author_username'],
                     'affected_assets': json.dumps(result['affected_assets']),
                     'market_data': json.dumps(result['market_data']),
+                    'price_analysis': json.dumps(result['price_analysis']),
+                    'volume_analysis': json.dumps(result['volume_analysis']),
                     'analysis_status': result['analysis_status'],
                     'error_message': result.get('error', None)
                 }
