@@ -362,9 +362,10 @@ class SocialMediaAnalyzer:
         if not content or len(content) > 1000:  # 너무 긴 글 제외
             return []
         
+        start_time = time.time()
         # 더 제한적인 패턴으로 메모리 절약
         # 알파벳만, 3-12자, 최대 50개 단어만
-        words = re.findall(r'\b[a-zA-Z]{3,12}\b', content.lower())[:30]
+        words = re.findall(r'\b[a-zA-Z]{3,12}\b', content.lower())[:50]
         
         matched_assets = []
         seen_symbols = set()
@@ -385,12 +386,11 @@ class SocialMediaAnalyzer:
                         'matched_keyword': word
                     })
         
+        self.keyword_buffer.add_keywords(matched_assets)
         # 즉시 메모리 해제
         del words, seen_symbols
-        
-        # 키워드 저장 비활성화
-        # self.keyword_buffer.add_keywords(matched_keywords)
-        
+        end_time = time.time()
+        logger.info(f"Keyword extraction time: {end_time - start_time} seconds")
         return matched_assets
     
     def dedupe_assets(self, matched_assets):
