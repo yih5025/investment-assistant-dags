@@ -46,12 +46,13 @@ def social_media_analysis_dag():
         
         # X 게시글 - 50개만
         x_query = """
-        SELECT tweet_id as post_id, 'x' as source, username, 
+        SELECT tweet_id as post_id, 'x' as source, username,
                text as content, created_at as post_timestamp
-        FROM x_posts 
+        FROM x_posts
         WHERE tweet_id NOT IN (
             SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
-        ) AND text NOT LIKE '@%'
+        )
+        AND (text IS NULL OR text NOT LIKE '@%')
         ORDER BY created_at DESC
         LIMIT %s
         """
@@ -62,7 +63,8 @@ def social_media_analysis_dag():
                clean_content as content, created_at as post_timestamp
         FROM truth_social_posts
         WHERE id NOT IN (
-            SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_posts'
+            SELECT post_id FROM post_analysis_cache
+            WHERE (post_source = 'truth_social_posts' OR post_source = 'truth_social_trends')
         )
         ORDER BY created_at DESC
         LIMIT %s
@@ -74,7 +76,8 @@ def social_media_analysis_dag():
                clean_content as content, created_at as post_timestamp
         FROM truth_social_trends
         WHERE id NOT IN (
-            SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_trends'
+            SELECT post_id FROM post_analysis_cache
+            WHERE (post_source = 'truth_social_posts' OR post_source = 'truth_social_trends')
         )
         ORDER BY created_at DESC
         LIMIT %s
