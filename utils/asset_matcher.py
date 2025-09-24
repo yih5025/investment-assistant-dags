@@ -559,8 +559,7 @@ class SocialMediaAnalyzer:
                 FROM bithumb_ticker 
                 WHERE trade_timestamp BETWEEN {start_ms} AND {end_ms}
                     AND market LIKE 'KRW-%'
-                    AND trade_price IS NOT NULL 
-                    AND LENGTH(trade_price) > 0
+                    AND trade_price IS NOT NULL
                 GROUP BY market
                 HAVING COUNT(*) >= 3
             )
