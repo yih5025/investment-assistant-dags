@@ -1,16 +1,17 @@
-# social_media_analysis_dag_fixed.py - 브랜치 로직 수정
+# social_media_analysis_dag.py
 from airflow import DAG
 from airflow.decorators import task, dag
 from airflow.hooks.postgres_hook import PostgresHook
-from airflow.operators.dummy import DummyOperator
 from datetime import datetime, timedelta
 import json
 import logging
 
 try:
+    # Try relative import first
     from utils.asset_matcher import SocialMediaAnalyzer
     from utils.market_data_collector import MarketDataCollector
 except ImportError:
+    # Fallback to absolute import
     from dags.utils.asset_matcher import SocialMediaAnalyzer
     from dags.utils.market_data_collector import MarketDataCollector
 
@@ -21,220 +22,131 @@ default_args = {
     'depends_on_past': False,
     'start_date': datetime(2025, 9, 21),
     'retries': None,
-    'retry_delay': timedelta(minutes=5)
+    'retry_delay': timedelta(minutes=2)
 }
 
-BATCH_SIZE = 100
-
 @dag(
-    dag_id='hourly_batch_social_media_analysis_fixed',
+    dag_id='batch_processing_social_media_market_analysis',
     default_args=default_args,
-    description='소셜미디어 게시글 시장 영향 분석 - 1시간마다 배치 처리 (수정됨)',
-    schedule_interval='0 * * * *',  # 매시 정각 실행
+    description='소셜미디어 게시글 시장 영향 분석',
+    schedule_interval='@daily',
     catchup=False,
     max_active_runs=1,
-    tags=['social_media', 'market_analysis', 'hourly_batch', 'fixed']
+    tags=['social_media', 'market_analysis']
 )
 def social_media_analysis_dag():
     
     @task
-    def get_processing_status():
-        """현재 처리 진행 상황 확인"""
+    def get_unanalyzed_posts():
+        """분석되지 않은 모든 게시글 조회 (X, Truth Social Posts, Truth Social Trends)"""
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        status_queries = {
-            'x': """
-                SELECT 
-                    COUNT(*) as total,
-                    COUNT(CASE WHEN tweet_id IN (
-                        SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
-                    ) THEN 1 END) as processed
-                FROM x_posts
-            """,
-            'truth_social_posts': """
-                SELECT 
-                    COUNT(*) as total,
-                    COUNT(CASE WHEN id IN (
-                        SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_posts'
-                    ) THEN 1 END) as processed
-                FROM truth_social_posts
-            """,
-            'truth_social_trends': """
-                SELECT 
-                    COUNT(*) as total,
-                    COUNT(CASE WHEN id IN (
-                        SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_trends'
-                    ) THEN 1 END) as processed
-                FROM truth_social_trends
-            """
-        }
+        # X 게시글 - 미분석된 모든 게시글
+        x_query = """
+        SELECT tweet_id as post_id, 'x' as source, username, 
+               text as content, created_at as post_timestamp
+        FROM x_posts 
+        WHERE tweet_id NOT IN (
+            SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
+        )
+        ORDER BY created_at DESC
+        """
         
-        status = {}
-        for source, query in status_queries.items():
-            try:
-                result = pg_hook.get_first(query)
-                if result:
-                    total, processed = result
-                    remaining = total - processed
-                    status[source] = {
-                        'total': total,
-                        'processed': processed,
-                        'remaining': remaining,
-                        'has_work': remaining > 0
-                    }
-                else:
-                    status[source] = {
-                        'total': 0,
-                        'processed': 0,
-                        'remaining': 0,
-                        'has_work': False
-                    }
-            except Exception as e:
-                logger.error(f"Error checking status for {source}: {e}")
-                status[source] = {
-                    'total': 0,
-                    'processed': 0,
-                    'remaining': 0,
-                    'has_work': False
-                }
+        # Truth Social 게시글 - 미분석된 모든 게시글
+        truth_posts_query = """
+        SELECT id as post_id, 'truth_social_posts' as source, username,
+               clean_content as content, created_at as post_timestamp
+        FROM truth_social_posts
+        WHERE id NOT IN (
+            SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_posts'
+        )
+        ORDER BY created_at DESC
+        """
         
-        logger.info(f"Processing status: {status}")
-        return status
-    
-    @task
-    def get_batch_posts(status):
-        """배치 단위로 미분석 게시글 조회"""
-        # 처리할 작업이 없으면 빈 리스트 반환
-        total_work = sum(s['remaining'] for s in status.values())
-        if total_work == 0:
-            logger.info("No work needed - returning empty list")
-            return []
+        # Truth Social 트렌드 - 미분석된 모든 게시글
+        truth_trends_query = """
+        SELECT id as post_id, 'truth_social_trends' as source, username,
+               clean_content as content, created_at as post_timestamp
+        FROM truth_social_trends
+        WHERE id NOT IN (
+            SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_trends'
+        )
+        ORDER BY created_at DESC
+        """
         
-        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
+        x_posts = pg_hook.get_records(x_query)
+        truth_posts = pg_hook.get_records(truth_posts_query)
+        truth_trends = pg_hook.get_records(truth_trends_query)
+        
+        # 딕셔너리 형태로 변환
         all_posts = []
         
-        # X 게시글 배치 조회
-        if status['x']['has_work']:
-            try:
-                x_query = """
-                SELECT tweet_id as post_id, 'x' as source, username, 
-                       text as content, created_at as post_timestamp
-                FROM x_posts 
-                WHERE tweet_id NOT IN (
-                    SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
-                )
-                ORDER BY created_at DESC
-                LIMIT %s
-                """
-                x_posts = pg_hook.get_records(x_query, parameters=[BATCH_SIZE])
-                
-                for row in x_posts:
-                    all_posts.append({
-                        'post_id': row[0],
-                        'source': row[1], 
-                        'username': row[2],
-                        'content': row[3],
-                        'post_timestamp': row[4]
-                    })
-                
-                logger.info(f"Retrieved {len(x_posts)} X posts")
-            except Exception as e:
-                logger.error(f"Error fetching X posts: {e}")
+        for row in x_posts:
+            all_posts.append({
+                'post_id': row[0],
+                'source': row[1], 
+                'username': row[2],
+                'content': row[3],
+                'post_timestamp': row[4]
+            })
         
-        # Truth Social Posts 배치 조회
-        if status['truth_social_posts']['has_work']:
-            try:
-                truth_posts_query = """
-                SELECT id as post_id, 'truth_social_posts' as source, username,
-                       clean_content as content, created_at as post_timestamp
-                FROM truth_social_posts
-                WHERE id NOT IN (
-                    SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_posts'
-                )
-                ORDER BY created_at DESC
-                LIMIT %s
-                """
-                truth_posts = pg_hook.get_records(truth_posts_query, parameters=[BATCH_SIZE])
-                
-                for row in truth_posts:
-                    all_posts.append({
-                        'post_id': row[0],
-                        'source': row[1],
-                        'username': row[2], 
-                        'content': row[3],
-                        'post_timestamp': row[4]
-                    })
-                
-                logger.info(f"Retrieved {len(truth_posts)} Truth Social posts")
-            except Exception as e:
-                logger.error(f"Error fetching Truth Social posts: {e}")
+        for row in truth_posts:
+            all_posts.append({
+                'post_id': row[0],
+                'source': row[1],
+                'username': row[2], 
+                'content': row[3],
+                'post_timestamp': row[4]
+            })
+            
+        for row in truth_trends:
+            all_posts.append({
+                'post_id': row[0],
+                'source': row[1],
+                'username': row[2], 
+                'content': row[3],
+                'post_timestamp': row[4]
+            })
         
-        # Truth Social Trends 배치 조회
-        if status['truth_social_trends']['has_work']:
-            try:
-                truth_trends_query = """
-                SELECT id as post_id, 'truth_social_trends' as source, username,
-                       clean_content as content, created_at as post_timestamp
-                FROM truth_social_trends
-                WHERE id NOT IN (
-                    SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_trends'
-                )
-                ORDER BY created_at DESC
-                LIMIT %s
-                """
-                truth_trends = pg_hook.get_records(truth_trends_query, parameters=[BATCH_SIZE])
-                
-                for row in truth_trends:
-                    all_posts.append({
-                        'post_id': row[0],
-                        'source': row[1],
-                        'username': row[2], 
-                        'content': row[3],
-                        'post_timestamp': row[4]
-                    })
-                
-                logger.info(f"Retrieved {len(truth_trends)} Truth Social trends")
-            except Exception as e:
-                logger.error(f"Error fetching Truth Social trends: {e}")
-        
-        total_posts = len(all_posts)
-        logger.info(f"Total posts in this batch: {total_posts}")
-        
+        logger.info(f"Found {len(all_posts)} unanalyzed posts (X: {len(x_posts)}, Truth Posts: {len(truth_posts)}, Truth Trends: {len(truth_trends)})")
         return all_posts
     
     @task
-    def analyze_posts_batch_optimized(posts):
-        """게시글 배치 분석 - 간소화된 버전"""
+    def analyze_posts_batch(posts):
+        """게시글 배치 분석"""
         if not posts:
-            logger.info("No posts to analyze in this batch")
+            logger.info("No posts to analyze")
             return []
         
-        # utils 모듈 import 실패 대비 간단한 분석
+        analyzer = SocialMediaAnalyzer()
+        collector = MarketDataCollector()
         results = []
         
-        logger.info(f"Starting analysis of {len(posts)} posts in this batch")
+        logger.info(f"Starting analysis of {len(posts)} posts")
         
         for i, post in enumerate(posts):
             try:
-                logger.info(f"Processing post {i+1}/{len(posts)}: {post['post_id']} from {post['source']}")
+                logger.info(f"Analyzing post {i+1}/{len(posts)}: {post['post_id']} from {post['source']}")
                 
-                # 간소화된 자산 매칭 (계정 기반만)
-                affected_assets = []
+                # 3단계 자산 매칭
+                affected_assets = analyzer.determine_affected_assets(
+                    username=post['username'],
+                    content=post['content'],
+                    timestamp=post['post_timestamp'],
+                    post_id=post['post_id'],
+                    post_source=post['source']
+                )
                 
-                # 기본 계정 매핑
-                account_mapping = {
-                    'elonmusk': [{'symbol': 'TSLA', 'source': 'account_default', 'priority': 1}],
-                    'realDonaldTrump': [{'symbol': 'DWAC', 'source': 'account_default', 'priority': 1}],
-                    'Apple': [{'symbol': 'AAPL', 'source': 'account_default', 'priority': 1}],
-                    'nvidia': [{'symbol': 'NVDA', 'source': 'account_default', 'priority': 1}],
-                }
-                
-                username = post['username']
-                if username in account_mapping:
-                    affected_assets = account_mapping[username]
+                # 시장 데이터 수집
+                market_data = collector.collect_market_data(
+                    affected_assets, post['post_timestamp']
+                )
                 
                 # 분석 상태 결정
-                analysis_status = 'complete' if affected_assets else 'partial'
+                if affected_assets:
+                    analysis_status = 'complete'
+                else:
+                    analysis_status = 'partial'
                 
                 result = {
                     'post_id': post['post_id'],
@@ -242,12 +154,12 @@ def social_media_analysis_dag():
                     'post_timestamp': post['post_timestamp'],
                     'author_username': post['username'],
                     'affected_assets': affected_assets,
-                    'market_data': {},  # 시장 데이터는 생략 (메모리 절약)
+                    'market_data': market_data,
                     'analysis_status': analysis_status
                 }
                 
                 results.append(result)
-                logger.info(f"Analyzed post {post['post_id']} - Found {len(affected_assets)} assets")
+                logger.info(f"Successfully analyzed post {post['post_id']} - Found {len(affected_assets)} assets")
                 
             except Exception as e:
                 logger.error(f"Analysis failed for post {post['post_id']}: {e}")
@@ -262,14 +174,14 @@ def social_media_analysis_dag():
                     'error': str(e)
                 })
         
-        logger.info(f"Batch analysis completed: {len(results)} posts processed")
+        logger.info(f"Completed analysis of {len(results)} posts")
         return results
     
     @task
-    def save_analysis_results_optimized(analysis_results):
-        """분석 결과 저장"""
+    def save_analysis_results(analysis_results):
+        """분석 결과를 캐시 테이블에 저장"""
         if not analysis_results:
-            logger.info("No results to save in this batch")
+            logger.info("No results to save")
             return
         
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
@@ -294,6 +206,7 @@ def social_media_analysis_dag():
                     updated_at = NOW()
                 """
                 
+                # JSONB 형태로 변환
                 params = {
                     'post_id': result['post_id'],
                     'post_source': result['post_source'],
@@ -314,29 +227,15 @@ def social_media_analysis_dag():
         logger.info("Analysis results saved successfully")
     
     @task
-    def log_completion_status(status):
-        """작업 완료 상태 로깅"""
-        total_remaining = sum(s['remaining'] for s in status.values())
-        
-        if total_remaining == 0:
-            logger.info("🎉 모든 소셜미디어 게시글 분석이 완료되었습니다!")
-        else:
-            for source, info in status.items():
-                if info['remaining'] > 0:
-                    progress_pct = (info['processed'] / info['total'] * 100) if info['total'] > 0 else 0
-                    logger.info(f"{source}: {info['processed']}/{info['total']} 완료 ({progress_pct:.1f}%), {info['remaining']}개 남음")
-        
-        return f"Total remaining: {total_remaining}"
-    
-    # 수정된 DAG 플로우 - 브랜치 없이 순차 실행
-    status = get_processing_status()
-    posts = get_batch_posts(status)
-    analysis_results = analyze_posts_batch_optimized(posts)
-    save_results = save_analysis_results_optimized(analysis_results)
-    completion_status = log_completion_status(status)
-    
-    # 태스크 의존성 (순차 실행)
-    status >> posts >> analysis_results >> save_results >> completion_status
+    def finalize_keywords():
+        analyzer = SocialMediaAnalyzer()
+        analyzer.finalize_keywords()
+
+    # DAG 태스크 실행 흐름
+    posts = get_unanalyzed_posts()
+    analysis_results = analyze_posts_batch(posts)
+    save_analysis_results(analysis_results)
+    finalize_keywords()
 
 # DAG 인스턴스 생성
 dag_instance = social_media_analysis_dag()
