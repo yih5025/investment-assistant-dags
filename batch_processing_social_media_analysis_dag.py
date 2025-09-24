@@ -9,9 +9,11 @@ import logging
 try:
     from utils.asset_matcher import SocialMediaAnalyzer
     from utils.market_data_collector import MarketDataCollector
+    from utils.market_data_collector import MarketAnalyzer
 except ImportError:
     from dags.utils.asset_matcher import SocialMediaAnalyzer
     from dags.utils.market_data_collector import MarketDataCollector
+    from dags.utils.market_data_collector import MarketAnalyzer
 
 logger = logging.getLogger(__name__)
 

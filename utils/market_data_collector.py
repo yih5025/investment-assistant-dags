@@ -7,11 +7,10 @@ import statistics
 
 logger = logging.getLogger(__name__)
 
-class MarketDataCollector:
-    def __init__(self):
-        self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
-        self._sp500_symbols_cache = None
-        self._crypto_symbols_cache = None
+class MarketAnalyzer:
+    def __init__(self, pg_hook, market_collector=None):
+        self.pg_hook = pg_hook
+        self.market_collector = market_collector or MarketDataCollector()
     
     def calculate_price_changes(self, symbol, post_timestamp, market_data):
         """게시글 전후 가격 변화 분석"""
@@ -41,7 +40,7 @@ class MarketDataCollector:
                 changes['12h_change'] = round(((hour_12_price - post_price) / post_price) * 100, 2)
             
             # 24시간 후 (또는 다음 거래일)
-            if self._is_crypto_symbol(symbol):
+            if self.market_collector.is_crypto_symbol(symbol):
                 # 암호화폐는 24시간 거래
                 hour_24_time = post_timestamp + timedelta(hours=24)
                 hour_24_price = self._get_price_near_time(price_timeline, hour_24_time)
@@ -160,6 +159,12 @@ class MarketDataCollector:
         # 거래 시간대로 조정 (오전 10시)
         next_day = next_day.replace(hour=10, minute=0, second=0, microsecond=0)
         return next_day
+
+class MarketDataCollector:
+    def __init__(self):
+        self.pg_hook = PostgresHook(postgres_conn_id='postgres_default')
+        self._sp500_symbols_cache = None
+        self._crypto_symbols_cache = None
     
     def collect_market_data(self, affected_assets, post_timestamp):
         """영향받은 자산들의 시장 데이터 수집"""
@@ -197,7 +202,7 @@ class MarketDataCollector:
             return self._get_sp500_timeline(symbol, start_time, end_time)
         
         # 암호화폐인지 확인 (3일 범위)
-        elif self._is_crypto_symbol(symbol):
+        elif self.is_crypto_symbol(symbol):
             start_time = post_timestamp - timedelta(days=1)
             end_time = post_timestamp + timedelta(days=1)
             return self._get_crypto_timeline(symbol, start_time, end_time)
@@ -218,7 +223,7 @@ class MarketDataCollector:
         
         return symbol in self._sp500_symbols_cache
     
-    def _is_crypto_symbol(self, symbol):
+    def is_crypto_symbol(self, symbol):
         """암호화폐 심볼인지 확인 - DB에서 동적 조회"""
         if self._crypto_symbols_cache is None:
             try:
@@ -304,6 +309,6 @@ class MarketDataCollector:
         """데이터 소스 식별"""
         if self._is_sp500_symbol(symbol):
             return 'sp500_realtime'
-        elif self._is_crypto_symbol(symbol):
+        elif self.is_crypto_symbol(symbol):
             return 'bithumb_realtime'
         return 'unknown'
