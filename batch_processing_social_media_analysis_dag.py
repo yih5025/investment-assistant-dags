@@ -1,4 +1,4 @@
-# social_media_analysis_dag.py
+# social_media_analysis_dag.py - 100개 제한 버전
 from airflow import DAG
 from airflow.decorators import task, dag
 from airflow.hooks.postgres_hook import PostgresHook
@@ -7,11 +7,9 @@ import json
 import logging
 
 try:
-    # Try relative import first
     from utils.asset_matcher import SocialMediaAnalyzer
     from utils.market_data_collector import MarketDataCollector
 except ImportError:
-    # Fallback to absolute import
     from dags.utils.asset_matcher import SocialMediaAnalyzer
     from dags.utils.market_data_collector import MarketDataCollector
 
@@ -28,20 +26,23 @@ default_args = {
 @dag(
     dag_id='batch_processing_social_media_market_analysis',
     default_args=default_args,
-    description='소셜미디어 게시글 시장 영향 분석',
-    schedule_interval='@daily',
+    description='소셜미디어 게시글 시장 영향 분석 - 100개씩 제한 처리',
+    schedule_interval='0 */2 * * *',  # 2시간마다 실행
     catchup=False,
     max_active_runs=1,
-    tags=['social_media', 'market_analysis']
+    tags=['social_media', 'market_analysis', 'batch_limited']
 )
 def social_media_analysis_dag():
     
     @task
-    def get_unanalyzed_posts():
-        """분석되지 않은 모든 게시글 조회 (X, Truth Social Posts, Truth Social Trends)"""
+    def get_unanalyzed_posts_limited():
+        """분석되지 않은 게시글 100개씩만 조회"""
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        # X 게시글 - 미분석된 모든 게시글
+        # 각 소스별로 최대 100개씩만 (총 300개 제한)
+        LIMIT_PER_SOURCE = 100
+        
+        # X 게시글 - 100개만
         x_query = """
         SELECT tweet_id as post_id, 'x' as source, username, 
                text as content, created_at as post_timestamp
@@ -50,9 +51,10 @@ def social_media_analysis_dag():
             SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
         )
         ORDER BY created_at DESC
+        LIMIT %s
         """
         
-        # Truth Social 게시글 - 미분석된 모든 게시글
+        # Truth Social 게시글 - 100개만
         truth_posts_query = """
         SELECT id as post_id, 'truth_social_posts' as source, username,
                clean_content as content, created_at as post_timestamp
@@ -61,9 +63,10 @@ def social_media_analysis_dag():
             SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_posts'
         )
         ORDER BY created_at DESC
+        LIMIT %s
         """
         
-        # Truth Social 트렌드 - 미분석된 모든 게시글
+        # Truth Social 트렌드 - 100개만
         truth_trends_query = """
         SELECT id as post_id, 'truth_social_trends' as source, username,
                clean_content as content, created_at as post_timestamp
@@ -72,11 +75,12 @@ def social_media_analysis_dag():
             SELECT post_id FROM post_analysis_cache WHERE post_source = 'truth_social_trends'
         )
         ORDER BY created_at DESC
+        LIMIT %s
         """
         
-        x_posts = pg_hook.get_records(x_query)
-        truth_posts = pg_hook.get_records(truth_posts_query)
-        truth_trends = pg_hook.get_records(truth_trends_query)
+        x_posts = pg_hook.get_records(x_query, parameters=[LIMIT_PER_SOURCE])
+        truth_posts = pg_hook.get_records(truth_posts_query, parameters=[LIMIT_PER_SOURCE])
+        truth_trends = pg_hook.get_records(truth_trends_query, parameters=[LIMIT_PER_SOURCE])
         
         # 딕셔너리 형태로 변환
         all_posts = []
@@ -108,27 +112,32 @@ def social_media_analysis_dag():
                 'post_timestamp': row[4]
             })
         
-        logger.info(f"Found {len(all_posts)} unanalyzed posts (X: {len(x_posts)}, Truth Posts: {len(truth_posts)}, Truth Trends: {len(truth_trends)})")
+        total_posts = len(all_posts)
+        logger.info(f"이번 배치에서 처리할 게시글: {total_posts}개 (X: {len(x_posts)}, Truth Posts: {len(truth_posts)}, Truth Trends: {len(truth_trends)})")
+        
+        if total_posts == 0:
+            logger.info("🎉 모든 게시글 분석 완료!")
+        
         return all_posts
     
     @task
     def analyze_posts_batch(posts):
-        """게시글 배치 분석"""
+        """게시글 배치 분석 - 기존 로직 그대로 사용"""
         if not posts:
-            logger.info("No posts to analyze")
+            logger.info("처리할 게시글이 없습니다.")
             return []
         
         analyzer = SocialMediaAnalyzer()
         collector = MarketDataCollector()
         results = []
         
-        logger.info(f"Starting analysis of {len(posts)} posts")
+        logger.info(f"🚀 {len(posts)}개 게시글 분석 시작")
         
         for i, post in enumerate(posts):
             try:
-                logger.info(f"Analyzing post {i+1}/{len(posts)}: {post['post_id']} from {post['source']}")
+                logger.info(f"게시글 분석 중 {i+1}/{len(posts)}: {post['post_id']} from {post['source']}")
                 
-                # 3단계 자산 매칭
+                # 3단계 자산 매칭 (기존 로직 그대로)
                 affected_assets = analyzer.determine_affected_assets(
                     username=post['username'],
                     content=post['content'],
@@ -137,7 +146,7 @@ def social_media_analysis_dag():
                     post_source=post['source']
                 )
                 
-                # 시장 데이터 수집
+                # 시장 데이터 수집 (기존 로직 그대로)
                 market_data = collector.collect_market_data(
                     affected_assets, post['post_timestamp']
                 )
@@ -159,10 +168,10 @@ def social_media_analysis_dag():
                 }
                 
                 results.append(result)
-                logger.info(f"Successfully analyzed post {post['post_id']} - Found {len(affected_assets)} assets")
+                logger.info(f"✅ 분석 완료 {post['post_id']} - {len(affected_assets)}개 자산 발견")
                 
             except Exception as e:
-                logger.error(f"Analysis failed for post {post['post_id']}: {e}")
+                logger.error(f"❌ 분석 실패 {post['post_id']}: {e}")
                 results.append({
                     'post_id': post['post_id'],
                     'post_source': post['source'],
@@ -174,19 +183,19 @@ def social_media_analysis_dag():
                     'error': str(e)
                 })
         
-        logger.info(f"Completed analysis of {len(results)} posts")
+        logger.info(f"✅ 배치 분석 완료: {len(results)}개 게시글 처리됨")
         return results
     
     @task
     def save_analysis_results(analysis_results):
-        """분석 결과를 캐시 테이블에 저장"""
+        """분석 결과를 캐시 테이블에 저장 - 기존 로직 그대로"""
         if not analysis_results:
-            logger.info("No results to save")
+            logger.info("저장할 결과가 없습니다.")
             return
         
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        logger.info(f"Saving {len(analysis_results)} analysis results")
+        logger.info(f"💾 {len(analysis_results)}개 분석 결과 저장 중")
         
         for result in analysis_results:
             try:
@@ -206,7 +215,6 @@ def social_media_analysis_dag():
                     updated_at = NOW()
                 """
                 
-                # JSONB 형태로 변환
                 params = {
                     'post_id': result['post_id'],
                     'post_source': result['post_source'],
@@ -221,18 +229,20 @@ def social_media_analysis_dag():
                 pg_hook.run(upsert_query, parameters=params)
                 
             except Exception as e:
-                logger.error(f"Failed to save result for post {result['post_id']}: {e}")
+                logger.error(f"저장 실패 {result['post_id']}: {e}")
                 continue
         
-        logger.info("Analysis results saved successfully")
+        logger.info("✅ 분석 결과 저장 완료")
     
     @task
     def finalize_keywords():
+        """키워드 정리 작업"""
         analyzer = SocialMediaAnalyzer()
         analyzer.finalize_keywords()
+        logger.info("키워드 정리 완료")
 
-    # DAG 태스크 실행 흐름
-    posts = get_unanalyzed_posts()
+    # DAG 태스크 실행 흐름 (기존과 동일)
+    posts = get_unanalyzed_posts_limited()
     analysis_results = analyze_posts_batch(posts)
     save_analysis_results(analysis_results)
     finalize_keywords()
