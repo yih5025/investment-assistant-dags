@@ -51,7 +51,7 @@ def social_media_analysis_dag():
         FROM x_posts 
         WHERE tweet_id NOT IN (
             SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
-        )
+        ) AND text NOT LIKE '@%'
         ORDER BY created_at DESC
         LIMIT %s
         """
