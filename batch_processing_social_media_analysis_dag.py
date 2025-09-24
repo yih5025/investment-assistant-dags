@@ -52,7 +52,8 @@ def social_media_analysis_dag():
         WHERE tweet_id NOT IN (
             SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
         )
-        AND text NOT LIKE '@%%' -- '%'를 '%%'로 수정
+        AND text NOT LIKE '@%%'
+        AND text IS NOT NULL
         ORDER BY created_at DESC
         LIMIT %s
         """
