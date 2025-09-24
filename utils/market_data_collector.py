@@ -2,6 +2,7 @@
 from airflow.hooks.postgres_hook import PostgresHook
 from datetime import datetime, timedelta
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,8 @@ class MarketDataCollector:
     def collect_market_data(self, affected_assets, post_timestamp):
         """영향받은 자산들의 시장 데이터 수집"""
         market_data = {}
-        
+
+        start_time = time.time()
         for asset_info in affected_assets:
             symbol = asset_info['symbol']
             
@@ -32,7 +34,8 @@ class MarketDataCollector:
             except Exception as e:
                 logger.error(f"Failed to collect market data for {symbol}: {e}")
                 continue
-        
+        end_time = time.time()
+        logger.info(f"Market data collection time: {end_time - start_time} seconds")
         return market_data
     
     def _get_price_timeline(self, symbol, post_timestamp):

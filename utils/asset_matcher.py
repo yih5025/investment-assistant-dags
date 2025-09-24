@@ -3,6 +3,8 @@ from airflow.hooks.postgres_hook import PostgresHook
 from datetime import datetime, timedelta, timezone
 import logging
 import re
+import time
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -191,19 +193,27 @@ class SocialMediaAnalyzer:
         """단순화된 2단계 자산 매칭 로직"""
         affected_assets = []
 
+        start_account_assets_time = time.time()
         account_assets = self.get_account_default_assets(username)
         affected_assets.extend(account_assets)
-        
+        end_account_assets_time = time.time()
+        logger.info(f"Account assets time: {end_account_assets_time - start_account_assets_time} seconds")
+
+        start_keyword_assets_time = time.time()
         # 1단계: 범용 키워드 매핑 (키워드 저장 포함)
         keyword_assets = self.extract_keyword_assets_v2(content, post_id, post_source)
         affected_assets.extend(keyword_assets[:5])
-        
+        end_keyword_assets_time = time.time()
+        logger.info(f"Keyword assets time: {end_keyword_assets_time - start_keyword_assets_time} seconds")
+
+        start_volatile_asset_time = time.time()
         # 2단계: 통계적 변동성 (키워드 매칭이 5개 미만일 때만)
         if len(affected_assets) < 5:
             volatile_asset = self.find_statistical_outlier(timestamp)
             if volatile_asset:
                 affected_assets.append(volatile_asset)
-        
+        end_volatile_asset_time = time.time()
+        logger.info(f"Volatile asset time: {end_volatile_asset_time - start_volatile_asset_time} seconds")
         return self.dedupe_and_rank(affected_assets)
     
 
@@ -414,11 +424,17 @@ class SocialMediaAnalyzer:
             # 시장 데이터 범위 체크
             if not self._has_market_data_for_time(timestamp):
                 return None
-            
+            sp500_start_time = time.time()
             # SP500과 빗썸 분석
             sp500_outlier = self._analyze_sp500_volatility(timestamp)
+            sp500_end_time = time.time()
+            logger.info(f"SP500 volatility analysis time: {sp500_end_time - sp500_start_time} seconds")
+
+            bithumb_start_time = time.time()
             bithumb_outlier = self._analyze_bithumb_volatility(timestamp)
-            
+            bithumb_end_time = time.time()
+            logger.info(f"Bithumb volatility analysis time: {bithumb_end_time - bithumb_start_time} seconds")
+
             # 가장 높은 변동성 반환
             candidates = [x for x in [sp500_outlier, bithumb_outlier] if x]
             if candidates:
@@ -542,13 +558,13 @@ class SocialMediaAnalyzer:
                     COUNT(*) as trade_count
                 FROM bithumb_ticker 
                 WHERE trade_timestamp BETWEEN {start_ms} AND {end_ms}
-                    AND trade_price::text ~ '^[0-9]+\.?[0-9]*$'
                     AND market LIKE 'KRW-%'
+                    AND trade_price != ''
+                    AND trade_price IS NOT NULL
                 GROUP BY market
                 HAVING COUNT(*) >= 3
             )
-            SELECT market,
-                ((max_price - min_price) / NULLIF(min_price, 0) * 100) as volatility_pct
+            SELECT market, ((max_price - min_price) / min_price * 100) as volatility_pct
             FROM crypto_changes
             WHERE min_price > 0
             ORDER BY volatility_pct DESC
