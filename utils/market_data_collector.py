@@ -156,8 +156,11 @@ class MarketAnalyzer:
         for point in timeline:
             try:
                 point_time = datetime.fromisoformat(point['timestamp'].replace('Z', '+00:00'))
-                if start_time <= point_time <= end_time and point.get('volume'):
-                    volumes.append(float(point['volume']))
+                # [수정] point 딕셔너리에서 'volume' 키의 값을 직접 확인하고, 0인 경우도 제외
+                if start_time <= point_time <= end_time:
+                    volume_value = point.get('volume')
+                    if volume_value is not None and volume_value > 0:
+                        volumes.append(float(volume_value))
             except:
                 continue
 
