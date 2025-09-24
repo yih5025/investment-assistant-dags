@@ -47,12 +47,12 @@ def social_media_analysis_dag():
         # X 게시글 - 50개만
         x_query = """
         SELECT tweet_id as post_id, 'x' as source, username,
-               text as content, created_at as post_timestamp
+                text as content, created_at as post_timestamp
         FROM x_posts
         WHERE tweet_id NOT IN (
             SELECT post_id FROM post_analysis_cache WHERE post_source = 'x'
         )
-        AND (text IS NULL OR text NOT LIKE '@%')
+        AND (text IS NOT NULL OR text NOT LIKE '@%%') -- '%'를 '%%'로 수정
         ORDER BY created_at DESC
         LIMIT %s
         """
