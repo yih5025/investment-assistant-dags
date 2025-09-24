@@ -136,8 +136,9 @@ def social_media_analysis_dag():
         collector = MarketDataCollector()
         market_analyzer = MarketAnalyzer(collector.pg_hook)  # 새로 추가된 분석기
         results = []
-        
+
         logger.info(f"🚀 {len(posts)}개 게시글 분석 시작 (시장 분석 포함)")
+        logger.info("📊 MarketAnalyzer 초기화 완료")
         
         for i, post in enumerate(posts):
             try:
@@ -160,7 +161,9 @@ def social_media_analysis_dag():
                 # 3. 새로운 시장 분석 추가
                 price_analysis = {}
                 volume_analysis = {}
-                
+
+                logger.info(f"📈 {len(affected_assets)}개 자산에 대한 시장 분석 시작")
+
                 for asset in affected_assets:
                     symbol = asset['symbol']
                     if symbol in market_data:
@@ -170,7 +173,7 @@ def social_media_analysis_dag():
                         )
                         if price_changes:
                             price_analysis[symbol] = price_changes
-                        
+
                         # 거래량 변화 분석
                         volume_changes = market_analyzer.calculate_volume_changes(
                             symbol, post['post_timestamp'], market_data[symbol]
@@ -194,7 +197,7 @@ def social_media_analysis_dag():
                 }
                 
                 results.append(result)
-                logger.info(f"✅ 분석 완료 {post['post_id']} - {len(affected_assets)}개 자산, {len(price_analysis)}개 가격분석")
+                logger.info(f"✅ 분석 완료 {post['post_id']} - {len(affected_assets)}개 자산, {len(price_analysis)}개 가격분석, {len(volume_analysis)}개 거래량분석")
                 
             except Exception as e:
                 logger.error(f"❌ 분석 실패 {post['post_id']}: {e}")
@@ -212,6 +215,7 @@ def social_media_analysis_dag():
                 })
         
         logger.info(f"✅ 배치 분석 완료: {len(results)}개 게시글 처리됨")
+        logger.info(f"📊 전체 통계 - 가격분석: {sum(len(r.get('price_analysis', {})) for r in results)}개, 거래량분석: {sum(len(r.get('volume_analysis', {})) for r in results)}개")
         return results
     
     @task

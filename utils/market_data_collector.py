@@ -14,31 +14,33 @@ class MarketAnalyzer:
     
     def calculate_price_changes(self, symbol, post_timestamp, market_data):
         """게시글 전후 가격 변화 분석"""
+        start_time = time.time()
+
         try:
             price_timeline = market_data.get('price_timeline', [])
             if not price_timeline:
                 return {}
-            
+
             # 게시글 시점 기준 가격 찾기
             post_price = self._get_price_near_time(price_timeline, post_timestamp)
             if not post_price:
                 return {}
-            
+
             # 시간별 가격 변화 계산
             changes = {}
-            
+
             # 1시간 후 (실제로는 가장 가까운 데이터포인트)
             hour_1_time = post_timestamp + timedelta(hours=1)
             hour_1_price = self._get_price_near_time(price_timeline, hour_1_time)
             if hour_1_price:
                 changes['1h_change'] = round(((hour_1_price - post_price) / post_price) * 100, 2)
-            
+
             # 12시간 후
             hour_12_time = post_timestamp + timedelta(hours=12)
             hour_12_price = self._get_price_near_time(price_timeline, hour_12_time)
             if hour_12_price:
                 changes['12h_change'] = round(((hour_12_price - post_price) / post_price) * 100, 2)
-            
+
             # 24시간 후 (또는 다음 거래일)
             if self.market_collector.is_crypto_symbol(symbol):
                 # 암호화폐는 24시간 거래
@@ -52,48 +54,61 @@ class MarketAnalyzer:
                 next_day_price = self._get_average_price_around_time(price_timeline, next_trading_day, hours=1)
                 if next_day_price:
                     changes['next_day_change'] = round(((next_day_price - post_price) / post_price) * 100, 2)
-            
+
             changes['base_price'] = post_price
+
+            # 시간 측정 로깅
+            elapsed = time.time() - start_time
+            logger.info(f"💰 Price analysis for {symbol}: {elapsed:.2f}s")
+
             return changes
-            
+
         except Exception as e:
-            logger.error(f"Price change calculation failed for {symbol}: {e}")
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Price analysis failed for {symbol} in {elapsed:.2f}s: {e}")
             return {}
     
     def calculate_volume_changes(self, symbol, post_timestamp, market_data):
         """게시글 전후 거래량 변화 분석"""
+        start_time = time.time()
+
         try:
             price_timeline = market_data.get('price_timeline', [])
             if not price_timeline:
                 return {}
-            
+
             # 게시글 전 1시간 평균 거래량
             before_time = post_timestamp - timedelta(hours=1)
             before_volume = self._get_average_volume_around_time(price_timeline, before_time, hours=1)
-            
+
             # 게시글 후 1시간 평균 거래량
-            after_time = post_timestamp + timedelta(hours=1)  
+            after_time = post_timestamp + timedelta(hours=1)
             after_volume = self._get_average_volume_around_time(price_timeline, after_time, hours=1)
-            
+
             volume_changes = {}
             if before_volume and after_volume and before_volume > 0:
                 volume_changes['volume_change_1h'] = round(((after_volume - before_volume) / before_volume) * 100, 2)
                 volume_changes['volume_spike_ratio'] = round(after_volume / before_volume, 2)
-            
+
             # 24시간 전 대비 (기준선 설정)
             day_before_time = post_timestamp - timedelta(hours=24)
             baseline_volume = self._get_average_volume_around_time(price_timeline, day_before_time, hours=2)
-            
+
             if baseline_volume and after_volume and baseline_volume > 0:
                 volume_changes['volume_vs_baseline'] = round(((after_volume - baseline_volume) / baseline_volume) * 100, 2)
-            
+
             volume_changes['baseline_volume'] = baseline_volume
             volume_changes['post_volume'] = after_volume
-            
+
+            # 시간 측정 로깅
+            elapsed = time.time() - start_time
+            logger.info(f"📊 Volume analysis for {symbol}: {elapsed:.2f}s")
+
             return volume_changes
-            
+
         except Exception as e:
-            logger.error(f"Volume change calculation failed for {symbol}: {e}")
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Volume analysis failed for {symbol} in {elapsed:.2f}s: {e}")
             return {}
     
     def _get_price_near_time(self, timeline, target_time, tolerance_hours=2):
@@ -101,26 +116,26 @@ class MarketAnalyzer:
         target_timestamp = target_time.timestamp()
         closest_price = None
         min_diff = float('inf')
-        
+
         for point in timeline:
             try:
                 point_time = datetime.fromisoformat(point['timestamp'].replace('Z', '+00:00'))
                 time_diff = abs((point_time.timestamp() - target_timestamp))
-                
+
                 # tolerance_hours 시간 내의 데이터만 사용
                 if time_diff <= tolerance_hours * 3600 and time_diff < min_diff:
                     min_diff = time_diff
                     closest_price = float(point['price'])
             except:
                 continue
-        
+
         return closest_price
     
     def _get_average_price_around_time(self, timeline, target_time, hours=1):
         """특정 시간 전후 일정 시간의 평균 가격"""
         start_time = target_time - timedelta(hours=hours/2)
         end_time = target_time + timedelta(hours=hours/2)
-        
+
         prices = []
         for point in timeline:
             try:
@@ -129,14 +144,14 @@ class MarketAnalyzer:
                     prices.append(float(point['price']))
             except:
                 continue
-        
+
         return statistics.mean(prices) if prices else None
     
     def _get_average_volume_around_time(self, timeline, target_time, hours=1):
         """특정 시간 전후 일정 시간의 평균 거래량"""
         start_time = target_time - timedelta(hours=hours/2)
         end_time = target_time + timedelta(hours=hours/2)
-        
+
         volumes = []
         for point in timeline:
             try:
@@ -145,7 +160,7 @@ class MarketAnalyzer:
                     volumes.append(float(point['volume']))
             except:
                 continue
-        
+
         return statistics.mean(volumes) if volumes else None
     
     def _get_next_trading_day(self, post_timestamp):
