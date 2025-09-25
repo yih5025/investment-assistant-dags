@@ -396,7 +396,7 @@ class MarketDataCollector:
             query = """
             SELECT trade_timestamp, 
                 CAST(trade_price AS DECIMAL) as price,
-                CAST(acc_trade_volume_24h AS DECIMAL) as acc_volume
+                CAST(trade_volume AS DECIMAL) as volume
             FROM bithumb_ticker 
             WHERE market = %s 
                 AND trade_timestamp BETWEEN %s AND %s
@@ -411,7 +411,7 @@ class MarketDataCollector:
             return [{
                 'timestamp': datetime.fromtimestamp(row[0]/1000).isoformat(),
                 'price': float(row[1]) if row[1] else 0,
-                'acc_volume': float(row[2]) if row[2] else 0
+                'volume': float(row[2]) if row[2] else 0
             } for row in results]
             
         except Exception as e:

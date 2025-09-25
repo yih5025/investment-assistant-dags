@@ -54,7 +54,7 @@ def social_media_analysis_dag():
         )
         AND text IS NOT NULL
         AND text NOT LIKE '@%%'
-        ORDER BY created_at DESC
+        ORDER BY created_at ASC
         LIMIT %s
         """
         
@@ -67,7 +67,7 @@ def social_media_analysis_dag():
             SELECT post_id FROM post_analysis_cache
             WHERE (post_source = 'truth_social_posts' OR post_source = 'truth_social_trends')
         )
-        ORDER BY created_at DESC
+        ORDER BY created_at ASC
         LIMIT %s
         """
         
@@ -80,7 +80,7 @@ def social_media_analysis_dag():
             SELECT post_id FROM post_analysis_cache
             WHERE (post_source = 'truth_social_posts' OR post_source = 'truth_social_trends')
         )
-        ORDER BY created_at DESC
+        ORDER BY created_at ASC
         LIMIT %s
         """
         
