@@ -69,53 +69,80 @@ class MarketAnalyzer:
             return {}
     
     def calculate_volume_changes(self, symbol, post_timestamp, market_data):
-        """[수정] 누적 거래량 차이를 이용한 거래량 변화 분석"""
+        """[수정] 데이터 종류에 따라 올바른 볼륨 분석을 호출하는 컨트롤 타워"""
+        price_timeline = market_data.get('price_timeline', [])
+        if not price_timeline:
+            return {}
+
+        # Bithumb 데이터 (누적 거래량)인지 확인
+        if 'acc_volume' in price_timeline[0]:
+            return self._calculate_cumulative_volume_change(symbol, post_timestamp, price_timeline)
+        # S&P 500 / ETF 데이터 (개별 거래량)인지 확인
+        elif 'volume' in price_timeline[0]:
+            return self._calculate_average_volume_change(symbol, post_timestamp, price_timeline)
+        
+        return {}
+
+    def _calculate_cumulative_volume_change(self, symbol, post_timestamp, timeline):
+        """[신규] 누적 거래량(acc_volume)을 사용한 분석 (Bithumb 전용)"""
         start_time = time.time()
-
         try:
-            price_timeline = market_data.get('price_timeline', [])
-            if not price_timeline or 'acc_volume' not in price_timeline[0]:
-                # 타임라인이 비어있거나, acc_volume 데이터가 없으면 종료
-                return {}
-
-            # 1. 게시글 시점 전후 1시간의 누적 거래량 찾기
             time_before_1h = post_timestamp - timedelta(hours=1)
             time_at_post = post_timestamp
             time_after_1h = post_timestamp + timedelta(hours=1)
 
-            acc_vol_before_1h = self._get_acc_volume_near_time(price_timeline, time_before_1h)
-            acc_vol_at_post = self._get_acc_volume_near_time(price_timeline, time_at_post)
-            acc_vol_after_1h = self._get_acc_volume_near_time(price_timeline, time_after_1h)
+            acc_vol_before_1h = self._get_acc_volume_near_time(timeline, time_before_1h)
+            acc_vol_at_post = self._get_acc_volume_near_time(timeline, time_at_post)
+            acc_vol_after_1h = self._get_acc_volume_near_time(timeline, time_after_1h)
 
-            # 2. 구간별 거래량 계산
             volume_changes = {}
-            volume_in_prior_hour = None
-            volume_in_post_hour = None
+            volume_in_prior_hour, volume_in_post_hour = None, None
 
             if acc_vol_before_1h is not None and acc_vol_at_post is not None:
                 volume_in_prior_hour = acc_vol_at_post - acc_vol_before_1h
                 volume_changes['volume_in_prior_hour'] = round(volume_in_prior_hour, 2)
 
             if acc_vol_at_post is not None and acc_vol_after_1h is not None:
-                volume_in_post_hour = acc_vol_after_1h - acc_vol_at_post
+                volume_in_post_hour = acc_vol_at_post - acc_vol_after_1h
                 volume_changes['volume_in_post_hour'] = round(volume_in_post_hour, 2)
 
-            # 3. 거래량 급증률 계산
             if volume_in_prior_hour and volume_in_post_hour and volume_in_prior_hour > 0:
                 spike_ratio = volume_in_post_hour / volume_in_prior_hour
                 volume_changes['volume_spike_ratio_1h'] = round(spike_ratio, 2)
 
             elapsed = time.time() - start_time
-            logger.info(f"📊 Volume analysis for {symbol}: {elapsed:.2f}s")
-
+            logger.info(f"📊 Cumulative Volume analysis for {symbol}: {elapsed:.2f}s")
             return volume_changes
-
         except Exception as e:
             elapsed = time.time() - start_time
-            logger.error(f"❌ Volume analysis failed for {symbol} in {elapsed:.2f}s: {e}")
+            logger.error(f"❌ Cumulative Volume analysis failed for {symbol} in {elapsed:.2f}s: {e}")
             return {}
 
-    
+    def _calculate_average_volume_change(self, symbol, post_timestamp, timeline):
+        """[신규] 개별 거래량(volume) 평균을 사용한 분석 (S&P500, ETF 전용)"""
+        start_time = time.time()
+        try:
+            before_time = post_timestamp - timedelta(hours=1)
+            before_volume = self._get_average_volume_around_time(timeline, before_time, hours=1)
+
+            after_time = post_timestamp
+            after_volume = self._get_average_volume_around_time(timeline, after_time, hours=1)
+
+            volume_changes = {}
+            if before_volume is not None and after_volume is not None and before_volume > 0:
+                volume_changes['avg_volume_change_1h'] = round(((after_volume - before_volume) / before_volume) * 100, 2)
+            
+            volume_changes['avg_volume_before'] = before_volume
+            volume_changes['avg_volume_after'] = after_volume
+
+            elapsed = time.time() - start_time
+            logger.info(f"📊 Average Volume analysis for {symbol}: {elapsed:.2f}s")
+            return volume_changes
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ Average Volume analysis failed for {symbol} in {elapsed:.2f}s: {e}")
+            return {}
+
     def _get_price_near_time(self, timeline, target_time, tolerance_hours=2):
         """특정 시간 근처의 가격 찾기"""
         target_timestamp = target_time.timestamp()
@@ -369,7 +396,7 @@ class MarketDataCollector:
             query = """
             SELECT trade_timestamp, 
                 CAST(trade_price AS DECIMAL) as price,
-                CAST(acc_trade_volume AS DECIMAL) as volume
+                CAST(acc_trade_volume_24h AS DECIMAL) as acc_volume
             FROM bithumb_ticker 
             WHERE market = %s 
                 AND trade_timestamp BETWEEN %s AND %s
@@ -384,7 +411,7 @@ class MarketDataCollector:
             return [{
                 'timestamp': datetime.fromtimestamp(row[0]/1000).isoformat(),
                 'price': float(row[1]) if row[1] else 0,
-                'volume': float(row[2]) if row[2] else 0
+                'acc_volume': float(row[2]) if row[2] else 0
             } for row in results]
             
         except Exception as e:
