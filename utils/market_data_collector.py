@@ -69,38 +69,42 @@ class MarketAnalyzer:
             return {}
     
     def calculate_volume_changes(self, symbol, post_timestamp, market_data):
-        """게시글 전후 거래량 변화 분석"""
+        """[수정] 누적 거래량 차이를 이용한 거래량 변화 분석"""
         start_time = time.time()
 
         try:
             price_timeline = market_data.get('price_timeline', [])
-            if not price_timeline:
+            if not price_timeline or 'acc_volume' not in price_timeline[0]:
+                # 타임라인이 비어있거나, acc_volume 데이터가 없으면 종료
                 return {}
 
-            # 게시글 전 1시간 평균 거래량
-            before_time = post_timestamp - timedelta(hours=1)
-            before_volume = self._get_average_volume_around_time(price_timeline, before_time, hours=1)
+            # 1. 게시글 시점 전후 1시간의 누적 거래량 찾기
+            time_before_1h = post_timestamp - timedelta(hours=1)
+            time_at_post = post_timestamp
+            time_after_1h = post_timestamp + timedelta(hours=1)
 
-            # 게시글 후 1시간 평균 거래량
-            after_time = post_timestamp + timedelta(hours=1)
-            after_volume = self._get_average_volume_around_time(price_timeline, after_time, hours=1)
+            acc_vol_before_1h = self._get_acc_volume_near_time(price_timeline, time_before_1h)
+            acc_vol_at_post = self._get_acc_volume_near_time(price_timeline, time_at_post)
+            acc_vol_after_1h = self._get_acc_volume_near_time(price_timeline, time_after_1h)
 
+            # 2. 구간별 거래량 계산
             volume_changes = {}
-            if before_volume and after_volume and before_volume > 0:
-                volume_changes['volume_change_1h'] = round(((after_volume - before_volume) / before_volume) * 100, 2)
-                volume_changes['volume_spike_ratio'] = round(after_volume / before_volume, 2)
+            volume_in_prior_hour = None
+            volume_in_post_hour = None
 
-            # 24시간 전 대비 (기준선 설정)
-            day_before_time = post_timestamp - timedelta(hours=24)
-            baseline_volume = self._get_average_volume_around_time(price_timeline, day_before_time, hours=2)
+            if acc_vol_before_1h is not None and acc_vol_at_post is not None:
+                volume_in_prior_hour = acc_vol_at_post - acc_vol_before_1h
+                volume_changes['volume_in_prior_hour'] = round(volume_in_prior_hour, 2)
 
-            if baseline_volume and after_volume and baseline_volume > 0:
-                volume_changes['volume_vs_baseline'] = round(((after_volume - baseline_volume) / baseline_volume) * 100, 2)
+            if acc_vol_at_post is not None and acc_vol_after_1h is not None:
+                volume_in_post_hour = acc_vol_after_1h - acc_vol_at_post
+                volume_changes['volume_in_post_hour'] = round(volume_in_post_hour, 2)
 
-            volume_changes['baseline_volume'] = baseline_volume
-            volume_changes['post_volume'] = after_volume
+            # 3. 거래량 급증률 계산
+            if volume_in_prior_hour and volume_in_post_hour and volume_in_prior_hour > 0:
+                spike_ratio = volume_in_post_hour / volume_in_prior_hour
+                volume_changes['volume_spike_ratio_1h'] = round(spike_ratio, 2)
 
-            # 시간 측정 로깅
             elapsed = time.time() - start_time
             logger.info(f"📊 Volume analysis for {symbol}: {elapsed:.2f}s")
 
@@ -110,6 +114,7 @@ class MarketAnalyzer:
             elapsed = time.time() - start_time
             logger.error(f"❌ Volume analysis failed for {symbol} in {elapsed:.2f}s: {e}")
             return {}
+
     
     def _get_price_near_time(self, timeline, target_time, tolerance_hours=2):
         """특정 시간 근처의 가격 찾기"""
@@ -177,6 +182,26 @@ class MarketAnalyzer:
         # 거래 시간대로 조정 (오전 10시)
         next_day = next_day.replace(hour=10, minute=0, second=0, microsecond=0)
         return next_day
+
+    def _get_acc_volume_near_time(self, timeline, target_time, tolerance_hours=2):
+        """[추가] 특정 시간 근처의 누적 거래량(acc_volume) 찾기"""
+        target_timestamp = target_time.timestamp()
+        closest_volume = None
+        min_diff = float('inf')
+
+        for point in timeline:
+            try:
+                point_time = datetime.fromisoformat(point['timestamp'].replace('Z', '+00:00'))
+                time_diff = abs((point_time.timestamp() - target_timestamp))
+
+                if time_diff <= tolerance_hours * 3600 and time_diff < min_diff:
+                    min_diff = time_diff
+                    # 'price' 대신 'acc_volume' 키의 값을 가져옴
+                    closest_volume = float(point['acc_volume'])
+            except:
+                continue
+
+        return closest_volume
 
 class MarketDataCollector:
     def __init__(self):
@@ -344,7 +369,7 @@ class MarketDataCollector:
             query = """
             SELECT trade_timestamp, 
                 CAST(trade_price AS DECIMAL) as price,
-                CAST(trade_volume AS DECIMAL) as volume
+                CAST(acc_trade_volume AS DECIMAL) as volume
             FROM bithumb_ticker 
             WHERE market = %s 
                 AND trade_timestamp BETWEEN %s AND %s
