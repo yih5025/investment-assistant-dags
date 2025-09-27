@@ -29,7 +29,7 @@ default_args = {
     dag_id='batch_processing_social_media_market_analysis',
     default_args=default_args,
     description='소셜미디어 게시글 시장 영향 분석 - 50개씩 제한 처리',
-    schedule_interval='0 */2 * * *',  # 2시간마다 실행
+    schedule_interval='*/30 * * * *',  # 2시간마다 실행
     catchup=False,
     max_active_runs=1,
     tags=['social_media', 'market_analysis', 'batch_limited']
@@ -42,7 +42,7 @@ def social_media_analysis_dag():
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
         # 각 소스별로 최대 50개씩만 (총 150개 제한)
-        LIMIT_PER_SOURCE = 150
+        LIMIT_PER_SOURCE = 75
         
         # X 게시글 - 50개만
         x_query = """
