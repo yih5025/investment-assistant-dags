@@ -103,7 +103,8 @@ class MarketAnalyzer:
                 volume_changes['volume_in_prior_hour'] = round(volume_in_prior_hour, 2)
 
             if acc_vol_at_post is not None and acc_vol_after_1h is not None:
-                volume_in_post_hour = acc_vol_at_post - acc_vol_after_1h
+                # 수정된 부분
+                volume_in_post_hour = acc_vol_after_1h - acc_vol_at_post
                 volume_changes['volume_in_post_hour'] = round(volume_in_post_hour, 2)
 
             if volume_in_prior_hour and volume_in_post_hour and volume_in_prior_hour > 0:
@@ -388,32 +389,34 @@ class MarketDataCollector:
         try:
             # KRW- 접두사 추가해서 빗썸 형식으로 변환
             bithumb_market = f"KRW-{symbol}"
-            
+
             # 타임스탬프를 밀리초로 변환
             start_ms = int(start_time.timestamp() * 1000)
             end_ms = int(end_time.timestamp() * 1000)
-            
+
             query = """
-            SELECT trade_timestamp, 
+            SELECT trade_timestamp,
                 CAST(trade_price AS DECIMAL) as price,
-                CAST(trade_volume AS DECIMAL) as volume
-            FROM bithumb_ticker 
-            WHERE market = %s 
+                CAST(trade_volume AS DECIMAL) as volume,
+                CAST(acc_trade_volume AS DECIMAL) as acc_volume
+            FROM bithumb_ticker
+            WHERE market = %s
                 AND trade_timestamp BETWEEN %s AND %s
                 -- 타입을 명확히 하여 안전하게 필터링
                 AND trade_price::text ~ '^[0-9]+\.?[0-9]*$'
             ORDER BY trade_timestamp
             LIMIT 3000
             """
-            
+
             results = self.pg_hook.get_records(query, parameters=[bithumb_market, start_ms, end_ms])
-            
+
             return [{
                 'timestamp': datetime.fromtimestamp(row[0]/1000).isoformat(),
                 'price': float(row[1]) if row[1] else 0,
-                'volume': float(row[2]) if row[2] else 0
+                'volume': float(row[2]) if row[2] else 0,
+                'acc_volume': float(row[3]) if row[3] else 0
             } for row in results]
-            
+
         except Exception as e:
             logger.error(f"Failed to get crypto timeline for {symbol}: {e}")
             return []
