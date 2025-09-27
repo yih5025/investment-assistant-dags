@@ -81,7 +81,7 @@ def social_media_analysis_dag():
             WHERE (post_source = 'truth_social_posts' OR post_source = 'truth_social_trends')
         )
         ORDER BY created_at ASC
-        LIMIT 0
+        LIMIT %s
         """
         
         x_posts = pg_hook.get_records(x_query, parameters=[LIMIT_PER_SOURCE])
