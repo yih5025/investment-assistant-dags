@@ -42,7 +42,7 @@ def social_media_analysis_dag():
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
         # 각 소스별로 최대 50개씩만 (총 150개 제한)
-        LIMIT_PER_SOURCE = 75
+        LIMIT_PER_SOURCE = 150
         
         # X 게시글 - 50개만
         x_query = """
