@@ -26,6 +26,11 @@ INSERT INTO truth_social_trends (
     url,
     uri,
     
+    -- 미디어 정보
+    has_media,
+    media_count,
+    media_attachments,
+    
     -- 태그 및 멘션
     tags,
     mentions,
@@ -68,6 +73,11 @@ INSERT INTO truth_social_trends (
     %(url)s,
     %(uri)s,
     
+    -- 미디어 정보
+    %(has_media)s,
+    %(media_count)s,
+    %(media_attachments)s,
+    
     -- 태그 및 멘션
     %(tags)s,
     %(mentions)s,
@@ -97,6 +107,11 @@ DO UPDATE SET
     -- 🔥 트렌딩 정보 업데이트 (순위 변동 가능)
     trend_rank = EXCLUDED.trend_rank,
     trend_score = EXCLUDED.trend_score,
+    
+    -- 🎬 미디어 정보 업데이트 (NULL에서 값이 들어올 수 있음)
+    has_media = EXCLUDED.has_media,
+    media_count = EXCLUDED.media_count,
+    media_attachments = COALESCE(EXCLUDED.media_attachments, truth_social_trends.media_attachments),
     
     -- 🕒 업데이트 시간 갱신
     updated_at = NOW()

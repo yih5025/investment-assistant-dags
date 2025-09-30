@@ -73,10 +73,13 @@ def is_already_collected_recently(post_id):
     return result is not None
 
 def parse_trend_data(raw_post, rank):
-    """트렌딩 포스트 데이터 간단 파싱"""
+    """트렌딩 포스트 데이터 파싱 (Posts와 동일하게 미디어 필드 포함)"""
     account = raw_post.get('account', {})
     content = raw_post.get('content', '')
     created_at = raw_post.get('created_at', '').replace('Z', '+00:00') if raw_post.get('created_at') else None
+    
+    # 미디어 정보 추출 (Posts와 동일한 방식)
+    media_attachments = raw_post.get('media_attachments', [])
     
     return {
         'id': raw_post.get('id'),
@@ -94,6 +97,9 @@ def parse_trend_data(raw_post, rank):
         'downvotes_count': raw_post.get('downvotes_count', 0),
         'url': raw_post.get('url'),
         'uri': raw_post.get('uri'),
+        'has_media': len(media_attachments) > 0,
+        'media_count': len(media_attachments),
+        'media_attachments': json.dumps(media_attachments) if media_attachments else None,
         'tags': json.dumps(raw_post.get('tags', [])),
         'mentions': json.dumps(raw_post.get('mentions', [])),
         'visibility': raw_post.get('visibility', 'public'),
@@ -137,6 +143,8 @@ def fetch_trending_posts(**context):
             trends.append(processed_trend)
         except Exception as e:
             print(f"⚠️ 트렌딩 파싱 실패: {post_id} - {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     if len(trends) == 0 and skipped_count > 0:
