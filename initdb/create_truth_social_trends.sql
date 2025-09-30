@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS truth_social_trends (
     url TEXT,                                      -- 포스트 URL
     uri TEXT,                                      -- 포스트 URI
     
+    -- 🎬 미디어 정보
+    has_media BOOLEAN DEFAULT FALSE,               -- 미디어 첨부 여부
+    media_count INTEGER DEFAULT 0,                -- 미디어 개수
+    media_attachments JSONB,                      -- 미디어 첨부 파일 정보
+    
     -- 🏷️ 태그 및 멘션
     tags JSONB DEFAULT '[]'::jsonb,               -- 해시태그 배열
     mentions JSONB DEFAULT '[]'::jsonb,           -- 멘션 배열
@@ -51,6 +56,10 @@ CREATE INDEX IF NOT EXISTS idx_trends_rank ON truth_social_trends(trend_rank);
 CREATE INDEX IF NOT EXISTS idx_trends_score ON truth_social_trends(trend_score DESC);
 CREATE INDEX IF NOT EXISTS idx_trends_username ON truth_social_trends(username);
 
+-- 미디어 포함 포스트 인덱스
+CREATE INDEX IF NOT EXISTS idx_trends_with_media ON truth_social_trends(created_at DESC) 
+WHERE has_media = TRUE;
+
 -- 전문 검색용 인덱스
 CREATE INDEX IF NOT EXISTS idx_trends_content_search ON truth_social_trends 
 USING gin(to_tsvector('english', clean_content));
@@ -59,3 +68,5 @@ USING gin(to_tsvector('english', clean_content));
 COMMENT ON TABLE truth_social_trends IS 'Truth Social 트렌딩 포스트 데이터';
 COMMENT ON COLUMN truth_social_trends.trend_rank IS '수집 시점의 트렌딩 순위';
 COMMENT ON COLUMN truth_social_trends.collected_at IS '트렌딩으로 수집된 시간';
+COMMENT ON COLUMN truth_social_trends.has_media IS '미디어 첨부 여부';
+COMMENT ON COLUMN truth_social_trends.media_attachments IS '미디어 첨부 파일 정보 (JSONB 배열)';
