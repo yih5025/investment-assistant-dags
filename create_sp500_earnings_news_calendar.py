@@ -104,7 +104,7 @@ def extract_sp500_earnings_schedule(**context):
             sp.headquarters
         FROM earnings_calendar ec
         INNER JOIN sp500_companies sp ON ec.symbol = sp.symbol
-        WHERE ec.report_date >= CURRENT_DATE 
+        WHERE ec.report_date >= CURRENT_DATE - INTERVAL '7 days'
           AND ec.report_date <= CURRENT_DATE + INTERVAL '30 days'
         ORDER BY ec.report_date, ec.symbol
     """
@@ -445,7 +445,7 @@ def upsert_consolidated_data(**context):
 with DAG(
     dag_id='create_sp500_earnings_calendar',
     default_args=default_args,
-    schedule_interval='@weekly',  # 주 1회 실행
+    schedule_interval='0 0 */4 * *',  # 4일마다 실행
     catchup=False,
     description='SP500 기업 실적 캘린더 생성 (30일 범위, 뉴스 통합)',
     template_searchpath=[INITDB_SQL_DIR],
