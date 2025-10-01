@@ -48,7 +48,7 @@ with DAG(
         """Alpha Vantage API에서 IPO 캘린더 데이터 수집"""
         
         # API 키 가져오기
-        api_key = Variable.get('ALPHA_VANTAGE_API_KEY_2')
+        api_key = Variable.get('ALPHA_VANTAGE_API_KEY_5')
         
         print(f"🔑 API 키 확인: {api_key[:8]}...")
         print(f"📅 수집 시작: IPO Calendar (3개월)")
