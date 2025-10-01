@@ -48,7 +48,7 @@ with DAG(
         """Alpha Vantage API에서 IPO 캘린더 데이터 수집"""
         
         # API 키 가져오기
-        api_key = Variable.get('ALPHA_VANTAGE_API_KEY_5')
+        api_key = Variable.get('ALPHA_VANTAGE_API_KEY_3')
         
         print(f"🔑 API 키 확인: {api_key[:8]}...")
         print(f"📅 수집 시작: IPO Calendar (3개월)")
@@ -64,19 +64,42 @@ with DAG(
         )
         resp.raise_for_status()
         
-        # 응답 검증
-        if 'Error Message' in resp.text:
-            raise ValueError(f"API 오류: {resp.text}")
+        # ===== 🔥 응답 검증 강화 =====
+        response_text = resp.text.strip()
         
-        if not resp.text or len(resp.text.strip()) == 0:
-            raise ValueError("API에서 빈 응답을 받았습니다")
+        # 1. 에러 메시지 체크 (대소문자 구분 없이)
+        if 'Error Message' in response_text or 'error' in response_text.lower():
+            raise ValueError(f"API 오류: {response_text[:200]}")
+        
+        # 2. Information 메시지 체크 (Rate Limit 등)
+        if 'Information' in response_text or 'Thank you' in response_text:
+            raise ValueError(f"API Rate Limit 또는 정보 메시지: {response_text[:200]}")
+        
+        # 3. 빈 응답 체크
+        if not response_text or len(response_text) < 50:
+            raise ValueError(f"API에서 짧은 응답을 받았습니다: {response_text}")
+        
+        # 4. CSV 헤더 검증
+        first_line = response_text.split('\n')[0] if '\n' in response_text else response_text
+        expected_headers = ['symbol', 'name', 'ipoDate']
+        
+        if not any(header in first_line for header in expected_headers):
+            print(f"⚠️ CSV 헤더가 예상과 다릅니다:")
+            print(f"   첫 번째 줄: {first_line[:100]}")
+            print(f"   전체 응답 미리보기: {response_text[:300]}")
+            raise ValueError("CSV 형식이 아닌 응답을 받았습니다")
         
         # CSV 데이터 파싱
-        rows = list(csv.DictReader(StringIO(resp.text)))
+        rows = list(csv.DictReader(StringIO(response_text)))
         
         if not rows:
             print("⚠️ IPO 일정이 없습니다 (3개월 내)")
             return 0
+        
+        # ===== 🔥 첫 번째 레코드 검증 추가 =====
+        first_row = rows[0]
+
+        print(f"✅ 첫 번째 레코드: {first_row}")
         
         print(f"✅ IPO 캘린더 데이터 수집 완료: {len(rows)}개 레코드")
         print(f"📋 샘플 데이터: {rows[0]}")
