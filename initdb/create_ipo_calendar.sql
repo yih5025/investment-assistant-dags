@@ -2,6 +2,10 @@
 -- IPO 캘린더 테이블 생성
 
 CREATE TABLE IF NOT EXISTS ipo_calendar (
+    -- Primary Key: 자동 증가 ID
+    id SERIAL PRIMARY KEY,
+    
+    -- IPO 정보
     symbol VARCHAR(10) NOT NULL,
     company_name TEXT NOT NULL,
     ipo_date DATE NOT NULL,
@@ -15,8 +19,8 @@ CREATE TABLE IF NOT EXISTS ipo_calendar (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     
-    -- Primary Key: symbol과 ipo_date 조합으로 고유성 보장
-    PRIMARY KEY (symbol, ipo_date)
+    -- Unique 제약 조건: symbol과 ipo_date 조합은 고유해야 함
+    CONSTRAINT uq_symbol_ipo_date UNIQUE (symbol, ipo_date)
 );
 
 -- 인덱스 생성 (검색 성능 최적화)

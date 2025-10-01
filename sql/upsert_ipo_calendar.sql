@@ -2,6 +2,7 @@
 -- IPO 캘린더 데이터 Upsert (중복 시 업데이트)
 
 INSERT INTO ipo_calendar (
+    id,
     symbol,
     company_name,
     ipo_date,
@@ -13,6 +14,7 @@ INSERT INTO ipo_calendar (
     created_at,
     updated_at
 ) VALUES (
+    %(id)s,
     %(symbol)s,
     %(company_name)s,
     %(ipo_date)s,
@@ -26,6 +28,7 @@ INSERT INTO ipo_calendar (
 )
 ON CONFLICT (symbol, ipo_date)
 DO UPDATE SET
+    symbol = EXCLUDED.symbol,
     company_name = EXCLUDED.company_name,
     price_range_low = EXCLUDED.price_range_low,
     price_range_high = EXCLUDED.price_range_high,
