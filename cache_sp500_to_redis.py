@@ -217,7 +217,7 @@ def sp500_caching_dag():
             raise
         
         # Redis Hash Key
-        redis_key = "sp500_realtime_data"
+        redis_key = "sp500_market_data"
         
         # Pipeline 사용하여 일괄 저장
         pipeline = redis_client.pipeline()
@@ -272,12 +272,12 @@ def sp500_caching_dag():
         # Pub/Sub 신호 발행 (WebSocket에 업데이트 알림)
         try:
             message = json.dumps({
-                'message': 'SP500 data updated',
+                'message': 'SP500 market data updated',
                 'count': cached_count,
                 'timestamp': datetime.utcnow().isoformat()
             })
             redis_client.publish('sp500_updates', message)
-            logger.info("📢 SP500 업데이트 신호 발행 완료")
+            logger.info("📢 SP500 market data updated signal published")
         except Exception as e:
             logger.warning(f"⚠️ Pub/Sub 발행 실패: {e}")
         
