@@ -201,17 +201,23 @@ def sp500_caching_dag():
         
         # Redis 연결
         try:
+            # ⭐ Kubernetes Service 환경 변수 사용
+            redis_host = os.getenv('REDIS_SERVICE_HOST', os.getenv('REDIS_HOST', 'redis-master'))
+            redis_port = int(os.getenv('REDIS_SERVICE_PORT', os.getenv('REDIS_PORT_6379_TCP_PORT', 6379)))
+            redis_password = os.getenv('REDIS_PASSWORD', None)
+            redis_db = int(os.getenv('REDIS_DB', 0))
+            
             redis_client = redis.Redis(
-                host=os.getenv('REDIS_HOST', 'redis-master'),
-                port=int(os.getenv('REDIS_PORT', 6379)),
-                db=int(os.getenv('REDIS_DB', 0)),
-                password=os.getenv('REDIS_PASSWORD', None),
+                host=redis_host,
+                port=redis_port,
+                db=redis_db,
+                password=redis_password,
                 decode_responses=True,
                 socket_connect_timeout=5,
                 socket_timeout=5
             )
             redis_client.ping()
-            logger.info("✅ Redis 연결 성공")
+            logger.info(f"✅ Redis 연결 성공: {redis_host}:{redis_port}")
         except Exception as e:
             logger.error(f"❌ Redis 연결 실패: {e}")
             raise
