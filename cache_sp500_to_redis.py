@@ -84,21 +84,23 @@ def sp500_caching_dag():
         
         # 각 종목별 최신 거래 데이터 조회
         query = """
+        WITH latest_trades AS (
+            SELECT DISTINCT ON (symbol)
+                symbol,
+                price,
+                volume,
+                created_at
+            FROM sp500_websocket_trades
+            ORDER BY symbol, created_at DESC
+        )
         SELECT 
             c.symbol,
-            c.name as company_name,
-            latest.price as current_price,
-            latest.volume,
-            latest.created_at as last_updated
+            c.company_name,
+            lt.price as current_price,
+            lt.volume,
+            lt.created_at as last_updated
         FROM sp500_companies c
-        LEFT JOIN LATERAL (
-            SELECT price, volume, created_at
-            FROM sp500_websocket_trades t
-            WHERE t.symbol = c.symbol
-            ORDER BY created_at DESC
-            LIMIT 1
-        ) latest ON true
-        WHERE latest.price IS NOT NULL
+        INNER JOIN latest_trades lt ON c.symbol = lt.symbol
         ORDER BY c.symbol
         """
         
