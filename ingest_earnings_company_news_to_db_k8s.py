@@ -27,11 +27,11 @@ default_args = {
 with DAG(
     dag_id='ingest_company_news_to_db_k8s',
     default_args=default_args,
-    schedule_interval='0 9,15,21 * * *',
+    schedule_interval='0 3,15 * * *',  # 하루 2번: 새벽 3시, 오후 3시
     catchup=False,
-    description='Fetch news for trending stocks from top_gainers table with Rate Limit protection',
+    description='Fetch news for S&P 500 companies (500 companies per run, 2 times daily)',
     template_searchpath=[INITDB_SQL_DIR],
-    tags=['company', 'news', 'finnhub', 'k8s', 'top-gainers', 'trending', 'rate-limit-safe'],
+    tags=['company', 'news', 'finnhub', 'k8s', 'sp500', 'batch', 'high-frequency'],
 ) as dag:
 
     create_table = PostgresOperator(
@@ -40,95 +40,105 @@ with DAG(
         sql='create_company_news.sql',
     )
 
-    def fetch_and_upsert_trending_news(**context):
-        """최신 트렌딩 종목(50개) 뉴스 수집 및 저장"""
+    def fetch_and_upsert_sp500_news(**context):
+        """S&P 500 기업 뉴스 수집 및 저장 (진행형 배치 처리)"""
         hook = PostgresHook(postgres_conn_id='postgres_default')
         api_key = Variable.get('FINNHUB_API_KEY')
         
-        print(f"🔑 API 키 확인: {api_key[:8]}...")
+        # 진행상황 추적 테이블 생성
+        create_progress_table = """
+        CREATE TABLE IF NOT EXISTS company_news_progress (
+            id SERIAL PRIMARY KEY,
+            collection_name TEXT NOT NULL DEFAULT 'sp500_news',
+            current_position INTEGER NOT NULL DEFAULT 0,
+            total_symbols INTEGER NOT NULL,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'active'
+        );
+        """
+        hook.run(create_progress_table)
         
-        # ⭐ 핵심: 최신 batch_id의 50개 종목 모두 조회
-        latest_batch_query = """
-        SELECT 
-            symbol, 
-            category, 
-            rank_position,
-            change_percentage,
-            volume,
-            price
-        FROM top_gainers 
-        WHERE batch_id = (
-            SELECT MAX(batch_id) FROM top_gainers
-        )
-        ORDER BY 
-            CASE 
-                WHEN category = 'top_gainers' THEN 1
-                WHEN category = 'most_actively_traded' THEN 2  
-                WHEN category = 'top_losers' THEN 3
-                ELSE 4
-            END,
-            rank_position ASC
+        # 현재 진행상황 조회
+        progress_query = """
+        SELECT current_position, total_symbols 
+        FROM company_news_progress 
+        WHERE collection_name = 'sp500_news' AND status = 'active'
+        ORDER BY last_updated DESC 
+        LIMIT 1
         """
         
-        rows = hook.get_records(latest_batch_query)
+        progress_result = hook.get_first(progress_query)
         
-        if not rows:
-            print("❌ top_gainers 테이블에 데이터가 없습니다.")
+        # S&P 500 기업 심볼 조회 (알파벳 순)
+        sp500_query = """
+        SELECT symbol, company_name, gics_sector
+        FROM sp500_companies 
+        WHERE symbol IS NOT NULL
+        ORDER BY symbol ASC
+        """
+        
+        all_symbols = hook.get_records(sp500_query)
+        
+        if not all_symbols:
+            print("❌ sp500_companies 테이블에 데이터가 없습니다.")
             return 0
         
-        # ⭐ 정확한 50개 확인
-        if len(rows) != 50:
-            print(f"⚠️ 예상과 다른 데이터 수: {len(rows)}개 (예상: 50개)")
+        total_count = len(all_symbols)
         
-        # 배치 정보 상세 출력
-        batch_info_query = """
-        SELECT 
-            batch_id, 
-            last_updated, 
-            COUNT(*) as total_count,
-            COUNT(CASE WHEN category = 'top_gainers' THEN 1 END) as gainers,
-            COUNT(CASE WHEN category = 'most_actively_traded' THEN 1 END) as active,
-            COUNT(CASE WHEN category = 'top_losers' THEN 1 END) as losers
-        FROM top_gainers 
-        WHERE batch_id = (SELECT MAX(batch_id) FROM top_gainers)
-        GROUP BY batch_id, last_updated
-        """
+        # 진행상황 초기화 또는 로드
+        if not progress_result:
+            current_position = 0
+            hook.run("""
+                INSERT INTO company_news_progress (collection_name, current_position, total_symbols)
+                VALUES ('sp500_news', 0, %s)
+            """, parameters=[total_count])
+        else:
+            current_position = progress_result[0]
         
-        batch_info = hook.get_first(batch_info_query)
-        if batch_info:
-            batch_id, last_updated, total, gainers, active, losers = batch_info
-            print(f"📊 배치 정보: ID={batch_id}, 업데이트={last_updated}")
-            print(f"📈 구성: 상승{gainers}개 + 활발{active}개 + 하락{losers}개 = 총{total}개")
-            
-            # ⭐ 50개 확인
-            if total == 50:
-                print("✅ 정확히 50개 트렌딩 종목 확인됨")
-            else:
-                print(f"⚠️ 비정상적인 데이터 수: {total}개")
+        # 오늘 수집할 배치 크기 (Finnhub Rate Limit: 분당 60회)
+        # 2초 딜레이 → 분당 30회 → 500개 전체 처리 가능 (약 16.7분 소요)
+        batch_size = 500  # 한 번에 전체 처리
+        end_position = min(current_position + batch_size, total_count)
+        
+        if current_position >= total_count:
+            print("✅ 모든 S&P 500 기업 뉴스 수집 완료!")
+            hook.run("""
+                UPDATE company_news_progress 
+                SET status = 'completed', last_updated = CURRENT_TIMESTAMP
+                WHERE collection_name = 'sp500_news' AND status = 'active'
+            """)
+            # 다음 주기를 위해 리셋
+            hook.run("""
+                UPDATE company_news_progress 
+                SET current_position = 0, status = 'active', last_updated = CURRENT_TIMESTAMP
+                WHERE collection_name = 'sp500_news'
+            """)
+            return 0
+        
+        # 오늘 처리할 기업들
+        today_batch = all_symbols[current_position:end_position]
+        batch_symbols = [row[0] for row in today_batch]
+        
+        print(f"🚀 S&P 500 뉴스 수집 시작: {len(batch_symbols)}개 기업 ({current_position}/{total_count})")
         
         success_count = 0
         error_count = 0 
         api_call_count = 0
+        successful_symbols = []
         
-        # 시간 범위 설정 (최근 24시간)
-        from_date = (datetime.today() - timedelta(hours=24)).strftime("%Y-%m-%d")
+        # 시간 범위 설정 (최근 7일)
+        from_date = (datetime.today() - timedelta(days=7)).strftime("%Y-%m-%d")
         to_date = datetime.today().strftime("%Y-%m-%d")
         
         start_time = datetime.now()
         
-        print(f"🚀 50개 트렌딩 종목 뉴스 수집 시작...")
-        print(f"⏱️ 예상 소요 시간: {50 * 3 / 60:.1f}분 (3초 딜레이)")
-        
-        for i, row in enumerate(rows):
-            symbol, category, rank_position, change_percentage, volume, price = row
+        for i, row in enumerate(today_batch):
+            symbol, company_name, sector = row
             
             try:
-                # ⭐ 50개 모두 3초 딜레이 (Rate Limit 방지)
+                # 2초 딜레이 (Rate Limit 방지: 분당 30회)
                 if i > 0:
-                    print(f"⏳ 3초 대기... ({i+1}/50) - {symbol} ({category})")
-                    time.sleep(3.0)
-                
-                call_start = datetime.now()
+                    time.sleep(2.0)
                 
                 # Finnhub API 호출
                 resp = requests.get(
@@ -143,131 +153,94 @@ with DAG(
                 )
                 
                 api_call_count += 1
-                call_duration = (datetime.now() - call_start).total_seconds()
                 
                 # Rate Limit 체크
                 if resp.status_code == 429:
-                    print(f"⚠️ Rate Limit: {symbol} ({category}) - 10초 추가 대기")
-                    time.sleep(10.0)
+                    print(f"⚠️ Rate Limit: {symbol}")
+                    time.sleep(15.0)
                     error_count += 1
                     continue
                 
                 resp.raise_for_status()
                 articles = resp.json() or []
                 
-                # ⭐ 트렌딩 종목 상세 정보 로깅
-                print(f"📰 {symbol} ({category}, #{rank_position}): {len(articles)}개 기사 "
-                      f"[{change_percentage} 변동, ${price}] ({call_duration:.1f}초)")
-                
-                # 각 기사 저장
+                # 각 기사 저장 (중복 체크)
                 article_success = 0
+                
                 for article in articles:
                     try:
                         if not article.get('url') or not article.get('datetime'):
                             continue
                         
-                        published_at = datetime.fromtimestamp(article['datetime']).isoformat()
+                        url = article['url']
                         
-                        # ⭐ 트렌딩 카테고리 메타데이터 포함
-                        content_with_meta = f"[{category}_rank_{rank_position}] {article.get('summary', '')}"
+                        # 중복 URL 체크 (symbol + url 조합)
+                        existing = hook.get_first("""
+                            SELECT 1 FROM company_news 
+                            WHERE symbol = %s AND url = %s
+                        """, parameters=[symbol, url])
+                        
+                        if existing:
+                            continue  # 이미 존재하는 기사는 스킵
+                        
+                        published_at = datetime.fromtimestamp(article['datetime']).isoformat()
                         
                         hook.run(UPSERT_SQL, parameters={
                             'symbol': symbol,
                             'source': article.get('source', ''),
-                            'url': article['url'],
+                            'url': url,
                             'title': article.get('headline', ''),
                             'description': article.get('summary', ''),
-                            'content': content_with_meta,  # 순위 정보까지 포함
+                            'content': article.get('summary', ''),
                             'published_at': published_at,
                         })
                         
                         article_success += 1
                         
-                    except Exception as e:
-                        print(f"❌ 기사 저장 실패: {symbol} - {str(e)}")
+                    except Exception:
                         continue
                 
-                success_count += article_success
-                
-                # ⭐ 50개 기준 진행률 표시
-                if (i + 1) % 10 == 0:  # 10개마다 표시
-                    elapsed = (datetime.now() - start_time).total_seconds()
-                    remaining = (50 - (i + 1)) * 3
-                    progress_pct = ((i + 1) / 50) * 100
-                    print(f"📊 진행률: {i+1}/50 ({progress_pct:.1f}%) "
-                          f"- 경과: {elapsed/60:.1f}분, 남은시간: {remaining/60:.1f}분")
+                if article_success > 0:
+                    successful_symbols.append(symbol)
+                    success_count += article_success
                 
             except requests.exceptions.HTTPError as e:
                 if "429" in str(e):
-                    print(f"🚨 HTTP 429: {symbol} ({category}) - 15초 대기")
+                    print(f"⚠️ Rate Limit: {symbol}")
                     time.sleep(15.0)
-                else:
-                    print(f"❌ {symbol} ({category}) HTTP 에러: {str(e)}")
                 error_count += 1
                 
             except requests.exceptions.Timeout:
-                print(f"⏱️ {symbol} ({category}) 타임아웃 - 5초 대기 후 계속")
                 time.sleep(5.0)
                 error_count += 1
                 
-            except Exception as e:
-                print(f"❌ {symbol} ({category}) API 호출 실패: {str(e)}")
+            except Exception:
                 error_count += 1
                 continue
         
-        # ⭐ 50개 트렌딩 종목 최종 통계
+        # 진행상황 업데이트 (성공한 만큼만)
+        if len(successful_symbols) > 0:
+            new_position = current_position + len(successful_symbols)
+            hook.run("""
+                UPDATE company_news_progress 
+                SET current_position = %s, last_updated = CURRENT_TIMESTAMP
+                WHERE collection_name = 'sp500_news' AND status = 'active'
+            """, parameters=[new_position])
+        
+        # 최종 통계
         total_elapsed = (datetime.now() - start_time).total_seconds()
-        print(f"\n🏁 50개 트렌딩 종목 처리 완료 - 소요시간: {total_elapsed/60:.1f}분")
-        print(f"📞 총 API 호출: {api_call_count}회 / 50회")
+        new_position = current_position + len(successful_symbols)
         
-        # 카테고리별 통계
-        category_stats = {}
-        for row in rows:
-            category = row[1]
-            category_stats[category] = category_stats.get(category, 0) + 1
-        
-        print(f"📊 트렌딩 카테고리별 처리:")
-        for category, count in category_stats.items():
-            print(f"   - {category}: {count}개")
-        
-        print(f"✅ 저장 완료: {success_count}개 성공, {error_count}개 실패")
-        
-        if api_call_count > 0:
-            success_rate = (api_call_count - error_count) / api_call_count * 100
-            print(f"📈 API 성공률: {success_rate:.1f}%")
-        
-        # 최종 DB 통계
-        result = hook.get_first("SELECT COUNT(*) FROM company_news")
-        total_records = result[0] if result else 0
-        print(f"📊 총 기업 뉴스 레코드 수: {total_records}")
-        
-        # ⭐ 오늘 트렌딩 뉴스 상세 통계
-        today_trending_query = """
-        SELECT 
-            COUNT(DISTINCT symbol) as unique_symbols, 
-            COUNT(*) as total_articles,
-            COUNT(CASE WHEN content LIKE '[top_gainers%' THEN 1 END) as gainer_articles,
-            COUNT(CASE WHEN content LIKE '[most_actively_traded%' THEN 1 END) as active_articles,
-            COUNT(CASE WHEN content LIKE '[top_losers%' THEN 1 END) as loser_articles
-        FROM company_news 
-        WHERE fetched_at >= CURRENT_DATE
-        AND content LIKE '[%]%'
-        """
-        
-        today_stats = hook.get_first(today_trending_query)
-        if today_stats:
-            unique_symbols, total_articles, gainer_arts, active_arts, loser_arts = today_stats
-            print(f"🔥 오늘 트렌딩 뉴스 요약:")
-            print(f"   - 총 {unique_symbols}개 종목, {total_articles}개 기사")
-            print(f"   - 상승주 뉴스: {gainer_arts}개")
-            print(f"   - 활발주 뉴스: {active_arts}개") 
-            print(f"   - 하락주 뉴스: {loser_arts}개")
+        print(f"✅ 완료: {success_count}개 뉴스 ({len(successful_symbols)}개 기업) | "
+              f"진행: {new_position}/{total_count} | "
+              f"실패: {error_count}개 | "
+              f"소요: {total_elapsed/60:.1f}분")
         
         return success_count
 
     fetch_upsert = PythonOperator(
-        task_id='fetch_and_upsert_trending_news',
-        python_callable=fetch_and_upsert_trending_news,
+        task_id='fetch_and_upsert_sp500_news',
+        python_callable=fetch_and_upsert_sp500_news,
     )
 
     # Task 의존성
