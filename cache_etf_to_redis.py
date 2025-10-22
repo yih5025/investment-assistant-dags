@@ -1,4 +1,4 @@
-# cache_sp500_to_redis.py - SP500 데이터를 DB에서 조회하여 Redis에 캐싱
+# cache_etf_to_redis.py - ETF 데이터를 DB에서 조회하여 Redis에 캐싱
 from airflow import DAG
 from airflow.decorators import task, dag
 from airflow.hooks.postgres_hook import PostgresHook
@@ -46,25 +46,25 @@ def is_us_market_open():
 default_args = {
     'owner': 'investment_assistant',
     'depends_on_past': False,
-    'start_date': datetime(2025, 10, 16),
+    'start_date': datetime(2025, 10, 22),
     'retries': None,
     'retry_delay': timedelta(minutes=2)
 }
 
 @dag(
-    dag_id='cache_sp500_to_redis',
+    dag_id='cache_etf_to_redis',
     default_args=default_args,
-    description='SP500 데이터 Redis 캐싱 (변화율 계산 포함)',
+    description='ETF 데이터 Redis 캐싱 (변화율 계산 포함)',
     schedule_interval='*/10 * * * *',  # 매 10분마다 실행
     catchup=False,
     max_active_runs=1,
-    tags=['sp500', 'redis', 'caching']
+    tags=['etf', 'redis', 'caching']
 )
-def sp500_caching_dag():
+def etf_caching_dag():
     
     @task
-    def fetch_sp500_current_data():
-        """DB에서 SP500 현재가 + 회사명 + 거래량 조회"""
+    def fetch_etf_current_data():
+        """DB에서 ETF 현재가 + ETF명 + 거래량 조회"""
         market_open = is_us_market_open()
         
         # 시장 마감 중: 전체 작업 건너뜀
@@ -72,11 +72,11 @@ def sp500_caching_dag():
             logger.info("🔒 시장 마감 중 - 작업 건너뜀")
             return []
         
-        logger.info("📊 SP500 현재 데이터 조회 시작 (시장 개장 중 - 10분마다)")
+        logger.info("📊 ETF 현재 데이터 조회 시작 (시장 개장 중 - 10분마다)")
         
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
-        # 각 종목별 최신 거래 데이터 조회
+        # 각 ETF별 최신 거래 데이터 조회
         query = """
         WITH latest_trades AS (
             SELECT DISTINCT ON (symbol)
@@ -84,18 +84,18 @@ def sp500_caching_dag():
                 price,
                 volume,
                 created_at
-            FROM sp500_websocket_trades
+            FROM etf_realtime_prices
             ORDER BY symbol, created_at DESC
         )
         SELECT 
-            c.symbol,
-            c.company_name,
+            b.symbol,
+            b.name as etf_name,
             lt.price as current_price,
             lt.volume,
             lt.created_at as last_updated
-        FROM sp500_companies c
-        INNER JOIN latest_trades lt ON c.symbol = lt.symbol
-        ORDER BY c.symbol
+        FROM etf_basic_info b
+        INNER JOIN latest_trades lt ON b.symbol = lt.symbol
+        ORDER BY b.symbol
         """
         
         records = pg_hook.get_records(query)
@@ -104,13 +104,13 @@ def sp500_caching_dag():
         for r in records:
             result.append({
                 'symbol': r[0],
-                'company_name': r[1],
+                'etf_name': r[1],
                 'current_price': float(r[2]) if r[2] else 0,
                 'volume': int(r[3]) if r[3] else 0,
                 'last_updated': r[4].isoformat() if r[4] else None
             })
         
-        logger.info(f"✅ {len(result)}개 종목 현재 데이터 조회 완료")
+        logger.info(f"✅ {len(result)}개 ETF 현재 데이터 조회 완료")
         return result
     
     @task
@@ -132,8 +132,8 @@ def sp500_caching_dag():
                 price,
                 created_at,
                 ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY created_at DESC) as rn
-            FROM sp500_websocket_trades
-            WHERE created_at >= NOW() - INTERVAL '4 days'
+            FROM etf_realtime_prices
+            WHERE created_at >= NOW() - INTERVAL '3 days'
                 AND DATE(created_at AT TIME ZONE 'America/New_York') < 
                     CURRENT_DATE AT TIME ZONE 'America/New_York'
         )
@@ -149,7 +149,7 @@ def sp500_caching_dag():
         for r in records:
             result[r[0]] = float(r[1]) if r[1] else 0
         
-        logger.info(f"✅ {len(result)}개 종목 전일 종가 조회 완료")
+        logger.info(f"✅ {len(result)}개 ETF 전일 종가 조회 완료")
         return result
     
     @task
@@ -168,7 +168,7 @@ def sp500_caching_dag():
         SELECT 
             symbol,
             SUM(volume) as volume_24h
-        FROM sp500_websocket_trades
+        FROM etf_realtime_prices
         WHERE created_at >= NOW() - INTERVAL '24 hours'
         GROUP BY symbol
         """
@@ -180,7 +180,7 @@ def sp500_caching_dag():
         for r in records:
             result[r[0]] = int(r[1]) if r[1] else 0
         
-        logger.info(f"✅ {len(result)}개 종목 24시간 거래량 조회 완료")
+        logger.info(f"✅ {len(result)}개 ETF 24시간 거래량 조회 완료")
         return result
     
     @task
@@ -191,7 +191,7 @@ def sp500_caching_dag():
             logger.info("🔒 시장이 닫혀있어 Redis 캐싱을 건너뜁니다.")
             return []
         
-        logger.info(f"💾 Redis 캐싱 시작 ({len(current_data)}개 종목)")
+        logger.info(f"💾 Redis 캐싱 시작 ({len(current_data)}개 ETF)")
         
         # Redis 연결
         try:
@@ -217,16 +217,16 @@ def sp500_caching_dag():
             raise
         
         # Redis Hash Key
-        redis_key = "sp500_market_data"
+        redis_key = "etf_market_data"
         
         # Pipeline 사용하여 일괄 저장
         pipeline = redis_client.pipeline()
         cached_count = 0
         enriched_data = []  # DB 저장용 데이터
         
-        for stock in current_data:
-            symbol = stock['symbol']
-            current_price = stock['current_price']
+        for etf in current_data:
+            symbol = etf['symbol']
+            current_price = etf['current_price']
             previous_close = previous_close_map.get(symbol, 0)
             volume_24h = volume_24h_map.get(symbol, 0)
             
@@ -241,13 +241,13 @@ def sp500_caching_dag():
             # Redis 저장용 데이터 (WebSocket 응답 포맷 + 24h volume)
             redis_data = {
                 'symbol': symbol,
-                'company_name': stock['company_name'],
+                'etf_name': etf['etf_name'],
                 'current_price': current_price,
                 'change_amount': round(change_amount, 2),
                 'change_percentage': round(change_percentage, 2),
-                'volume': stock['volume'],
+                'volume': etf['volume'],
                 'volume_24h': volume_24h,  # 🆕 24시간 거래량
-                'last_updated': stock['last_updated']
+                'last_updated': etf['last_updated']
             }
             
             # Hash에 저장
@@ -263,7 +263,7 @@ def sp500_caching_dag():
         # 일괄 실행
         try:
             pipeline.execute()
-            logger.info(f"✅ {cached_count}개 종목 Redis 캐싱 완료")
+            logger.info(f"✅ {cached_count}개 ETF Redis 캐싱 완료")
         except Exception as e:
             logger.error(f"❌ Redis 저장 실패: {e}")
             redis_client.close()
@@ -272,12 +272,12 @@ def sp500_caching_dag():
         # Pub/Sub 신호 발행 (WebSocket에 업데이트 알림)
         try:
             message = json.dumps({
-                'message': 'SP500 market data updated',
+                'message': 'ETF market data updated',
                 'count': cached_count,
                 'timestamp': datetime.utcnow().isoformat()
             })
-            redis_client.publish('sp500_market_updates', message)
-            logger.info("📢 SP500 market data updated signal published (sp500_market_updates)")
+            redis_client.publish('etf_market_updates', message)
+            logger.info("📢 ETF market data updated signal published (etf_market_updates)")
         except Exception as e:
             logger.warning(f"⚠️ Pub/Sub 발행 실패: {e}")
         
@@ -293,7 +293,7 @@ def sp500_caching_dag():
             logger.info("🔒 저장할 데이터가 없습니다.")
             return
         
-        logger.info(f"💾 DB 스냅샷 저장 시작 ({len(enriched_data)}개 종목)")
+        logger.info(f"💾 DB 스냅샷 저장 시작 ({len(enriched_data)}개 ETF)")
         pg_hook = PostgresHook(postgres_conn_id='postgres_default')
         
         snapshot_time = datetime.now(pytz.timezone('Asia/Seoul'))
@@ -303,17 +303,17 @@ def sp500_caching_dag():
             try:
                 # INSERT 쿼리 (중복 시 무시)
                 insert_query = """
-                INSERT INTO sp500_market_snapshots 
-                (symbol, company_name, current_price, change_amount, change_percentage, 
+                INSERT INTO etf_market_snapshots 
+                (symbol, etf_name, current_price, change_amount, change_percentage, 
                  volume, volume_24h, snapshot_time)
-                VALUES (%(symbol)s, %(company_name)s, %(current_price)s, %(change_amount)s, 
+                VALUES (%(symbol)s, %(etf_name)s, %(current_price)s, %(change_amount)s, 
                         %(change_percentage)s, %(volume)s, %(volume_24h)s, %(snapshot_time)s)
                 ON CONFLICT (symbol, snapshot_time) DO NOTHING
                 """
                 
                 params = {
                     'symbol': data['symbol'],
-                    'company_name': data['company_name'],
+                    'etf_name': data['etf_name'],
                     'current_price': data['current_price'],
                     'change_amount': data['change_amount'],
                     'change_percentage': data['change_percentage'],
@@ -329,14 +329,14 @@ def sp500_caching_dag():
                 logger.warning(f"⚠️ {data['symbol']} 저장 실패: {e}")
                 continue
         
-        logger.info(f"✅ DB 스냅샷 저장 완료: {saved_count}개 종목")
+        logger.info(f"✅ DB 스냅샷 저장 완료: {saved_count}개 ETF")
     
     # Task 실행 흐름
-    current_data = fetch_sp500_current_data()
+    current_data = fetch_etf_current_data()
     previous_close = fetch_previous_close(current_data)
     volume_24h = fetch_24h_volume(current_data)
     enriched_data = calculate_and_cache(current_data, previous_close, volume_24h)
     save_to_database(enriched_data)
 
 # DAG 인스턴스 생성
-dag_instance = sp500_caching_dag()
+dag_instance = etf_caching_dag()
