@@ -133,9 +133,9 @@ def etf_caching_dag():
                 created_at,
                 ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY created_at DESC) as rn
             FROM etf_realtime_prices
-            WHERE created_at >= NOW() - INTERVAL '3 days'
-                AND DATE(created_at AT TIME ZONE 'America/New_York') < 
-                    CURRENT_DATE AT TIME ZONE 'America/New_York'
+            WHERE created_at >= NOW() - INTERVAL '5 days'
+                AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York')::date < 
+                    (NOW() AT TIME ZONE 'America/New_York')::date
         )
         SELECT symbol, price
         FROM ranked_prices
