@@ -36,10 +36,10 @@ CREATE TABLE IF NOT EXISTS coingecko_coin_details (
     
     -- ATH/ATL (Tab 3)
     ath_usd DECIMAL(20,8),
-    ath_change_percentage DECIMAL(10,4),
+    ath_change_percentage DECIMAL(20,4),
     ath_date TIMESTAMP,
     atl_usd DECIMAL(20,8),
-    atl_change_percentage DECIMAL(10,4),
+    atl_change_percentage DECIMAL(20,4),
     atl_date TIMESTAMP,
     
     -- Supply Data (Tab 3)
