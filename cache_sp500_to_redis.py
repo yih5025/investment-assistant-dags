@@ -2,6 +2,7 @@
 from airflow import DAG
 from airflow.decorators import task, dag
 from airflow.hooks.postgres_hook import PostgresHook
+from airflow.exceptions import AirflowSkipException
 from datetime import datetime, timedelta, time
 import json
 import logging
@@ -17,9 +18,22 @@ def get_market_open_close_kst():
     et_tz = pytz.timezone('US/Eastern')
     kst_tz = pytz.timezone('Asia/Seoul')
     now_et = datetime.now(et_tz)
+    
+    # 오늘 날짜의 개장 시간 (9:30 AM ET)
     market_open_et = et_tz.localize(datetime.combine(now_et.date(), time(9, 30)))
+    market_open_kst = market_open_et.astimezone(kst_tz)
+    
+    # 오늘 날짜의 마감 시간 (4:00 PM ET) - KST로 변환하면 다음날이 됨
     market_close_et = et_tz.localize(datetime.combine(now_et.date(), time(16, 0)))
-    return market_open_et.astimezone(kst_tz), market_close_et.astimezone(kst_tz)
+    market_close_kst = market_close_et.astimezone(kst_tz)
+    
+    # 마감 시간이 다음날이 되도록 명시적으로 설정
+    # (개장 시간이 마감 시간보다 크면 마감 시간을 다음날로 설정)
+    if market_open_kst.date() == market_close_kst.date():
+        # 마감 시간이 같은 날이면 다음날로 조정
+        market_close_kst = market_close_kst + timedelta(days=1)
+    
+    return market_open_kst, market_close_kst
 
 def is_us_market_open():
     """
@@ -34,10 +48,13 @@ def is_us_market_open():
         if now_kst.weekday() >= 5:
             return False
 
-        # 자정 넘어가는 경우 처리
-        if market_open_kst.time() > market_close_kst.time():
+        # 자정 넘어가는 경우 처리 (개장: 오늘 23:30, 마감: 내일 06:00)
+        # 현재 시간이 개장 시간 이후이거나 마감 시간 이전이면 시장 개장
+        if market_open_kst.date() < market_close_kst.date():
+            # 자정을 넘기는 경우
             return now_kst >= market_open_kst or now_kst < market_close_kst
         else:
+            # 같은 날인 경우 (일반적으로 발생하지 않지만 안전장치)
             return market_open_kst <= now_kst < market_close_kst
     except Exception as e:
         logger.warning(f"시장 개장 여부 확인 실패: {e}")
@@ -55,7 +72,7 @@ default_args = {
     dag_id='cache_sp500_to_redis',
     default_args=default_args,
     description='SP500 데이터 Redis 캐싱 (변화율 계산 포함)',
-    schedule_interval='*/5 * * * *',  # 매 10분마다 실행
+    schedule_interval='*/10 * * * *',  # 매 10분마다 실행
     catchup=False,
     max_active_runs=1,
     tags=['sp500', 'redis', 'caching']
@@ -67,10 +84,10 @@ def sp500_caching_dag():
         """DB에서 SP500 현재가 + 회사명 + 거래량 조회"""
         market_open = is_us_market_open()
         
-        # 시장 마감 중: 전체 작업 건너뜀
+        # 시장 마감 중: 전체 DAG 건너뛰기 (리소스 절약)
         if not market_open:
-            logger.info("🔒 시장 마감 중 - 작업 건너뜀")
-            return []
+            logger.info("🔒 시장 마감 중 - DAG 실행 건너뜀")
+            raise AirflowSkipException("시장이 마감되어 DAG 실행을 건너뜁니다.")
         
         logger.info("📊 SP500 현재 데이터 조회 시작 (시장 개장 중 - 10분마다)")
         
@@ -186,13 +203,6 @@ def sp500_caching_dag():
     @task
     def calculate_and_cache(current_data, previous_close_map, volume_24h_map):
         """변화율 계산 + 24h 거래량 추가 후 Redis에 캐싱"""
-        # 시장이 닫혀있으면 skip
-        if not current_data:
-            logger.info("🔒 시장이 닫혀있어 Redis 캐싱을 건너뜁니다.")
-            return []
-        
-        logger.info(f"💾 Redis 캐싱 시작 ({len(current_data)}개 종목)")
-        
         # Redis 연결
         try:
             # ⭐ Kubernetes Service 환경 변수 사용
@@ -219,6 +229,65 @@ def sp500_caching_dag():
         # Redis Hash Key
         redis_key = "sp500_market_data"
         
+        # 시장이 닫혀있으면: 기존 Redis 데이터에서 변화율/변화액 유지
+        if not current_data:
+            logger.info("🔒 시장 마감 중 - 기존 Redis 데이터의 변화율/변화액 유지")
+            
+            # 기존 Redis 데이터 조회
+            existing_data = redis_client.hgetall(redis_key)
+            
+            if not existing_data:
+                logger.info("⚠️ Redis에 기존 데이터가 없습니다.")
+                redis_client.close()
+                return []
+            
+            # 기존 데이터를 파싱하여 변화율/변화액 유지
+            pipeline = redis_client.pipeline()
+            preserved_count = 0
+            enriched_data = []
+            
+            for symbol, data_str in existing_data.items():
+                try:
+                    existing_json = json.loads(data_str)
+                    
+                    # 기존 변화율/변화액 유지 (현재가만 업데이트 가능하면 업데이트, 아니면 그대로 유지)
+                    redis_data = {
+                        'symbol': existing_json.get('symbol', symbol),
+                        'company_name': existing_json.get('company_name', ''),
+                        'current_price': existing_json.get('current_price', 0),
+                        'change_amount': existing_json.get('change_amount', 0),  # 기존 값 유지
+                        'change_percentage': existing_json.get('change_percentage', 0),  # 기존 값 유지
+                        'volume': existing_json.get('volume', 0),
+                        'volume_24h': existing_json.get('volume_24h', 0),
+                        'last_updated': existing_json.get('last_updated', '')
+                    }
+                    
+                    # Hash에 저장 (변화율/변화액 유지)
+                    pipeline.hset(redis_key, symbol, json.dumps(redis_data))
+                    preserved_count += 1
+                    enriched_data.append(redis_data)
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ {symbol} 기존 데이터 파싱 실패: {e}")
+                    continue
+            
+            # TTL 설정 (7일)
+            pipeline.expire(redis_key, 604800)
+            
+            try:
+                pipeline.execute()
+                logger.info(f"✅ {preserved_count}개 종목 변화율/변화액 유지 완료")
+            except Exception as e:
+                logger.error(f"❌ Redis 저장 실패: {e}")
+                redis_client.close()
+                raise
+            
+            redis_client.close()
+            return enriched_data
+        
+        # 시장 개장 중: 새로운 변화율/변화액 계산
+        logger.info(f"💾 Redis 캐싱 시작 ({len(current_data)}개 종목)")
+        
         # Pipeline 사용하여 일괄 저장
         pipeline = redis_client.pipeline()
         cached_count = 0
@@ -235,8 +304,21 @@ def sp500_caching_dag():
                 change_amount = current_price - previous_close
                 change_percentage = (change_amount / previous_close) * 100
             else:
-                change_amount = 0
-                change_percentage = 0
+                # 전일 종가를 찾지 못한 경우, 기존 Redis 데이터에서 변화율/변화액 가져오기 시도
+                try:
+                    existing_data_str = redis_client.hget(redis_key, symbol)
+                    if existing_data_str:
+                        existing_json = json.loads(existing_data_str)
+                        change_amount = existing_json.get('change_amount', 0)
+                        change_percentage = existing_json.get('change_percentage', 0)
+                        logger.debug(f"📌 {symbol}: 전일 종가 없음, 기존 변화율 유지 ({change_percentage}%)")
+                    else:
+                        change_amount = 0
+                        change_percentage = 0
+                except Exception as e:
+                    logger.debug(f"⚠️ {symbol}: 기존 데이터 조회 실패, 변화율 0으로 설정: {e}")
+                    change_amount = 0
+                    change_percentage = 0
             
             # Redis 저장용 데이터 (WebSocket 응답 포맷 + 24h volume)
             redis_data = {
