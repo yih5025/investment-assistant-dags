@@ -193,7 +193,7 @@ with DAG(
                     logger.info(f"📧 Sending email to: {email}")
                     
                     email_content = generate_email_body(token)
-                    subject = f"[Investment Assistant] 다음 주 S&P 500 실적 발표 ({next_monday} 주간)"
+                    subject = f"[WE INVESTING] 다음 주 S&P 500 실적 발표 ({next_monday} 주간)"
                     
                     # 직접 SMTP로 이메일 발송
                     send_email_via_smtp(email, subject, email_content)
