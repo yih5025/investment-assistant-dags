@@ -1,11 +1,12 @@
 import logging
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.utils.email import send_email
-
-
+from airflow.hooks.base import BaseHook
 
 # 로거 설정
 logger = logging.getLogger("airflow.task")
@@ -18,6 +19,43 @@ default_args = {
     'retries': 1,
     'retry_delay': timedelta(minutes=1),
 }
+
+def send_email_via_smtp(to_email: str, subject: str, html_content: str) -> bool:
+    """
+    smtp_default connection을 사용하여 직접 이메일 발송
+    """
+    try:
+        # Airflow connection에서 SMTP 설정 가져오기
+        conn = BaseHook.get_connection('smtp_default')
+        
+        smtp_host = conn.host
+        smtp_port = conn.port or 587
+        smtp_user = conn.login
+        smtp_password = conn.password
+        
+        logger.info(f"📬 SMTP Config: {smtp_host}:{smtp_port}, user: {smtp_user}")
+        
+        # 이메일 메시지 생성
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = smtp_user
+        msg['To'] = to_email
+        
+        # HTML 본문 추가
+        html_part = MIMEText(html_content, 'html', 'utf-8')
+        msg.attach(html_part)
+        
+        # SMTP 서버 연결 및 발송
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+            server.starttls()  # TLS 시작
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, [to_email], msg.as_string())
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"SMTP Error: {e}")
+        raise e
 
 with DAG(
     'weekly_earnings_notifications_dag',
@@ -145,7 +183,7 @@ with DAG(
             # [로그] 구독자 수 확인
             logger.info(f"👥 Found {len(subscribers)} active subscribers.")
 
-            # 5. 이메일 발송
+            # 5. 이메일 발송 (직접 SMTP 사용)
             sent_count = 0
             error_count = 0
 
@@ -155,12 +193,13 @@ with DAG(
                     logger.info(f"📧 Sending email to: {email}")
                     
                     email_content = generate_email_body(token)
-                    send_email(
-                        to=[email],
-                        subject=f"[Investment Assistant] 다음 주 S&P 500 실적 발표 ({next_monday} 주간)",
-                        html_content=email_content
-                    )
+                    subject = f"[Investment Assistant] 다음 주 S&P 500 실적 발표 ({next_monday} 주간)"
+                    
+                    # 직접 SMTP로 이메일 발송
+                    send_email_via_smtp(email, subject, email_content)
                     sent_count += 1
+                    logger.info(f"✅ Successfully sent email to: {email}")
+                    
                 except Exception as e:
                     logger.error(f"❌ Failed to send email to {email}: {e}")
                     error_count += 1
