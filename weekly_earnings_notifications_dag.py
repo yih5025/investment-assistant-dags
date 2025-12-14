@@ -72,7 +72,7 @@ with DAG(
             # 3. 이메일 본문 생성 함수
             def generate_email_body(token):
                 # 실제 서버 주소로 변경 필요
-                unsubscribe_link = f"http://YOUR_SERVER_IP:8000/api/unsubscribe?token={token}"
+                unsubscribe_link = f"https://api.investment-assistant.site/api/unsubscribe?token={token}"
                 
                 html = f"""
                 <html>
