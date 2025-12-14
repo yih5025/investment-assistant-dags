@@ -172,16 +172,18 @@ with DAG(
                 """
                 return html
 
-            # 4. 구독자 조회
+            # 4. 구독자 조회 (인증 완료된 구독자만)
             subs_sql = """
                 SELECT email, unsubscribe_token 
                 FROM email_subscriptions 
-                WHERE is_active = TRUE AND scope = 'SP500'
+                WHERE is_active = TRUE 
+                  AND is_verified = TRUE 
+                  AND scope = 'SP500'
             """
             subscribers = pg_hook.get_records(subs_sql)
             
             # [로그] 구독자 수 확인
-            logger.info(f"👥 Found {len(subscribers)} active subscribers.")
+            logger.info(f"👥 Found {len(subscribers)} active & verified subscribers.")
 
             # 5. 이메일 발송 (직접 SMTP 사용)
             sent_count = 0
