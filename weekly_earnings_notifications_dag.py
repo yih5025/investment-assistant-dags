@@ -3,8 +3,9 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-# [변경 1] SmtpHook 임포트 (기존 send_email 대신 사용)
-from airflow.providers.smtp.hooks.smtp import SmtpHook
+from airflow.utils.email import send_email
+
+
 
 # 로거 설정
 logger = logging.getLogger("airflow.task")
@@ -144,14 +145,6 @@ with DAG(
             # [로그] 구독자 수 확인
             logger.info(f"👥 Found {len(subscribers)} active subscribers.")
 
-            # [변경 2] SmtpHook 초기화 (Airflow Connection ID: smtp_default 사용)
-            try:
-                smtp_hook = SmtpHook(smtp_conn_id='smtp_default')
-                logger.info("✅ SMTP Hook initialized successfully.")
-            except Exception as e:
-                logger.error(f"❌ Failed to initialize SMTP Hook: {e}")
-                raise e
-
             # 5. 이메일 발송
             sent_count = 0
             error_count = 0
@@ -162,22 +155,18 @@ with DAG(
                     logger.info(f"📧 Sending email to: {email}")
                     
                     email_content = generate_email_body(token)
-                    
-                    # [변경 3] send_email 대신 smtp_hook.send_email_smtp 사용
-                    smtp_hook.send_email_smtp(
+                    send_email(
                         to=[email],
                         subject=f"[Investment Assistant] 다음 주 S&P 500 실적 발표 ({next_monday} 주간)",
                         html_content=email_content
                     )
                     sent_count += 1
-                    logger.info(f"✅ Sent successfully to {email}")
-                    
                 except Exception as e:
                     logger.error(f"❌ Failed to send email to {email}: {e}")
                     error_count += 1
             
             # [로그] 최종 완료
-            logger.info(f"🎉 Task Finished. Sent: {sent_count}, Errors: {error_count}")
+            logger.info(f"✅ Task Finished. Sent: {sent_count}, Errors: {error_count}")
 
         except Exception as e:
             # [로그] 치명적 에러 발생 시
