@@ -61,7 +61,7 @@ with DAG(
     'weekly_earnings_notifications_dag',
     default_args=default_args,
     description='Send weekly earnings forecast emails',
-    schedule_interval='0 0 * * 0', 
+    schedule_interval='0 0 * * 0',  # 매주 일요일 00:00 UTC
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['notification', 'sp500', 'earnings']
@@ -74,13 +74,13 @@ with DAG(
         try:
             pg_hook = PostgresHook(postgres_conn_id='postgres_default')
             
-            # 1. 날짜 계산
+            # 1. 날짜 계산 (오늘부터 7일 후까지)
             today = datetime.now().date()
-            next_monday = today + timedelta(days=(7 - today.weekday()))
-            next_sunday = next_monday + timedelta(days=6)
+            start_date = today
+            end_date = today + timedelta(days=7)
             
             # [로그] 날짜 확인
-            logger.info(f"📅 Calculated Date Range: {next_monday} ~ {next_sunday}")
+            logger.info(f"📅 Calculated Date Range: {start_date} ~ {end_date}")
 
             # 2. S&P 500 실적 발표 데이터 조회
             earnings_sql = f"""
@@ -92,7 +92,7 @@ with DAG(
                     sp.gics_sector
                 FROM earnings_calendar ec
                 JOIN sp500_companies sp ON ec.symbol = sp.symbol
-                WHERE ec.report_date BETWEEN '{next_monday}' AND '{next_sunday}'
+                WHERE ec.report_date BETWEEN '{start_date}' AND '{end_date}'
                 ORDER BY ec.report_date ASC, sp.market_cap DESC;
             """
             
@@ -106,7 +106,7 @@ with DAG(
             logger.info(f"📊 Query Result: Found {row_count} earnings events.")
 
             if not earnings_data:
-                logger.warning("⚠️ No earnings scheduled for next week. Skipping email sending.")
+                logger.warning("⚠️ No earnings scheduled for the next 7 days. Skipping email sending.")
                 return "No Data"
 
             # 3. 이메일 본문 생성 함수
@@ -127,8 +127,8 @@ with DAG(
                     </style>
                 </head>
                 <body>
-                    <h2>📅 다음 주 S&P 500 실적 발표 일정</h2>
-                    <p>안녕하세요! <b>{next_monday}</b>부터 <b>{next_sunday}</b>까지 예정된 주요 기업의 실적 발표 일정입니다.</p>
+                    <h2>📅 향후 7일간 S&P 500 실적 발표 일정</h2>
+                    <p>안녕하세요! <b>{start_date}</b>부터 <b>{end_date}</b>까지 예정된 주요 기업의 실적 발표 일정입니다.</p>
                     <table>
                         <thead>
                             <tr>
@@ -195,7 +195,7 @@ with DAG(
                     logger.info(f"📧 Sending email to: {email}")
                     
                     email_content = generate_email_body(token)
-                    subject = f"[WE INVESTING] 다음 주 S&P 500 실적 발표 ({next_monday} 주간)"
+                    subject = f"[WE INVESTING] 향후 7일간 S&P 500 실적 발표 ({start_date} ~ {end_date})"
                     
                     # 직접 SMTP로 이메일 발송
                     send_email_via_smtp(email, subject, email_content)
