@@ -49,10 +49,16 @@ def is_us_market_open():
             return False
 
         # 자정 넘어가는 경우 처리 (개장: 오늘 23:30, 마감: 내일 06:00)
-        # 현재 시간이 개장 시간 이후이거나 마감 시간 이전이면 시장 개장
         if market_open_kst.date() < market_close_kst.date():
-            # 자정을 넘기는 경우
-            return now_kst >= market_open_kst or now_kst < market_close_kst
+            # 자정을 넘기는 경우:
+            # - 현재 날짜가 개장 날짜이고 개장 시간 이후 (23:30 ~ 자정)
+            # - 또는 현재 날짜가 마감 날짜이고 마감 시간 이전 (자정 ~ 06:00)
+            if now_kst.date() == market_open_kst.date():
+                return now_kst >= market_open_kst  # 23:30 이후인지
+            elif now_kst.date() == market_close_kst.date():
+                return now_kst < market_close_kst  # 06:00 이전인지
+            else:
+                return False  # 개장/마감 날짜와 다른 날
         else:
             # 같은 날인 경우 (일반적으로 발생하지 않지만 안전장치)
             return market_open_kst <= now_kst < market_close_kst
