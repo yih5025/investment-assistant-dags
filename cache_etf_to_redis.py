@@ -84,10 +84,10 @@ def etf_caching_dag():
         """DB에서 ETF 현재가 + ETF명 + 거래량 조회"""
         market_open = is_us_market_open()
         
-        # 시장 마감 중: 전체 DAG 건너뛰기 (리소스 절약)
+        # 시장 마감 중: 빈 리스트 반환 → calculate_and_cache에서 기존 데이터 유지
         if not market_open:
-            logger.info("🔒 시장 마감 중 - DAG 실행 건너뜀")
-            raise AirflowSkipException("시장이 마감되어 DAG 실행을 건너뜁니다.")
+            logger.info("🔒 시장 마감 중 - 기존 Redis 데이터 유지 모드")
+            return []  # Skip 대신 빈 리스트 반환하여 calculate_and_cache로 전달
         
         logger.info("📊 ETF 현재 데이터 조회 시작 (시장 개장 중 - 10분마다)")
         
